@@ -1,0 +1,29 @@
+# Rabbit Hunter 项目依赖
+# 安装方式: pip install -r requirements.txt
+
+# 交易所 API 交互
+ccxt>=4.0.0
+
+# Supabase 数据库客户端
+supabase>=2.0.0
+
+# 环境变量管理
+python-dotenv>=1.0.0
+
+# FastAPI Web 框架
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+pydantic>=2.0.0
+
+# 技术指标计算
+numpy>=1.24.0
+
+# 数据分析 / 重试机制（用于 CVD 分析器）
+pandas>=2.0.0
+tenacity>=8.2.0
+
+# AI 判定（先用可控的逻辑回归做“继续参与概率”，不做方向预测）
+scikit-learn>=1.3.0
+
+# DeepSeek 裁决：使用 requests 调用 OpenAI 兼容接口（无需新增依赖）
+

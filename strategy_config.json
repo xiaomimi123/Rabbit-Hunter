@@ -1,0 +1,13 @@
+{
+  "atr_multiplier_p2": 2.5,
+  "atr_multiplier_p3a_early": 2.5,
+  "atr_multiplier_p3a_normal": 2.0,
+  "atr_multiplier_p3b": 1.5,
+  "structure_gap_threshold": 0.02,
+  "phase_age_max_candles": 100,
+  "context_gate_required": true,
+  "golden_wick_bypass_structure": true,
+  "risk_per_trade": 0.015,
+  "ai_judge_threshold": 0.65
+}
+

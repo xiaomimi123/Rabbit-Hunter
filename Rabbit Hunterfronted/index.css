@@ -1,0 +1,102 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Global reset */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  @apply bg-terminal-bg text-text-primary font-sans overflow-x-hidden;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 4px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-terminal-bg;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-terminal-border rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-primary;
+}
+
+/* Glass card — keep for components that still use .glass */
+.glass {
+  background: rgba(17, 24, 39, 0.8);
+  backdrop-filter: blur(12px);
+  @apply border border-terminal-border;
+}
+
+/* Gradient text */
+.gradient-text {
+  background: linear-gradient(135deg, #7b61ff 0%, #00d395 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Buttons */
+.btn {
+  @apply px-4 py-2 rounded-lg font-medium transition-all duration-200;
+}
+
+.btn-primary {
+  @apply btn bg-primary text-white hover:shadow-primary-glow;
+}
+
+.btn-bull {
+  @apply btn bg-bull-dim text-bull border border-bull/30 hover:bg-bull/20;
+}
+
+.btn-bear {
+  @apply btn bg-bear-dim text-bear border border-bear/30 hover:bg-bear/20;
+}
+
+.btn-ghost {
+  @apply btn bg-transparent border border-terminal-border hover:bg-terminal-hover;
+}
+
+/* Table */
+table {
+  @apply w-full;
+}
+
+thead {
+  @apply border-b border-terminal-border;
+}
+
+tbody tr {
+  @apply border-b border-terminal-border hover:bg-terminal-hover transition-colors;
+}
+
+td, th {
+  @apply px-4 py-2 text-left;
+}
+
+/* Form inputs */
+input, select, textarea {
+  @apply bg-terminal-card border border-terminal-border rounded-lg px-3 py-2
+         text-text-primary placeholder-text-muted
+         focus:outline-none focus:border-primary;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  body {
+    @apply text-sm;
+  }
+}
