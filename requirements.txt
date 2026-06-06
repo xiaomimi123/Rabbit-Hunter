@@ -1,29 +1,55 @@
 # Rabbit Hunter 项目依赖
-# 安装方式: pip install -r requirements.txt
+#
+# v45 起统一用 == 精确锁版本（不再用 >=）。理由：
+#   1) >= 让 `pip install -U` 把 openai 升到 1.55+ 会摔在 client.beta.vector_stores
+#      迁移到 top-level（详见 scripts/ai/trading_assistant.py 的兼容性边界）
+#   2) >= 让 pydantic / supabase / fastapi 的小版本 breaking change 在升级日突然
+#      炸 prod，没有回滚到"上次能跑的版本"的稳态
+#   3) 单机部署 → 单一可重现版本组合 > 上游灵活性
+#
+# 升级一个依赖的标准流程：
+#   1) 在 dev 环境改这里 → pip install -r requirements.txt --upgrade
+#   2) python -m py_compile $(git ls-files '*.py') 验证语法
+#   3) 跑该模块相关的 smoke test
+#   4) 一次 commit 一次升一个依赖；不要批量
+#
+# 安装：pip install -r requirements.txt
 
-# 交易所 API 交互
-ccxt>=4.0.0
+# ── 交易所 API ─────────────────────────────────────────────────────
+# 4.4 系列稳定，binanceusdm 在该版本兼容性良好
+ccxt==4.4.30
 
-# Supabase 数据库客户端
-supabase>=2.0.0
+# ── 数据库 ─────────────────────────────────────────────────────────
+# supabase 2.x 与本仓库 .table().select().eq().execute() 链式 API 一致
+supabase==2.9.1
 
-# 环境变量管理
-python-dotenv>=1.0.0
+# ── 环境变量 ───────────────────────────────────────────────────────
+python-dotenv==1.0.1
 
-# FastAPI Web 框架
-fastapi>=0.104.0
-uvicorn[standard]>=0.24.0
-pydantic>=2.0.0
+# ── Web 框架 ───────────────────────────────────────────────────────
+# FastAPI 0.115 系列 — 与 starlette 0.41 / pydantic 2.10 协调
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+pydantic==2.10.4
 
-# 技术指标计算
-numpy>=1.24.0
+# ── 技术指标 / 数据分析 ────────────────────────────────────────────
+# numpy 1.26 系列（不上 2.x，避免 risk_calculator 等 numpy 1.x ABI 假设）
+numpy==1.26.4
+pandas==2.2.3
 
-# 数据分析 / 重试机制（用于 CVD 分析器）
-pandas>=2.0.0
-tenacity>=8.2.0
+# ── 重试机制 ───────────────────────────────────────────────────────
+# v45 起 binance_trader 已不再用 tenacity（_safe_create_order 自带分类重试），
+# 但其它模块（deepseek 学习循环等）还在用，保留依赖。
+tenacity==9.0.0
 
-# AI 判定（先用可控的逻辑回归做“继续参与概率”，不做方向预测）
-scikit-learn>=1.3.0
+# ── 本地 LR AI Judge（已 deprecated，仅为 train_ai_judge.py 训练时使用）─
+scikit-learn==1.5.2
 
-# DeepSeek 裁决：使用 requests 调用 OpenAI 兼容接口（无需新增依赖）
+# ── OpenAI Assistants API（第一次显式列出 — 之前完全没在 requirements 里）─
+# 关键边界：openai>=1.55 把 vector_stores 从 beta 提到顶层，
+# 我们的 trading_assistant.py 还在用 client.beta.vector_stores。
+# 在迁移 API 路径前，必须锁在 1.54.x。
+openai==1.54.5
 
+# DeepSeek 裁决：使用 requests 调用 OpenAI 兼容接口
+requests==2.32.3
