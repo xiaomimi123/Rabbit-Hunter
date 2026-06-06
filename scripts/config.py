@@ -39,6 +39,19 @@ class TradingConfig:
     # ── 自动交易 ─────────────────────────────────────────────
     enable_auto_trading: bool = False
 
+    # ── 失败安全（fail-closed by default） ───────────────────
+    # AI 决策层不可用/超时/异常时，是否仍然放行交易（默认 False = 拒绝）
+    ai_fail_open: bool = False
+    # SL/TP 下单失败时，是否仍然保留刚开的仓位（默认 False = 立即平仓回滚）
+    sl_tp_fail_open: bool = False
+
+    # ── SHORT 路径暂停（v45 临时止血） ────────────────────────
+    # 默认禁用 SHORT 入场。VULTURE 策略 + chandelier_stop 的 SHORT 数学和
+    # positions_v43 的 lowest_price 字段尚未端到端打通，强行交易会得到错误的
+    # 止损位（实际等于没有止损）。系统性重写完成后再开启。
+    # 开关只影响**新的** SHORT 入场；已有 OPEN SHORT 仓位继续按旧逻辑管理。
+    enable_short_trading: bool = False
+
     # ── 采集参数 ─────────────────────────────────────────────
     scan_interval: float = 1.0
     write_queue_maxsize: int = 500
@@ -80,6 +93,9 @@ def _load_from_env() -> TradingConfig:
         deepseek_enabled=os.environ.get("DEEPSEEK_ENABLED", "0") in ("1", "true", "True"),
         ai_judge_enabled=os.environ.get("AI_JUDGE_ENABLED", "0") in ("1", "true", "True"),
         enable_auto_trading=os.environ.get("ENABLE_AUTO_TRADING", "false").lower() in ("1", "true"),
+        ai_fail_open=os.environ.get("AI_FAIL_OPEN", "false").lower() in ("1", "true"),
+        sl_tp_fail_open=os.environ.get("SL_TP_FAIL_OPEN", "false").lower() in ("1", "true"),
+        enable_short_trading=os.environ.get("ENABLE_SHORT_TRADING", "false").lower() in ("1", "true"),
         scan_interval=float(os.environ.get("SCAN_INTERVAL", "1.0")),
         write_queue_maxsize=int(os.environ.get("WRITE_QUEUE_MAXSIZE", "500")),
         write_workers=int(os.environ.get("WRITE_WORKERS", "2")),

@@ -23,8 +23,18 @@ from typing import Optional
 
 import openai
 
-from .guardrails import apply_guardrails
+from .guardrails import GuardrailRejection, apply_guardrails
 from .prompt import SYSTEM_PROMPT
+
+
+def _fail_open() -> bool:
+    """Whether to fall back to execute=True when the AI layer is unavailable.
+
+    Defaults to False (fail-closed): if the second-opinion AI cannot answer,
+    we skip the trade rather than rubber-stamp it. Set AI_FAIL_OPEN=true to
+    restore the legacy "approve on failure" behavior.
+    """
+    return os.getenv("AI_FAIL_OPEN", "false").lower() in ("1", "true")
 
 # ---------------------------------------------------------------------------
 # Function tool definitions
@@ -185,9 +195,15 @@ class TradingAssistant:
         Falls back to execute-with-defaults if AI is unavailable or times out.
         """
         if not self._ready or not self.assistant_id:
+            fail_open = _fail_open()
             return AIDecision(
-                execute=True,
-                reasoning="AI not initialized, rule engine defaults applied",
+                execute=fail_open,
+                confidence=40 if fail_open else 0,
+                reasoning=(
+                    "AI not initialized; AI_FAIL_OPEN=true → executing with rule defaults"
+                    if fail_open
+                    else "AI not initialized; AI_FAIL_OPEN=false → skipping trade"
+                ),
             )
 
         try:
@@ -212,11 +228,16 @@ class TradingAssistant:
             return result
 
         except Exception as exc:
-            print(f"[AI] ERROR deciding {symbol}: {exc}")
+            fail_open = _fail_open()
+            print(f"[AI] ERROR deciding {symbol}: {exc} | fail_open={fail_open}")
             return AIDecision(
-                execute=True,
-                confidence=40,
-                reasoning=f"AI error ({type(exc).__name__}), rule engine defaults applied",
+                execute=fail_open,
+                confidence=40 if fail_open else 0,
+                reasoning=(
+                    f"AI error ({type(exc).__name__}); AI_FAIL_OPEN=true → executing"
+                    if fail_open
+                    else f"AI error ({type(exc).__name__}); AI_FAIL_OPEN=false → skipping trade"
+                ),
             )
 
     # ------------------------------------------------------------------
@@ -245,11 +266,19 @@ class TradingAssistant:
                     )
 
                     if tc.function.name == "execute_trade":
-                        g = apply_guardrails(
-                            sl_mult=args.get("sl_multiplier", 2.0),
-                            tp_mult=args.get("tp_multiplier", 3.0),
-                            size_mult=args.get("size_multiplier", 1.0),
-                        )
+                        try:
+                            g = apply_guardrails(
+                                sl_mult=args.get("sl_multiplier", 2.0),
+                                tp_mult=args.get("tp_multiplier", 3.0),
+                                size_mult=args.get("size_multiplier", 1.0),
+                            )
+                        except GuardrailRejection as exc:
+                            print(f"[AI] guardrails rejected execute_trade args: {exc}")
+                            return AIDecision(
+                                execute=False,
+                                confidence=0,
+                                reasoning=f"Guardrails rejected AI output: {exc}",
+                            )
                         return AIDecision(
                             execute=True,
                             sl_multiplier=g.sl_multiplier,
@@ -267,25 +296,47 @@ class TradingAssistant:
                             reasoning=args.get("reason", "AI skipped"),
                         )
 
+                    else:
+                        # Unknown tool name — treat as malformed AI output, fail-closed.
+                        print(f"[AI] unknown tool call '{tc.function.name}', skipping trade")
+                        return AIDecision(
+                            execute=False,
+                            confidence=0,
+                            reasoning=f"AI emitted unknown tool '{tc.function.name}'",
+                        )
+
             elif run.status in ("completed", "failed", "cancelled", "expired"):
                 reason = f"Run ended with status={run.status}"
+                fail_open = _fail_open() and run.status == "completed"
+                # failed/cancelled/expired: always fail-closed (the AI didn't actually decide).
+                # completed without tool call: honor AI_FAIL_OPEN.
                 if run.status != "completed":
-                    print(f"[AI] WARNING: {reason}")
-                # If completed without a function call, default to execute
+                    print(f"[AI] WARNING: {reason} → skipping trade")
+                else:
+                    print(f"[AI] {reason} without tool call | fail_open={fail_open}")
                 return AIDecision(
-                    execute=True,
-                    confidence=40,
-                    reasoning=f"{reason}, rule engine defaults applied",
+                    execute=fail_open,
+                    confidence=40 if fail_open else 0,
+                    reasoning=(
+                        f"{reason}; AI_FAIL_OPEN=true → executing with rule defaults"
+                        if fail_open
+                        else f"{reason}; skipping trade (fail-closed)"
+                    ),
                 )
 
             await asyncio.sleep(0.5)
 
         # Timeout
-        print(f"[AI] TIMEOUT after {timeout}s, defaulting to execute")
+        fail_open = _fail_open()
+        print(f"[AI] TIMEOUT after {timeout}s | fail_open={fail_open}")
         return AIDecision(
-            execute=True,
-            confidence=35,
-            reasoning="AI timeout, rule engine defaults applied",
+            execute=fail_open,
+            confidence=35 if fail_open else 0,
+            reasoning=(
+                "AI timeout; AI_FAIL_OPEN=true → executing with rule defaults"
+                if fail_open
+                else "AI timeout; AI_FAIL_OPEN=false → skipping trade"
+            ),
         )
 
     # ------------------------------------------------------------------

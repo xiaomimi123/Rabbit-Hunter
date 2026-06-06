@@ -11,12 +11,36 @@
 
 import os
 import time
+import uuid
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 
 import ccxt
 from dotenv import load_dotenv
-from tenacity import retry, stop_after_attempt, wait_exponential
+
+
+# ccxt exception classes that are safe to retry (truly transient).
+# Anything else (ExchangeError, BadSymbol, InsufficientFunds, ValueError, ...) is deterministic
+# and will not succeed on retry — those bubble up immediately.
+_RETRYABLE_EXC = (
+    ccxt.NetworkError,
+    ccxt.RequestTimeout,
+    ccxt.DDoSProtection,
+    ccxt.ExchangeNotAvailable,
+)
+
+
+# Substrings in error messages that indicate "this clientOrderId was already accepted" — Binance
+# returns these when a previous network-timed-out request actually went through. Treat as success.
+_DUPLICATE_ORDER_HINTS = (
+    "-2010",  # NEW_ORDER_REJECTED
+    "-2011",  # CANCEL_REJECTED
+    "-4015",  # Client order id is not valid
+    "-5022",  # Due to the order could not be filled immediately
+    "duplicate clientOrderId",
+    "Order already exists",
+    "DUPLICATE_ORDER",
+)
 
 # 用于直接 API 调用（测试网备用方案）
 try:
@@ -74,7 +98,11 @@ class BinanceTrader:
         }
         
         self.exchange = ccxt.binanceusdm(exchange_config)
-        
+
+        # 10s hard timeout on every ccxt HTTP call — without this, a hung TCP connection
+        # blocks the calling thread indefinitely.
+        self.exchange.timeout = 10000  # milliseconds
+
         if self.testnet:
             # 1. 劫持 URL (补全所有缺少的路标)
             testnet_url = "https://testnet.binancefuture.com/fapi/v1"
@@ -134,8 +162,241 @@ class BinanceTrader:
         """
         将 CCXT 格式转换为币安格式
         例如：TRB/USDT -> TRBUSDT
+
+        仅在调用 raw fapi/sapi 端点时使用。所有 ccxt 统一方法（create_*_order,
+        fetch_ticker, fetch_order 等）应该传 unified symbol "BTC/USDT"。
         """
         return symbol.replace("/", "")
+
+    @staticmethod
+    def _is_duplicate_order_error(err: Exception) -> bool:
+        """Binance 在 clientOrderId 已存在 / 之前重试已成功时返回的错误."""
+        msg = str(err)
+        return any(hint in msg for hint in _DUPLICATE_ORDER_HINTS)
+
+    @staticmethod
+    def make_client_order_tag(prefix: str = "rh") -> str:
+        """
+        生成 ccxt newClientOrderId 用的稳定字符串。
+        调用方应在 "一次逻辑下单" 的开头生成一次，整个 retry 链路复用同一个 tag —
+        这样网络超时后重试不会被 broker 视为新订单。
+        Binance 上限 36 字符，允许 [A-Za-z0-9.-_]。
+        """
+        return f"{prefix}-{uuid.uuid4().hex[:12]}"
+
+    def _safe_create_order(
+        self,
+        symbol: str,                    # unified, e.g. "BTC/USDT"
+        side: str,                      # "buy" or "sell"
+        order_type: str,                # "MARKET" / "LIMIT" / "STOP_MARKET" / "TAKE_PROFIT_MARKET"
+        amount: float,
+        price: Optional[float] = None,
+        stop_price: Optional[float] = None,
+        reduce_only: bool = False,
+        client_order_tag: Optional[str] = None,
+        max_attempts: int = 3,
+    ) -> Dict[str, Any]:
+        """
+        所有下单的唯一入口。修四个长期 bug：
+          1) ccxt 接收 unified symbol（不是拼接的 BTCUSDT）
+          2) amount/price/stopPrice 走 exchange.*_to_precision，避免 stepSize/tickSize 拒单
+          3) 校验 market.limits.amount.min / cost.min，提前拒绝
+          4) newClientOrderId 幂等键 — 网络超时重试不会重复成交
+          5) retry 只针对 NetworkError/RequestTimeout/DDoSProtection；其它异常立刻 fail
+          6) 重试时若 broker 回 "duplicate clientOrderId" → 视为之前重试已成功
+
+        Returns:
+            {
+                "success": bool,
+                "order_id": str | None,
+                "client_order_id": str,
+                "filled": float,           # 仅成功
+                "price": float | None,     # 仅成功
+                "raw": dict,               # ccxt 返回原文（成功时）
+                "error": str,              # 仅失败
+                "error_kind": "TRANSIENT" | "PERMANENT" | "DUPLICATE",
+            }
+        """
+        # ── 0. 校验 / 解析 market ─────────────────────────────────────
+        try:
+            market = self.exchange.market(symbol)
+        except Exception as e:
+            return {
+                "success": False,
+                "error": f"unknown symbol {symbol}: {e}",
+                "error_kind": "PERMANENT",
+            }
+        if not market or not market.get("active", True):
+            return {
+                "success": False,
+                "error": f"symbol {symbol} inactive or unavailable",
+                "error_kind": "PERMANENT",
+            }
+
+        # ── 1. precision 规整 ─────────────────────────────────────────
+        try:
+            amount_str = self.exchange.amount_to_precision(symbol, amount)
+            amount_f = float(amount_str)
+        except Exception as e:
+            return {
+                "success": False,
+                "error": f"amount_to_precision({amount}) failed: {e}",
+                "error_kind": "PERMANENT",
+            }
+
+        price_f: Optional[float] = None
+        if price is not None:
+            try:
+                price_f = float(self.exchange.price_to_precision(symbol, price))
+            except Exception as e:
+                return {
+                    "success": False,
+                    "error": f"price_to_precision({price}) failed: {e}",
+                    "error_kind": "PERMANENT",
+                }
+
+        stop_price_f: Optional[float] = None
+        if stop_price is not None:
+            try:
+                stop_price_f = float(self.exchange.price_to_precision(symbol, stop_price))
+            except Exception as e:
+                return {
+                    "success": False,
+                    "error": f"price_to_precision(stop={stop_price}) failed: {e}",
+                    "error_kind": "PERMANENT",
+                }
+
+        # ── 2. limits 校验 ────────────────────────────────────────────
+        limits = market.get("limits", {}) or {}
+        amount_min = (limits.get("amount") or {}).get("min")
+        cost_min = (limits.get("cost") or {}).get("min")
+        if amount_min and amount_f < float(amount_min):
+            return {
+                "success": False,
+                "error": f"amount {amount_f} below min {amount_min}",
+                "error_kind": "PERMANENT",
+            }
+        # 估算 notional 用的参考价：
+        #   LIMIT → price_f
+        #   STOP_MARKET / TAKE_PROFIT_MARKET → stop_price_f（触发价 ≈ 成交价）
+        #   MARKET → fetch_ticker last
+        ref_price = price_f or stop_price_f
+        if ref_price is None and cost_min:
+            try:
+                ticker = self.exchange.fetch_ticker(symbol) or {}
+                last = ticker.get("last")
+                if last is not None:
+                    ref_price = float(last) or None
+            except Exception:
+                ref_price = None
+        if cost_min and ref_price:
+            notional = amount_f * ref_price
+            if notional < float(cost_min):
+                return {
+                    "success": False,
+                    "error": f"notional {notional:.4f} below min cost {cost_min}",
+                    "error_kind": "PERMANENT",
+                }
+
+        # ── 3. 幂等键 ─────────────────────────────────────────────────
+        client_order_id = client_order_tag or self.make_client_order_tag()
+
+        # ── 4. 组装 params ────────────────────────────────────────────
+        params: Dict[str, Any] = {"newClientOrderId": client_order_id}
+        if reduce_only:
+            params["reduceOnly"] = True
+        if stop_price_f is not None:
+            params["stopPrice"] = stop_price_f
+
+        order_type_upper = order_type.upper()
+
+        # ── 5. 实际下单 + 受控 retry ──────────────────────────────────
+        last_exc: Optional[Exception] = None
+        for attempt in range(1, max_attempts + 1):
+            try:
+                if order_type_upper == "MARKET":
+                    order = self.exchange.create_market_order(
+                        symbol=symbol, side=side, amount=amount_f, params=params,
+                    )
+                elif order_type_upper == "LIMIT":
+                    if price_f is None:
+                        return {
+                            "success": False,
+                            "error": "LIMIT order requires price",
+                            "error_kind": "PERMANENT",
+                            "client_order_id": client_order_id,
+                        }
+                    order = self.exchange.create_limit_order(
+                        symbol=symbol, side=side, amount=amount_f, price=price_f, params=params,
+                    )
+                else:
+                    # STOP_MARKET / TAKE_PROFIT_MARKET — 通过 create_order
+                    order = self.exchange.create_order(
+                        symbol=symbol,
+                        type=order_type_upper,
+                        side=side,
+                        amount=amount_f,
+                        params=params,
+                    )
+
+                return {
+                    "success": True,
+                    "order_id": str(order.get("id")) if order.get("id") else None,
+                    "client_order_id": client_order_id,
+                    "filled": float(order.get("filled") or amount_f),
+                    "price": order.get("price") or order.get("average"),
+                    "raw": order,
+                }
+
+            except _RETRYABLE_EXC as e:
+                last_exc = e
+                if attempt < max_attempts:
+                    sleep_s = min(2 ** attempt, 8)
+                    print(
+                        f"[TRADE] {symbol} {order_type_upper} 瞬时错误 (尝试 {attempt}/{max_attempts}): "
+                        f"{e} — {sleep_s}s 后重试"
+                    )
+                    time.sleep(sleep_s)
+                    continue
+                # 出 retry → 报 TRANSIENT，调用方决定下一轮是否重试
+                return {
+                    "success": False,
+                    "error": str(e),
+                    "error_kind": "TRANSIENT",
+                    "client_order_id": client_order_id,
+                }
+
+            except Exception as e:
+                # 同一 clientOrderId 已经成交 — 之前重试其实成功了
+                if self._is_duplicate_order_error(e):
+                    print(
+                        f"[TRADE] {symbol} {order_type_upper} clientOrderId={client_order_id} "
+                        f"已存在 — 视为之前重试已成功"
+                    )
+                    return {
+                        "success": True,
+                        "order_id": None,
+                        "client_order_id": client_order_id,
+                        "filled": amount_f,
+                        "price": None,
+                        "error_kind": "DUPLICATE",
+                        "error": str(e),
+                    }
+                # 其它异常都是确定性的（坏 symbol / 余额不足 / 参数错），不重试
+                return {
+                    "success": False,
+                    "error": str(e),
+                    "error_kind": "PERMANENT",
+                    "client_order_id": client_order_id,
+                }
+
+        # 理论上不会走到（循环里要么 return 要么 continue），兜底
+        return {
+            "success": False,
+            "error": str(last_exc) if last_exc else "unknown",
+            "error_kind": "TRANSIENT",
+            "client_order_id": client_order_id,
+        }
     
     def _get_positions(self, symbol: Optional[str] = None) -> List[Dict[str, Any]]:
         """
@@ -370,7 +631,6 @@ class BinanceTrader:
                 "leverage": leverage,
             }
     
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
     def open_position(
         self,
         symbol: str,
@@ -382,174 +642,127 @@ class BinanceTrader:
         take_profit: Optional[float] = None,
     ) -> Dict[str, Any]:
         """
-        开仓
-        
+        开仓 — 走 _safe_create_order（带精度规整 + 幂等键 + 受控重试）
+
         Args:
-            symbol: 交易对符号（CCXT 格式，如 "TRB/USDT"）
+            symbol: 交易对符号（CCXT 统一格式，如 "TRB/USDT"）
             side: 方向（'LONG' 或 'SHORT'）
-            quantity: 数量（币数）
-            order_type: 订单类型（'MARKET' 或 'LIMIT'）
-            price: 限价单价格（限价单必需）
-            stop_loss: 止损价格（可选）
-            take_profit: 止盈价格（可选）
-        
+            quantity: 数量（币数 — 实际下单前会被 amount_to_precision 规整）
+            order_type: 'MARKET' 或 'LIMIT'
+            price: 限价单价格
+            stop_loss: 止损价格（可选 — 内部调 set_stop_loss）
+            take_profit: 止盈价格（可选 — 内部调 set_take_profit）
+
         Returns:
-            订单信息字典
+            {success, order_id, symbol, side, quantity, price, order_type, status,
+             stop_loss?, stop_loss_error?, take_profit?, take_profit_error?, timestamp}
+
+        注意：本函数本身**不**带 @retry — retry 已经被 _safe_create_order 接管，
+        而且它有 clientOrderId 幂等保护，网络超时重试不会双倍成交。
         """
-        binance_symbol = self._symbol_to_binance(symbol)
-        
-        # 验证交易对是否有效（在测试网可能不支持某些交易对）
-        try:
-            # 尝试加载市场信息，如果失败则说明交易对无效
-            market = self.exchange.market(symbol)
-            if not market or not market.get("active", True):
-                raise ValueError(f"交易对 {symbol} 不可用或已停用")
-        except Exception as e:
-            error_msg = str(e)
-            # 检查是否是 "Invalid symbol" 错误
-            if "-1121" in error_msg or "Invalid symbol" in error_msg or "symbol" in error_msg.lower():
-                raise ValueError(f"交易对 {symbol} 在币安测试网不支持或无效（错误: {error_msg}）")
-            # 其他错误也抛出，但保留原始错误信息
-            raise
-        
-        # 确定方向
+        # 校验方向
         if side.upper() == "LONG":
             side_ccxt = "buy"
         elif side.upper() == "SHORT":
             side_ccxt = "sell"
         else:
-            raise ValueError(f"无效的方向: {side}，必须是 'LONG' 或 'SHORT'")
-        
-        # 创建订单
-        try:
-            # 设置杠杆（在开仓前）
-            try:
-                self.set_leverage(symbol, self.leverage)
-            except Exception as e:
-                print(f"[WARNING] 设置杠杆失败（继续开仓）: {e}")
-            
-            if order_type.upper() == "MARKET":
-                order = self.exchange.create_market_order(
-                    symbol=binance_symbol,
-                    side=side_ccxt,
-                    amount=quantity,
-                )
-            elif order_type.upper() == "LIMIT":
-                if price is None:
-                    raise ValueError("限价单需要指定价格")
-                order = self.exchange.create_limit_order(
-                    symbol=binance_symbol,
-                    side=side_ccxt,
-                    amount=quantity,
-                    price=price,
-                )
-            else:
-                raise ValueError(f"不支持的订单类型: {order_type}")
-            
-            order_id = order.get("id")
-            filled_price = order.get("price") or order.get("average")
-            filled_quantity = order.get("filled", quantity)
-            
-            result = {
-                "success": True,
-                "order_id": str(order_id),
+            return {
+                "success": False,
+                "error": f"无效的方向: {side}，必须是 'LONG' 或 'SHORT'",
+                "error_kind": "PERMANENT",
                 "symbol": symbol,
-                "side": side,
-                "quantity": filled_quantity,
-                "price": filled_price,
-                "order_type": order_type,
-                "status": order.get("status", "unknown"),
                 "timestamp": datetime.now().isoformat(),
             }
-            
-            # 设置止损/止盈（如果提供）
-            # 注意：需要等待持仓建立后再设置止损/止盈
-            import time
-            time.sleep(0.5)  # 等待 0.5 秒，确保持仓已建立
-            
-            if stop_loss:
-                try:
-                    # 重试机制：最多重试 3 次，每次间隔 0.5 秒
-                    max_retries = 3
-                    stop_loss_success = False
-                    for attempt in range(max_retries):
-                        try:
-                            stop_result = self.set_stop_loss(symbol, stop_loss, side)
-                            if stop_result.get("success"):
-                                result["stop_loss"] = stop_loss
-                                stop_loss_success = True
-                                print(f"[TRADE] ✅ 止损设置成功: {symbol} @ {stop_loss}")
-                                break
-                            else:
-                                error_msg = stop_result.get("error", "未知错误")
-                                if "无持仓" in error_msg and attempt < max_retries - 1:
-                                    # 持仓可能还没建立，等待后重试
-                                    time.sleep(0.5)
-                                    continue
-                                else:
-                                    raise Exception(error_msg)
-                        except ValueError as e:
-                            if "无持仓" in str(e) and attempt < max_retries - 1:
-                                # 持仓可能还没建立，等待后重试
-                                time.sleep(0.5)
-                                continue
-                            else:
-                                raise
-                    if not stop_loss_success:
-                        raise Exception("止损设置失败：重试次数用尽")
-                except Exception as e:
-                    print(f"[WARNING] 设置止损失败: {symbol} - {e}")
-                    result["stop_loss_error"] = str(e)
-            
-            if take_profit:
-                try:
-                    # 重试机制：最多重试 3 次，每次间隔 0.5 秒
-                    max_retries = 3
-                    take_profit_success = False
-                    for attempt in range(max_retries):
-                        try:
-                            tp_result = self.set_take_profit(symbol, take_profit, side)
-                            if tp_result.get("success"):
-                                result["take_profit"] = take_profit
-                                take_profit_success = True
-                                print(f"[TRADE] ✅ 止盈设置成功: {symbol} @ {take_profit}")
-                                break
-                            else:
-                                error_msg = tp_result.get("error", "未知错误")
-                                if "无持仓" in error_msg and attempt < max_retries - 1:
-                                    # 持仓可能还没建立，等待后重试
-                                    time.sleep(0.5)
-                                    continue
-                                else:
-                                    raise Exception(error_msg)
-                        except ValueError as e:
-                            if "无持仓" in str(e) and attempt < max_retries - 1:
-                                # 持仓可能还没建立，等待后重试
-                                time.sleep(0.5)
-                                continue
-                            else:
-                                raise
-                    if not take_profit_success:
-                        raise Exception("止盈设置失败：重试次数用尽")
-                except Exception as e:
-                    print(f"[WARNING] 设置止盈失败: {symbol} - {e}")
-                    result["take_profit_error"] = str(e)
-            
-            print(f"[TRADE] ✅ 开仓成功: {symbol} {side} {filled_quantity:.4f} @ {filled_price}")
-            return result
-            
+
+        # 杠杆设置（best-effort，失败不阻塞）
+        try:
+            self.set_leverage(symbol, self.leverage)
         except Exception as e:
-            error_msg = str(e)
-            print(f"[ERROR] 开仓失败: {symbol} {side} - {error_msg}")
+            print(f"[WARNING] 设置杠杆失败（继续开仓）: {e}")
+
+        # 主下单 — 唯一入口
+        order_result = self._safe_create_order(
+            symbol=symbol,
+            side=side_ccxt,
+            order_type=order_type,
+            amount=quantity,
+            price=price,
+            reduce_only=False,
+        )
+
+        if not order_result.get("success"):
+            error_msg = order_result.get("error", "未知错误")
+            kind = order_result.get("error_kind", "UNKNOWN")
+            print(f"[ERROR] 开仓失败 [{kind}]: {symbol} {side} - {error_msg}")
             return {
                 "success": False,
                 "error": error_msg,
+                "error_kind": kind,
                 "symbol": symbol,
                 "side": side,
                 "timestamp": datetime.now().isoformat(),
             }
+
+        order_id = order_result.get("order_id")
+        filled_quantity = order_result.get("filled") or quantity
+        filled_price = order_result.get("price")
+
+        result: Dict[str, Any] = {
+            "success": True,
+            "order_id": order_id,
+            "client_order_id": order_result.get("client_order_id"),
+            "symbol": symbol,
+            "side": side,
+            "quantity": filled_quantity,
+            "price": filled_price,
+            "order_type": order_type,
+            "status": (order_result.get("raw") or {}).get("status", "unknown"),
+            "timestamp": datetime.now().isoformat(),
+        }
+        if order_result.get("error_kind") == "DUPLICATE":
+            result["was_duplicate"] = True
+
+        # 等持仓在 broker 端落定后再挂保护单（异步阻塞 — 此函数应在 to_thread 中调用）
+        time.sleep(0.5)
+
+        if stop_loss:
+            sl_result = self._place_protective_stop(
+                symbol=symbol,
+                stop_price=stop_loss,
+                side=side,
+                kind="STOP_LOSS",
+                quantity=filled_quantity,
+            )
+            if sl_result.get("success"):
+                result["stop_loss"] = stop_loss
+                print(f"[TRADE] ✅ 止损设置成功: {symbol} @ {stop_loss}")
+            else:
+                err = sl_result.get("error", "未知错误")
+                print(f"[WARNING] 设置止损失败: {symbol} - {err}")
+                result["stop_loss_error"] = err
+
+        if take_profit:
+            tp_result = self._place_protective_stop(
+                symbol=symbol,
+                stop_price=take_profit,
+                side=side,
+                kind="TAKE_PROFIT",
+                quantity=filled_quantity,
+            )
+            if tp_result.get("success"):
+                result["take_profit"] = take_profit
+                print(f"[TRADE] ✅ 止盈设置成功: {symbol} @ {take_profit}")
+            else:
+                err = tp_result.get("error", "未知错误")
+                print(f"[WARNING] 设置止盈失败: {symbol} - {err}")
+                result["take_profit_error"] = err
+
+        print(
+            f"[TRADE] ✅ 开仓成功: {symbol} {side} "
+            f"{float(filled_quantity):.4f} @ {filled_price}"
+        )
+        return result
     
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
     def close_position(
         self,
         symbol: str,
@@ -557,19 +770,21 @@ class BinanceTrader:
         order_type: str = 'MARKET',
     ) -> Dict[str, Any]:
         """
-        平仓
-        
+        平仓 — 走 _safe_create_order，reduce_only=True 防止意外反向开仓
+
         Args:
-            symbol: 交易对符号
+            symbol: 交易对符号（unified, 如 "BTC/USDT"）
             quantity: 平仓数量（None = 全部平仓）
-            order_type: 订单类型（'MARKET' 或 'LIMIT'）
-        
+            order_type: 'MARKET' 或 'LIMIT'
+
         Returns:
-            订单信息字典
+            订单结果字典
+
+        注意：本函数本身**不**带 @retry — retry 由 _safe_create_order 内部控制。
         """
         binance_symbol = self._symbol_to_binance(symbol)
-        
-        # 获取当前持仓（使用新的兼容方法）
+
+        # 查询当前持仓 — 这是 reduce_only 单需要的数量来源
         positions = self._get_positions(symbol)
         current_position = None
         for pos in positions:
@@ -582,210 +797,164 @@ class BinanceTrader:
                         "side": "LONG" if position_amt > 0 else "SHORT",
                     }
                     break
-        
+
         if not current_position:
             return {
                 "success": False,
                 "error": f"{symbol} 无持仓",
+                "error_kind": "PERMANENT",
                 "symbol": symbol,
             }
-        
-        # 确定平仓方向（与持仓相反）
+
+        # 反向单
         close_side = "sell" if current_position["side"] == "LONG" else "buy"
         close_quantity = quantity or abs(current_position["size"])
-        
-        try:
-            if order_type.upper() == "MARKET":
-                order = self.exchange.create_market_order(
-                    symbol=binance_symbol,
-                    side=close_side,
-                    amount=close_quantity,
-                )
-            elif order_type.upper() == "LIMIT":
-                # 限价平仓需要获取当前价格
-                ticker = self.exchange.fetch_ticker(binance_symbol)
-                price = ticker.get("last")
-                if price is None:
-                    raise ValueError("无法获取当前价格")
-                order = self.exchange.create_limit_order(
-                    symbol=binance_symbol,
-                    side=close_side,
-                    amount=close_quantity,
-                    price=price,
-                )
-            else:
-                raise ValueError(f"不支持的订单类型: {order_type}")
-            
-            order_id = order.get("id")
-            filled_price = order.get("price") or order.get("average")
-            filled_quantity = order.get("filled", close_quantity)
-            
-            print(f"[TRADE] ✅ 平仓成功: {symbol} {filled_quantity:.4f} @ {filled_price}")
-            return {
-                "success": True,
-                "order_id": str(order_id),
-                "symbol": symbol,
-                "quantity": filled_quantity,
-                "price": filled_price,
-                "order_type": order_type,
-                "status": order.get("status", "unknown"),
-                "timestamp": datetime.now().isoformat(),
-            }
-            
-        except Exception as e:
-            error_msg = str(e)
-            print(f"[ERROR] 平仓失败: {symbol} - {error_msg}")
+
+        # 限价单需要参考价
+        ref_price: Optional[float] = None
+        if order_type.upper() == "LIMIT":
+            try:
+                ticker = self.exchange.fetch_ticker(symbol)
+                ref_price = ticker.get("last")
+            except Exception as e:
+                return {
+                    "success": False,
+                    "error": f"无法获取参考价: {e}",
+                    "error_kind": "TRANSIENT",
+                    "symbol": symbol,
+                }
+            if ref_price is None:
+                return {
+                    "success": False,
+                    "error": "ticker last 为空",
+                    "error_kind": "TRANSIENT",
+                    "symbol": symbol,
+                }
+
+        order_result = self._safe_create_order(
+            symbol=symbol,
+            side=close_side,
+            order_type=order_type,
+            amount=close_quantity,
+            price=ref_price,
+            reduce_only=True,  # 关键：防止意外反向开仓
+        )
+
+        if not order_result.get("success"):
+            error_msg = order_result.get("error", "未知错误")
+            kind = order_result.get("error_kind", "UNKNOWN")
+            print(f"[ERROR] 平仓失败 [{kind}]: {symbol} - {error_msg}")
             return {
                 "success": False,
                 "error": error_msg,
+                "error_kind": kind,
                 "symbol": symbol,
                 "timestamp": datetime.now().isoformat(),
             }
-    
+
+        filled_quantity = order_result.get("filled") or close_quantity
+        filled_price = order_result.get("price")
+        print(
+            f"[TRADE] ✅ 平仓成功: {symbol} "
+            f"{float(filled_quantity):.4f} @ {filled_price}"
+        )
+        return {
+            "success": True,
+            "order_id": order_result.get("order_id"),
+            "client_order_id": order_result.get("client_order_id"),
+            "symbol": symbol,
+            "quantity": filled_quantity,
+            "price": filled_price,
+            "order_type": order_type,
+            "status": (order_result.get("raw") or {}).get("status", "unknown"),
+            "timestamp": datetime.now().isoformat(),
+        }
+
+    def _place_protective_stop(
+        self,
+        symbol: str,
+        stop_price: float,
+        side: str,             # 持仓方向 'LONG' / 'SHORT'
+        kind: str,             # 'STOP_LOSS' / 'TAKE_PROFIT'
+        quantity: Optional[float] = None,  # 数量；None 时查询 broker
+        max_wait_attempts: int = 4,
+        wait_seconds: float = 0.5,
+    ) -> Dict[str, Any]:
+        """
+        统一的保护单挂单逻辑。**关键修复**：
+          - 用 reduceOnly + 明确 amount，**不再**用 closePosition=True + amount
+            （这两个参数在 Binance 是互斥的，组合会被 -1106 拒绝 → 保护单永远挂不上）
+          - 走 _safe_create_order，享受 precision 规整 + idempotency + retry 分类
+          - 内置 "等持仓在 broker 端落定" 的轮询（首次 broker 仓位查询可能为空）
+        """
+        if side.upper() == "LONG":
+            # 多头止损/止盈方向都是 SELL
+            stop_side = "sell"
+        elif side.upper() == "SHORT":
+            stop_side = "buy"
+        else:
+            return {"success": False, "error": f"无效方向: {side}", "error_kind": "PERMANENT"}
+
+        if kind.upper() == "STOP_LOSS":
+            order_type = "STOP_MARKET"
+        elif kind.upper() == "TAKE_PROFIT":
+            order_type = "TAKE_PROFIT_MARKET"
+        else:
+            return {"success": False, "error": f"无效保护单类型: {kind}", "error_kind": "PERMANENT"}
+
+        binance_symbol = self._symbol_to_binance(symbol)
+
+        # 等持仓落定 / 查询数量
+        position_amt: float = abs(quantity) if quantity else 0.0
+        if not position_amt:
+            for attempt in range(max_wait_attempts):
+                positions = self._get_positions(symbol)
+                for pos in positions:
+                    if pos.get("symbol") == binance_symbol:
+                        position_amt = abs(float(pos.get("positionAmt", 0) or 0))
+                        if position_amt:
+                            break
+                if position_amt:
+                    break
+                if attempt < max_wait_attempts - 1:
+                    time.sleep(wait_seconds)
+            if not position_amt:
+                return {
+                    "success": False,
+                    "error": f"{symbol} broker 端无持仓（等待 {max_wait_attempts*wait_seconds:.1f}s 仍未出现）",
+                    "error_kind": "TRANSIENT",
+                }
+
+        return self._safe_create_order(
+            symbol=symbol,
+            side=stop_side,
+            order_type=order_type,
+            amount=position_amt,
+            stop_price=stop_price,
+            reduce_only=True,  # 关键 — 替代了之前错误的 closePosition=True
+        )
+
     def set_stop_loss(
         self,
         symbol: str,
         stop_price: float,
-        side: str,  # 'LONG' or 'SHORT'
+        side: str,
     ) -> Dict[str, Any]:
-        """
-        设置止损单（STOP_MARKET）
-        
-        Args:
-            symbol: 交易对符号
-            stop_price: 止损价格
-            side: 方向（'LONG' 或 'SHORT'）
-        
-        Returns:
-            订单信息字典
-        """
-        binance_symbol = self._symbol_to_binance(symbol)
-        
-        # 确定止损方向
-        if side.upper() == "LONG":
-            # 做多止损：价格下跌触发，卖出
-            stop_side = "SELL"
-        elif side.upper() == "SHORT":
-            # 做空止损：价格上涨触发，买入
-            stop_side = "BUY"
-        else:
-            raise ValueError(f"无效的方向: {side}")
-        
-        try:
-            # 币安止损单（STOP_MARKET）
-            # 注意：币安 API 需要先获取当前持仓数量
-            positions = self._get_positions(symbol)
-            position_amt = 0.0
-            for pos in positions:
-                pos_symbol = pos.get("symbol", "")
-                if pos_symbol == binance_symbol:
-                    position_amt = abs(float(pos.get("positionAmt", 0)))
-                    break
-            
-            if position_amt == 0:
-                raise ValueError(f"{symbol} 无持仓，无法设置止损")
-            
-            # 创建止损单
-            order = self.exchange.create_order(
-                symbol=binance_symbol,
-                type="STOP_MARKET",
-                side=stop_side.lower(),
-                amount=position_amt,
-                params={
-                    "stopPrice": stop_price,
-                    "closePosition": True,  # 平仓所有持仓
-                }
-            )
-            
-            # 注意：成功日志已在 open_position 中打印，这里不再重复
-            return {
-                "success": True,
-                "order_id": str(order.get("id")),
-                "symbol": symbol,
-                "stop_price": stop_price,
-                "timestamp": datetime.now().isoformat(),
-            }
-            
-        except Exception as e:
-            error_msg = str(e)
-            print(f"[ERROR] 设置止损失败: {symbol} - {error_msg}")
-            return {
-                "success": False,
-                "error": error_msg,
-                "symbol": symbol,
-            }
-    
+        """挂止损单（薄封装 → _place_protective_stop）"""
+        return self._place_protective_stop(
+            symbol=symbol, stop_price=stop_price, side=side, kind="STOP_LOSS",
+        )
+
     def set_take_profit(
         self,
         symbol: str,
         take_profit_price: float,
-        side: str,  # 'LONG' or 'SHORT'
+        side: str,
     ) -> Dict[str, Any]:
-        """
-        设置止盈单（TAKE_PROFIT_MARKET）
-        
-        Args:
-            symbol: 交易对符号
-            take_profit_price: 止盈价格
-            side: 方向（'LONG' 或 'SHORT'）
-        
-        Returns:
-            订单信息字典
-        """
-        binance_symbol = self._symbol_to_binance(symbol)
-        
-        # 确定止盈方向
-        if side.upper() == "LONG":
-            # 做多止盈：价格上涨触发，卖出
-            tp_side = "SELL"
-        elif side.upper() == "SHORT":
-            # 做空止盈：价格下跌触发，买入
-            tp_side = "BUY"
-        else:
-            raise ValueError(f"无效的方向: {side}")
-        
-        try:
-            # 获取当前持仓数量（使用新的兼容方法）
-            positions = self._get_positions(symbol)
-            position_amt = 0.0
-            for pos in positions:
-                pos_symbol = pos.get("symbol", "")
-                if pos_symbol == binance_symbol:
-                    position_amt = abs(float(pos.get("positionAmt", 0)))
-                    break
-            
-            if position_amt == 0:
-                raise ValueError(f"{symbol} 无持仓，无法设置止盈")
-            
-            # 创建止盈单
-            order = self.exchange.create_order(
-                symbol=binance_symbol,
-                type="TAKE_PROFIT_MARKET",
-                side=tp_side.lower(),
-                amount=position_amt,
-                params={
-                    "stopPrice": take_profit_price,
-                    "closePosition": True,  # 平仓所有持仓
-                }
-            )
-            
-            # 注意：成功日志已在 open_position 中打印，这里不再重复
-            return {
-                "success": True,
-                "order_id": str(order.get("id")),
-                "symbol": symbol,
-                "take_profit_price": take_profit_price,
-                "timestamp": datetime.now().isoformat(),
-            }
-            
-        except Exception as e:
-            error_msg = str(e)
-            print(f"[ERROR] 设置止盈失败: {symbol} - {error_msg}")
-            return {
-                "success": False,
-                "error": error_msg,
-                "symbol": symbol,
-            }
+        """挂止盈单（薄封装 → _place_protective_stop）"""
+        return self._place_protective_stop(
+            symbol=symbol, stop_price=take_profit_price, side=side, kind="TAKE_PROFIT",
+        )
     
     def get_order_status(self, symbol: str, order_id: str) -> Dict[str, Any]:
         """

@@ -181,6 +181,18 @@ class V43PositionManager:
         Returns:
             持仓字典，如果开仓失败返回 None
         """
+        # SHORT 路径暂停（v45 临时止血）
+        # chandelier_stop 的 SHORT 数学和 funding 符号尚未端到端修复，强行 SHORT 等于裸奔
+        # 设 ENABLE_SHORT_TRADING=true 可恢复（不推荐，等系统性修复后再开）
+        if side.upper() == "SHORT":
+            enable_short = os.environ.get("ENABLE_SHORT_TRADING", "false").lower() in ("1", "true")
+            if not enable_short:
+                print(
+                    f"[V4.3 SKIP] {symbol} SHORT 入场被 kill switch 拦截 "
+                    f"(ENABLE_SHORT_TRADING=false) — 设 true 可恢复"
+                )
+                return None
+
         # 幂等保护：永远从 DB 查询，不依赖内存缓存
         existing = self.get_position_api_safe(symbol)
         if existing:
@@ -271,8 +283,9 @@ class V43PositionManager:
             "atr_k": atr_k,
             "atr_shock_detected": False,
             "atr_shock_freeze_until": None,
+            # 对称初始化 — 已 ALTER TABLE 加上 lowest_price 列（v45 迁移）
             "highest_price": entry_price if side == "LONG" else None,
-            # 注意：数据库表中没有 lowest_price 字段，已移除
+            "lowest_price": entry_price if side == "SHORT" else None,
             "phase": features.get("phase"),
             "phase_age": features.get("phase_age"),
             "status": "OPEN",
@@ -298,20 +311,57 @@ class V43PositionManager:
                 if not trade_result.get("success"):
                     error_msg = trade_result.get('error', '未知错误')
                     print(f"[ERROR] 币安开仓失败: {error_msg}")
-                    
+
                     # 检查是否是交易对状态错误（测试网可能不支持某些交易对）
                     if "-4140" in str(error_msg) or "Invalid symbol status" in str(error_msg):
                         print(f"[WARNING] {symbol} 在币安测试网不支持或状态异常，跳过此交易对")
                         print(f"[INFO] 这是正常现象，测试网可能不支持所有交易对")
-                    
+
                     # 如果币安订单失败，不写入数据库，直接返回 None
                     # 这样可以避免记录虚假的持仓
                     return None
-                else:
-                    # 注意：数据库表中没有 binance_order_id 字段，已移除
-                    # 订单 ID 已通过日志输出
-                    print(f"[V4.3] ✅ 币安开仓成功: order_id={trade_result.get('order_id')}")
-                    binance_order_success = True
+
+                # 进场成功 — 但 SL/TP 可能在 trader 内部静默失败（只记 WARNING）。
+                # 默认 fail-closed：如果保护单未挂上，立刻平掉刚开的仓位，不写入 DB。
+                # 设 SL_TP_FAIL_OPEN=true 可恢复旧的"裸奔"行为。
+                sl_tp_fail_open = os.environ.get("SL_TP_FAIL_OPEN", "false").lower() in ("1", "true")
+                sl_err = trade_result.get("stop_loss_error")
+                tp_err = trade_result.get("take_profit_error")
+                if (sl_err or tp_err) and not sl_tp_fail_open:
+                    print(
+                        f"[CRITICAL] {symbol} 保护单未挂上 "
+                        f"(sl_error={sl_err!r}, tp_error={tp_err!r}) — 立刻回滚平仓"
+                    )
+                    try:
+                        rollback = self.trader.close_position(
+                            symbol=symbol, quantity=None, order_type="MARKET"
+                        )
+                        if rollback.get("success"):
+                            print(f"[V4.3] ↩ 回滚平仓成功: order_id={rollback.get('order_id')}")
+                        else:
+                            # 回滚失败 = 真正的紧急情况：broker 端有裸仓，需人工介入。
+                            print(
+                                f"[ALERT] {symbol} 回滚平仓失败: {rollback.get('error')} "
+                                f"— 请立即手动检查 broker 持仓"
+                            )
+                    except Exception as rb_exc:
+                        print(
+                            f"[ALERT] {symbol} 回滚平仓异常: {rb_exc} "
+                            f"— 请立即手动检查 broker 持仓"
+                        )
+                    return None
+
+                if sl_err or tp_err:
+                    # fail-open 路径：警告但继续写 DB
+                    print(
+                        f"[WARNING] {symbol} 保护单失败但 SL_TP_FAIL_OPEN=true，"
+                        f"仓位以裸奔状态记录 (sl_error={sl_err!r}, tp_error={tp_err!r})"
+                    )
+
+                # 注意：数据库表中没有 binance_order_id 字段，已移除
+                # 订单 ID 已通过日志输出
+                print(f"[V4.3] ✅ 币安开仓成功: order_id={trade_result.get('order_id')}")
+                binance_order_success = True
             except Exception as e:
                 print(f"[ERROR] 币安开仓异常: {e}")
                 # 如果币安订单异常，不写入数据库，直接返回 None
@@ -386,15 +436,20 @@ class V43PositionManager:
         position["current_price"] = current_price
         position["updated_at"] = datetime.now().isoformat()
         
-        # 更新最高价（LONG 持仓使用）
+        # 跟踪极值（v45 起 lowest_price 字段已存在）
         if position["side"] == "LONG":
             if position.get("highest_price") is None or current_price > position["highest_price"]:
                 position["highest_price"] = current_price
-        
-        # 注意：数据库表中没有 lowest_price 字段，SHORT 持仓直接使用 current_price
-        # 更新 Chandelier Stop
+        else:  # SHORT
+            if position.get("lowest_price") is None or current_price < position["lowest_price"]:
+                position["lowest_price"] = current_price
+
+        # 更新 Chandelier Stop 的参考极值
+        # 注意：v45 仅修了字段对称性。chandelier_stop 内部对 SHORT 的数学仍未修，
+        # 因此当前 ENABLE_SHORT_TRADING=false 的默认值下，下面这条 SHORT 路径
+        # 实际只会被遗留 OPEN SHORT 持仓触发。
         current_high = position.get("highest_price") if position["side"] == "LONG" else current_price
-        current_low = current_price  # SHORT 持仓直接使用当前价格（数据库中没有 lowest_price 字段）
+        current_low = position.get("lowest_price") if position["side"] == "SHORT" else current_price
         
         # 计算 ATR 历史（用于 ATR Shock Guard）
         atr_history = None
@@ -464,42 +519,75 @@ class V43PositionManager:
     ) -> Optional[Dict[str, Any]]:
         """
         平仓
-        
+
+        顺序：broker 先 → DB 后。
+        broker 平仓失败时保持 DB status=OPEN，返回 None，让下一轮 scan 重试；
+        避免出现 "DB 写 CLOSED 但 broker 实际还有持仓" 的幽灵仓位。
+
         Args:
             symbol: 交易对符号
-            exit_price: 平仓价格
+            exit_price: 平仓价格（broker 调用成功时会被实际成交价覆盖）
             exit_reason: 平仓原因
             write_queue: 异步写入队列（可选）
-        
+
         Returns:
-            平仓后的持仓字典（包含 PnL），如果持仓不存在返回 None
+            平仓后的持仓字典（包含 PnL），平仓不存在或 broker 失败返回 None
         """
         position = self.get_position(symbol)
         if not position:
             return None
-        
+
         entry_price = position["entry_price"]
         position_size = position["position_size"]
         side = position["side"]
-        
-        # 计算盈亏
+
+        # Step 1 — 先调 broker（如果配置了）。broker 失败就 DB 不动，让重试覆盖。
+        broker_fill_price: Optional[float] = None
+        if self.trader:
+            try:
+                trade_result = self.trader.close_position(
+                    symbol=symbol,
+                    quantity=None,  # 全部平仓
+                    order_type="MARKET",
+                )
+            except Exception as e:
+                print(
+                    f"[ALERT] {symbol} broker 平仓异常: {e} — "
+                    f"DB 保持 OPEN，下一轮 scan 会重试"
+                )
+                return None
+
+            if not trade_result.get("success"):
+                print(
+                    f"[ALERT] {symbol} broker 平仓失败: {trade_result.get('error', '未知错误')} — "
+                    f"DB 保持 OPEN，下一轮 scan 会重试"
+                )
+                return None
+
+            # broker 成交价优先（更准确）
+            broker_fill_price = trade_result.get("price") or trade_result.get("filled_price")
+            print(f"[V4.3] ✅ 币安平仓成功: order_id={trade_result.get('order_id')}")
+        else:
+            print(f"[INFO] 未配置交易器，仅记录平仓到数据库（模拟交易）")
+
+        # Step 2 — broker 成功（或模拟）后，用真实成交价计算 PnL 并写 DB。
+        final_exit_price = float(broker_fill_price) if broker_fill_price else exit_price
         if side == "LONG":
-            pnl = (exit_price - entry_price) * position_size
-            pnl_percent = ((exit_price - entry_price) / entry_price) * 100
+            pnl = (final_exit_price - entry_price) * position_size
+            pnl_percent = ((final_exit_price - entry_price) / entry_price) * 100
         else:  # SHORT
-            pnl = (entry_price - exit_price) * position_size
-            pnl_percent = ((entry_price - exit_price) / entry_price) * 100
-        
-        # 更新持仓记录
+            pnl = (entry_price - final_exit_price) * position_size
+            pnl_percent = ((entry_price - final_exit_price) / entry_price) * 100
+
+        now_iso = datetime.now().isoformat()
         position["status"] = "CLOSED"
-        position["current_price"] = exit_price
-        position["closed_at"] = datetime.now().isoformat()
+        position["current_price"] = final_exit_price
+        position["closed_at"] = now_iso
         position["exit_reason"] = exit_reason
         position["pnl"] = pnl
         position["pnl_percent"] = pnl_percent
-        position["updated_at"] = datetime.now().isoformat()
-        
-        # 更新数据库
+        position["updated_at"] = now_iso
+
         if write_queue:
             write_queue.put_nowait({
                 "op": "upsert",
@@ -515,47 +603,88 @@ class V43PositionManager:
                     .eq("status", "OPEN")\
                     .execute()
             except Exception as e:
-                print(f"[WARNING] 平仓更新失败: {e}")
-        
-        # 如果配置了交易器，执行实际平仓
-        if self.trader:
-            try:
-                trade_result = self.trader.close_position(
-                    symbol=symbol,
-                    quantity=None,  # 全部平仓
-                    order_type="MARKET",
+                # broker 已平，DB 没写上 — 出现 broker/DB 不一致。
+                # 记录关键告警，由 reconciler 后台修复。
+                print(
+                    f"[ALERT] {symbol} broker 已平仓但 DB 更新失败: {e} — "
+                    f"position_id={position.get('id')} 需要 reconciler 修复"
                 )
-                
-                if not trade_result.get("success"):
-                    print(f"[WARNING] 币安平仓失败: {trade_result.get('error', '未知错误')}")
-                    # 注意：数据库表中没有 trade_status 和 trade_error 字段，已移除
-                    # 错误信息已通过日志输出
-                else:
-                    # 注意：数据库表中没有 binance_order_id 字段，已移除
-                    # 订单 ID 已通过日志输出
-                    print(f"[V4.3] ✅ 币安平仓成功: order_id={trade_result.get('order_id')}")
-            except Exception as e:
-                print(f"[WARNING] 币安平仓异常: {e}")
-                # 注意：数据库表中没有 trade_status 和 trade_error 字段，已移除
-                # 错误信息已通过日志输出
-        else:
-            print(f"[INFO] 未配置交易器，仅记录平仓到数据库（模拟交易）")
-            # 注意：数据库表中没有 trade_status 字段，已移除
-        
+
         # 从缓存移除
         if symbol in self.positions_cache:
             del self.positions_cache[symbol]
-        
+
         print(
             f"[V4.3 CLOSE] {symbol:12s} | "
             f"side={side} | "
             f"entry={entry_price:.4f} | "
-            f"exit={exit_price:.4f} | "
+            f"exit={final_exit_price:.4f} | "
             f"pnl={pnl:.2f} ({pnl_percent:+.2f}%) | "
             f"reason={exit_reason}"
         )
-        
+
+        # v45：写入 AI 学习日志（JSONL），喂给 memory_uploader 的 Vector Store 上传。
+        # 之前 log_trade_result 没有任何调用方，Vector Store 永远是空的 → AI 的"搜索历史
+        # 案例"prompt 形同虚设。这里把闭环接通。任何写日志的失败都不能影响交易主线。
+        try:
+            self._log_trade_to_ai_memory(
+                position=position,
+                entry_price=entry_price,
+                exit_price=final_exit_price,
+                pnl=pnl,
+                pnl_percent=pnl_percent,
+                exit_reason=exit_reason,
+            )
+        except Exception as log_exc:
+            print(f"[WARNING] AI 学习日志写入失败（不影响交易）: {log_exc}")
+
         return position
+
+    @staticmethod
+    def _log_trade_to_ai_memory(
+        *,
+        position: Dict[str, Any],
+        entry_price: float,
+        exit_price: float,
+        pnl: float,
+        pnl_percent: float,   # 百分比形式（5.0 = 5%）
+        exit_reason: str,
+    ) -> None:
+        """把刚关闭的交易 append 到 data/ai_trade_log.jsonl。
+
+        memory_uploader.log_trade_result 期望 pnl_pct **小数形式**（0.05 = 5%），
+        它内部会 *100 转回百分比存储。所以这里把百分比 / 100。
+
+        从 position 上提取可用的 features / ai_decision 子集。完整的 features 需要
+        从 trade_scores_v43 / ai_training_data 关联查询，下一步再做。
+        """
+        # 懒加载：避免 import 时连锁副作用（openai 客户端等）
+        from scripts.ai.memory_uploader import log_trade_result
+
+        features = {
+            "phase": position.get("phase"),
+            "phase_age": position.get("phase_age"),
+            # 后续可在 open_position 时把完整 features 序列化进 position["entry_features"]
+            # 然后这里直接读出来，给 AI 学习"开仓时的市场状态 → 结果"的映射。
+        }
+        ai_decision = {
+            "confidence": position.get("ai_confidence"),
+            "sl_multiplier": position.get("ai_sl_multiplier"),
+            "tp_multiplier": position.get("ai_tp_multiplier"),
+            "strategy_id": position.get("strategy_id"),
+        }
+
+        log_trade_result(
+            symbol=position.get("symbol", "UNKNOWN"),
+            side=position.get("side", "UNKNOWN"),
+            entry_price=float(entry_price),
+            exit_price=float(exit_price),
+            pnl_usdt=float(pnl),
+            pnl_pct=float(pnl_percent) / 100.0,   # 转回小数形式
+            exit_reason=exit_reason,
+            features={k: v for k, v in features.items() if v is not None},
+            ai_decision={k: v for k, v in ai_decision.items() if v is not None} or None,
+        )
     
     def _calculate_bars_since_entry(self, position: Dict[str, Any]) -> int:
         """

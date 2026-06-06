@@ -248,7 +248,18 @@ def route_strategy(
     # ============================================
     # V4.5 变更：做空是当前的主力，给它足够的空间
     # 门槛从 75 放宽到 70，持仓从 3 提升到 5
+    # v45 临时止血：默认禁用 SHORT 入场（chandelier_stop 数学 + funding 符号未修）
     if phase in ["P3B_PUMP_LATE", "P4_DISTRIBUTION"]:
+        # SHORT kill switch — 在跑完 OI/structure 计算和 AI 二次决策前提前返回，省 token
+        if os.environ.get("ENABLE_SHORT_TRADING", "false").lower() not in ("1", "true"):
+            return StrategyResult(
+                id="WAIT",
+                score=0,
+                side="NONE",
+                confidence=0.0,
+                risk_profile={},
+                reason=f"SHORT kill switch active (ENABLE_SHORT_TRADING=false) — phase={phase} 候选忽略"
+            )
         # Vulture 触发条件：
         # - 被 LOW_EXPECTED_RETURN 拦截（上方无空间）
         # - OI 下降 > 3%（庄家平多，3% 的出货已经很明显）
