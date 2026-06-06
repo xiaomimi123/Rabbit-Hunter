@@ -8,15 +8,51 @@ V4.3 WebSocket 服务器
 - 系统状态更新
 - 图表数据更新
 - 交易确认
+
+v45：bearer 鉴权（与 HTTP 路由的 require_auth 平行）
+  浏览器 WS 升级不能发自定义 Authorization 头，所以走 query string：
+    ws://host:port/ws/v43?token=<API_BEARER_TOKEN>
+  未配置 API_BEARER_TOKEN 时不强制（默认本机模式兼容）。
+  注意：query string 会进 nginx/uvicorn 的 access log；单机使用风险可控，
+  若日后接入反代部署，建议改成 cookie / 短期 ticket。
 """
 
+import os
+import secrets
+from typing import Dict, List, Set, Optional
+
 from fastapi import WebSocket, WebSocketDisconnect
-from typing import Dict, List, Set
 import asyncio
 import json
 from datetime import datetime
 
 from scripts.v43_kill_queue_manager import get_kill_queue_manager
+
+
+def _expected_bearer_token() -> Optional[str]:
+    """运行时读取，避免锁死值（与 api/dependencies.py 行为一致）"""
+    tok = os.environ.get("API_BEARER_TOKEN", "").strip()
+    return tok or None
+
+
+async def _authorize_ws(websocket: WebSocket) -> bool:
+    """校验 WS 升级的 bearer token。
+    - API_BEARER_TOKEN 未设 → 直接放行（兼容默认本机模式）
+    - 已设 → 必须 ?token=<value> 或 ?api_key=<value> 且 constant-time 相等
+    失败时返回 False 并 close(code=4401)；调用方应立即 return。
+    """
+    expected = _expected_bearer_token()
+    if expected is None:
+        return True
+    # query_params: starlette QueryParams（dict-like），支持 .get
+    qp = websocket.query_params
+    provided = (qp.get("token") or qp.get("api_key") or "").strip()
+    if provided and secrets.compare_digest(provided, expected):
+        return True
+    # 1008 = Policy Violation；自定义 4401 也常用作"WS 鉴权失败"
+    await websocket.close(code=4401, reason="Unauthorized")
+    print("[WebSocket] 鉴权失败：query 中缺少或不匹配 bearer token")
+    return False
 
 
 class WebSocketManager:
@@ -88,7 +124,10 @@ websocket_manager = WebSocketManager()
 
 
 async def websocket_endpoint(websocket: WebSocket):
-    """WebSocket 端点处理函数"""
+    """WebSocket 端点处理函数（bearer 鉴权 → accept → 订阅循环）"""
+    # 先鉴权再 accept；失败时 _authorize_ws 已经 close 过了
+    if not await _authorize_ws(websocket):
+        return
     await websocket_manager.connect(websocket)
     
     try:
