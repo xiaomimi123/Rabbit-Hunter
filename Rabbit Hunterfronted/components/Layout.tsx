@@ -1,59 +1,63 @@
 /**
- * Layout v5.0 — 左侧边栏 + 顶栏 + 内容区
+ * Layout v45 — "简约高级" 风格
  *
- * 结构：
  *   ┌──────────────────────────────────────────┐
- *   │  顶栏 48px (Logo + 策略状态 + 系统指示)   │
+ *   │ Top bar 56px                              │
  *   ├────────┬─────────────────────────────────┤
- *   │ 侧边栏 │          内容区                  │
- *   │ 220px  │          overflow-y-auto         │
- *   │ (可折  │                                  │
- *   │  叠至  │                                  │
- *   │  64px) │                                  │
+ *   │ Side   │  Content (overflow-y auto)       │
+ *   │ 232px  │                                  │
+ *   │ → 64   │                                  │
  *   └────────┴─────────────────────────────────┘
+ *
+ * 设计原则：
+ *   - 单 accent（amber）、单层 surface、hairline 边
+ *   - 无 emoji、无 neon glow、无装饰渐变
+ *   - SHADOW/LIVE 切换走 useUIStore（之前只在 local state，对其它页无效）
+ *   - 切到 LIVE 走 ConfirmModal 二次确认（用户曾因误点引爆真实下单）
  */
 
 import React, { useState } from 'react';
 import {
-  Target, Briefcase, Crosshair, BrainCircuit, Zap, Activity,
-  BarChart3, Settings, LayoutDashboard, ChevronLeft, ChevronRight,
-  Skull, Circle,
+  ChevronLeft, ChevronRight, Circle,
+  CrosshairIcon, LayoutGrid, Briefcase, SquarePen,
+  Cpu, Sliders, BarChart3, ScrollText, Cog,
 } from 'lucide-react';
-import { ViewType } from '../types';
-import { SystemState } from '../types';
+import { ViewType, SystemState } from '../types';
+import { useUIStore } from '../services/store';
 import { useSystemStatus } from '../hooks/useSystemStatus';
+import ConfirmModal from './ui/ConfirmModal';
 
 // ─── nav config ──────────────────────────────────────────────────────────────
 
 interface NavItem {
   id: ViewType;
   label: string;
-  icon: React.ComponentType<{ size?: number; className?: string }>;
+  icon: React.ComponentType<{ size?: number; className?: string; strokeWidth?: number | string }>;
 }
 
 const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
   {
     label: '交易',
     items: [
-      { id: 'KILL_BOARD',  label: 'Kill Board',  icon: Target },
-      { id: 'POSITIONS',   label: '持仓管理',    icon: Briefcase },
-      { id: 'ORDER',       label: '手动下单',    icon: Crosshair },
+      { id: 'KILL_BOARD', label: '信号',     icon: CrosshairIcon },
+      { id: 'POSITIONS',  label: '持仓',     icon: Briefcase },
+      { id: 'ORDER',      label: '手动下单', icon: SquarePen },
     ],
   },
   {
-    label: 'AI 系统',
+    label: '智能',
     items: [
-      { id: 'AI_STATUS',      label: 'AI 状态',  icon: BrainCircuit },
-      { id: 'WEIGHT_HISTORY', label: 'AI 权重',  icon: Activity },
-      { id: 'TRADE_SCORES',   label: '交易评分', icon: BarChart3 },
-      { id: 'STRATEGY_CONFIG',label: '策略配置', icon: Zap },
+      { id: 'AI_STATUS',       label: 'AI 状态',  icon: Cpu },
+      { id: 'WEIGHT_HISTORY',  label: '权重历史', icon: ScrollText },
+      { id: 'TRADE_SCORES',    label: '评分',     icon: BarChart3 },
+      { id: 'STRATEGY_CONFIG', label: '策略',     icon: Sliders },
     ],
   },
   {
     label: '系统',
     items: [
-      { id: 'DASHBOARD', label: '仪表盘',  icon: LayoutDashboard },
-      { id: 'SETTINGS',  label: '系统设置', icon: Settings },
+      { id: 'DASHBOARD', label: '概览', icon: LayoutGrid },
+      { id: 'SETTINGS',  label: '设置', icon: Cog },
     ],
   },
 ];
@@ -64,88 +68,69 @@ interface TopBarProps {
   sidebarCollapsed: boolean;
   onToggleSidebar: () => void;
   systemMode: SystemState;
-  onToggleMode: () => void;
+  onRequestModeChange: (target: SystemState) => void;
 }
 
-const TopBar: React.FC<TopBarProps> = ({ sidebarCollapsed, onToggleSidebar, systemMode, onToggleMode }) => (
-  <header className="h-12 flex items-center justify-between px-4 bg-terminal-card border-b border-terminal-border shrink-0 z-20">
-    {/* Left: toggle + logo */}
-    <div className="flex items-center gap-3">
+const TopBar: React.FC<TopBarProps> = ({
+  sidebarCollapsed, onToggleSidebar, systemMode, onRequestModeChange,
+}) => (
+  <header className="h-14 flex items-center justify-between px-5 bg-terminal-bg border-b border-terminal-border shrink-0 z-20">
+    {/* Left: brand */}
+    <div className="flex items-center gap-4">
       <button
         onClick={onToggleSidebar}
-        className="p-1.5 rounded text-text-muted hover:text-text-primary hover:bg-terminal-hover transition-colors"
+        className="p-1.5 -ml-1.5 rounded text-text-muted hover:text-text-primary hover:bg-terminal-hover transition-colors"
+        aria-label={sidebarCollapsed ? '展开导航' : '收起导航'}
       >
-        {sidebarCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+        {sidebarCollapsed ? <ChevronRight size={16} strokeWidth={1.5} /> : <ChevronLeft size={16} strokeWidth={1.5} />}
       </button>
-      <div className="flex items-center gap-2">
-        <div className="w-6 h-6 rounded bg-primary/20 border border-primary/40 flex items-center justify-center">
-          <Skull size={13} className="text-primary" />
-        </div>
-        <div className="leading-none">
-          <div className="text-[11px] font-bold text-text-primary tracking-widest uppercase font-mono">
-            Rabbit Hunter
-          </div>
-          <div className="text-[9px] text-text-muted font-mono">v5.0</div>
-        </div>
+      <div className="flex items-baseline gap-2">
+        <span className="text-[15px] font-medium text-text-primary tracking-tight">
+          Rabbit Hunter
+        </span>
+        <span className="text-[10px] text-text-muted font-mono tracking-micro">v5.0</span>
       </div>
     </div>
 
-    {/* Center: strategy badges */}
-    <div className="flex items-center gap-2">
-      <StrategyBadge color="bull"  icon={Crosshair} label="SNIPER"  />
-      <StrategyBadge color="bear"  icon={Skull}     label="VULTURE" />
-    </div>
-
-    {/* Right: mode toggle + status */}
+    {/* Right: SHADOW / LIVE switch */}
     <div className="flex items-center gap-3">
-      <div className="flex items-center gap-1.5 text-[10px] font-mono">
-        <span className={systemMode === SystemState.SHADOW ? 'text-warn' : 'text-text-muted'}>
-          影子
-        </span>
-        <button
-          onClick={onToggleMode}
-          className={`relative w-9 h-5 rounded-full transition-colors duration-300 border ${
-            systemMode === SystemState.LIVE
-              ? 'bg-bear/20 border-bear/40'
-              : 'bg-warn/10 border-warn/30'
-          }`}
-        >
-          <div className={`absolute top-0.5 w-4 h-4 rounded-full transition-all duration-300 ${
-            systemMode === SystemState.LIVE
-              ? 'left-[18px] bg-bear shadow-[0_0_6px_#f6465d]'
-              : 'left-0.5 bg-warn shadow-[0_0_6px_#f59e0b]'
-          }`} />
-        </button>
-        <span className={systemMode === SystemState.LIVE ? 'text-bear font-bold' : 'text-text-muted'}>
-          实盘
-        </span>
-      </div>
+      <ModeSwitch mode={systemMode} onRequestChange={onRequestModeChange} />
     </div>
   </header>
 );
 
-// ─── strategy badge ───────────────────────────────────────────────────────────
+// ─── mode switch ─────────────────────────────────────────────────────────────
 
-const BADGE_COLORS = {
-  bull:    { bg: 'bg-bull/10',    border: 'border-bull/30',    text: 'text-bull' },
-  bear:    { bg: 'bg-bear/10',    border: 'border-bear/30',    text: 'text-bear' },
-  primary: { bg: 'bg-primary/10', border: 'border-primary/30', text: 'text-primary' },
-  muted:   { bg: 'bg-white/5',    border: 'border-white/10',   text: 'text-text-muted' },
-};
-
-interface StrategyBadgeProps {
-  color: keyof typeof BADGE_COLORS;
-  icon: React.ComponentType<{ size?: number; className?: string }>;
-  label: string;
-  dim?: boolean;
+interface ModeSwitchProps {
+  mode: SystemState;
+  onRequestChange: (target: SystemState) => void;
 }
 
-const StrategyBadge: React.FC<StrategyBadgeProps> = ({ color, icon: Icon, label, dim }) => {
-  const c = BADGE_COLORS[color];
+const ModeSwitch: React.FC<ModeSwitchProps> = ({ mode, onRequestChange }) => {
+  // 视觉：两段式 segmented，hover/active 都很克制
   return (
-    <div className={`flex items-center gap-1.5 px-2 py-1 rounded ${c.bg} border ${c.border} ${dim ? 'opacity-40' : ''}`}>
-      <Icon size={11} className={c.text} />
-      <span className={`text-[10px] font-mono font-bold ${c.text}`}>{label}</span>
+    <div className="inline-flex items-center rounded border border-terminal-border bg-terminal-card overflow-hidden">
+      <button
+        onClick={() => mode !== SystemState.SHADOW && onRequestChange(SystemState.SHADOW)}
+        className={`px-3 py-1.5 text-[11px] uppercase tracking-micro transition-colors ${
+          mode === SystemState.SHADOW
+            ? 'bg-warn/15 text-warn'
+            : 'text-text-muted hover:text-text-secondary'
+        }`}
+      >
+        影子
+      </button>
+      <div className="w-px h-4 bg-terminal-border" />
+      <button
+        onClick={() => mode !== SystemState.LIVE && onRequestChange(SystemState.LIVE)}
+        className={`px-3 py-1.5 text-[11px] uppercase tracking-micro transition-colors ${
+          mode === SystemState.LIVE
+            ? 'bg-bear/15 text-bear'
+            : 'text-text-muted hover:text-text-secondary'
+        }`}
+      >
+        实盘
+      </button>
     </div>
   );
 };
@@ -165,17 +150,15 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, activeView, onViewChange }
 
   return (
     <aside
-      className={`flex flex-col bg-terminal-card border-r border-terminal-border transition-all duration-300 shrink-0 ${
-        collapsed ? 'w-16' : 'w-[220px]'
+      className={`flex flex-col bg-terminal-bg border-r border-terminal-border transition-all duration-200 shrink-0 ${
+        collapsed ? 'w-16' : 'w-[232px]'
       }`}
     >
-      {/* Nav groups */}
-      <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-4">
+      <nav className="flex-1 overflow-y-auto py-5 px-3 space-y-6">
         {NAV_GROUPS.map((group) => (
           <div key={group.label}>
-            {/* Group label — hide when collapsed */}
             {!collapsed && (
-              <div className="px-2 mb-1.5 text-[9px] font-mono font-bold text-text-muted uppercase tracking-widest">
+              <div className="px-2 mb-2 text-[10px] text-text-muted uppercase tracking-micro">
                 {group.label}
               </div>
             )}
@@ -187,21 +170,19 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, activeView, onViewChange }
                     key={item.id}
                     onClick={() => onViewChange(item.id)}
                     title={collapsed ? item.label : undefined}
-                    className={`w-full flex items-center gap-3 px-2.5 py-2 rounded-lg transition-all duration-150 group ${
+                    className={`w-full flex items-center gap-3 px-2.5 py-2 rounded-md transition-colors ${
                       active
-                        ? 'bg-primary/15 text-primary border border-primary/25'
-                        : 'text-text-secondary hover:bg-terminal-hover hover:text-text-primary border border-transparent'
+                        ? 'bg-primary/10 text-primary'
+                        : 'text-text-secondary hover:bg-terminal-hover hover:text-text-primary'
                     }`}
                   >
                     <item.icon
                       size={16}
-                      className={`shrink-0 ${active ? 'text-primary' : 'text-text-muted group-hover:text-text-secondary'}`}
+                      strokeWidth={1.6}
+                      className="shrink-0"
                     />
                     {!collapsed && (
-                      <span className="text-xs font-mono truncate">{item.label}</span>
-                    )}
-                    {active && !collapsed && (
-                      <div className="ml-auto w-1 h-1 rounded-full bg-primary" />
+                      <span className="text-[13px] truncate">{item.label}</span>
                     )}
                   </button>
                 );
@@ -211,8 +192,8 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, activeView, onViewChange }
         ))}
       </nav>
 
-      {/* Bottom: system status */}
-      <div className={`border-t border-terminal-border px-3 py-3 space-y-2 ${collapsed ? 'flex flex-col items-center' : ''}`}>
+      {/* footer status */}
+      <div className={`border-t border-terminal-border ${collapsed ? 'py-3 flex flex-col items-center gap-2' : 'px-4 py-3 space-y-2'}`}>
         {collapsed ? (
           <>
             <StatusDot ok={collectorRunning} title="采集器" />
@@ -221,7 +202,7 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, activeView, onViewChange }
         ) : (
           <>
             <StatusRow label="采集器" ok={collectorRunning} />
-            <StatusRow label="API 服务" ok={apiOnline} />
+            <StatusRow label="API"   ok={apiOnline} />
           </>
         )}
       </div>
@@ -229,17 +210,14 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, activeView, onViewChange }
   );
 };
 
-// ─── status helpers ───────────────────────────────────────────────────────────
-
 const StatusRow: React.FC<{ label: string; ok: boolean }> = ({ label, ok }) => (
-  <div className="flex items-center justify-between text-[10px] font-mono">
+  <div className="flex items-center justify-between text-[11px]">
     <span className="text-text-muted">{label}</span>
-    <div className="flex items-center gap-1">
-      <Circle
-        size={6}
-        className={ok ? 'text-bull fill-bull' : 'text-bear fill-bear'}
-      />
-      <span className={ok ? 'text-bull' : 'text-bear'}>{ok ? '运行中' : '已停止'}</span>
+    <div className="flex items-center gap-1.5">
+      <Circle size={6} className={ok ? 'text-bull fill-bull' : 'text-bear fill-bear'} />
+      <span className={`num ${ok ? 'text-bull' : 'text-bear'}`}>
+        {ok ? '运行' : '停止'}
+      </span>
     </div>
   </div>
 );
@@ -247,11 +225,11 @@ const StatusRow: React.FC<{ label: string; ok: boolean }> = ({ label, ok }) => (
 const StatusDot: React.FC<{ ok: boolean; title: string }> = ({ ok, title }) => (
   <div
     title={title}
-    className={`w-2 h-2 rounded-full ${ok ? 'bg-bull shadow-[0_0_4px_#00d395]' : 'bg-bear shadow-[0_0_4px_#f6465d]'}`}
+    className={`w-2 h-2 rounded-full ${ok ? 'bg-bull' : 'bg-bear'}`}
   />
 );
 
-// ─── main layout ──────────────────────────────────────────────────────────────
+// ─── main layout ─────────────────────────────────────────────────────────────
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -261,27 +239,55 @@ interface LayoutProps {
 
 const Layout: React.FC<LayoutProps> = ({ children, activeView, onViewChange }) => {
   const [collapsed, setCollapsed] = useState(false);
-  const [mode, setMode] = useState<SystemState>(SystemState.SHADOW);
+  const systemState = useUIStore((s) => s.systemState);
+  const setSystemState = useUIStore((s) => s.setSystemState);
+
+  // SHADOW → LIVE 走二次确认；LIVE → SHADOW 直接降级（安全方向）
+  const [pendingLive, setPendingLive] = useState(false);
+
+  const requestModeChange = (target: SystemState) => {
+    if (target === SystemState.LIVE) {
+      setPendingLive(true);
+    } else {
+      setSystemState(SystemState.SHADOW);
+    }
+  };
 
   return (
     <div className="h-screen flex flex-col bg-terminal-bg overflow-hidden">
-      {/* Top bar */}
       <TopBar
         sidebarCollapsed={collapsed}
         onToggleSidebar={() => setCollapsed((c) => !c)}
-        systemMode={mode}
-        onToggleMode={() => setMode((m) => m === SystemState.SHADOW ? SystemState.LIVE : SystemState.SHADOW)}
+        systemMode={systemState}
+        onRequestModeChange={requestModeChange}
       />
 
-      {/* Body: sidebar + content */}
       <div className="flex flex-1 overflow-hidden">
         <Sidebar collapsed={collapsed} activeView={activeView} onViewChange={onViewChange} />
-
-        {/* Content area */}
-        <main className="flex-1 overflow-y-auto p-5">
-          {children}
+        <main className="flex-1 overflow-y-auto">
+          <div className="max-w-[1440px] mx-auto px-8 py-8">
+            {children}
+          </div>
         </main>
       </div>
+
+      <ConfirmModal
+        open={pendingLive}
+        title="切换到实盘模式"
+        description="开启后，所有策略信号将下达真实订单到 Binance。请确认你已检查 API key、leverage、风险参数。"
+        details={[
+          { label: '当前模式', value: '影子',  tone: 'warn' },
+          { label: '目标模式', value: '实盘',  tone: 'bear' },
+        ]}
+        confirmLabel="切换到实盘"
+        cancelLabel="保持影子"
+        destructive
+        onConfirm={() => {
+          setSystemState(SystemState.LIVE);
+          setPendingLive(false);
+        }}
+        onCancel={() => setPendingLive(false)}
+      />
     </div>
   );
 };

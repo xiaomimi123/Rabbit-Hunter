@@ -2,12 +2,13 @@
 import React from 'react';
 import { TradePhase, CoinData, Position, EvolutionEvent } from './types';
 
+// v45: 调色板和 tailwind.config.js 对齐 — 单 accent，去 neon
 export const COLORS = {
-  bg: '#050505',
-  glass: '#1A1A1A',
-  primary: '#00FF9D', // Neon Signal
-  ai: '#7B61FF',      // Quantum Purple
-  warning: '#FF2E2E', // Predator Red
+  bg: '#0a0a0a',
+  glass: '#111111',
+  primary: '#d4a256', // soft amber accent
+  ai: '#d4a256',      // 与 primary 同源（旧 quantum purple 已弃）
+  warning: '#f43f5e',
 };
 
 export const MOCK_KILL_QUEUE: CoinData[] = [

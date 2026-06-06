@@ -277,7 +277,7 @@ const StrategyConfig: React.FC = () => {
             value={config.SNIFFER.enabled}
             onChange={(v) => updateConfig(['SNIFFER', 'enabled'], v)}
             type="checkbox"
-            help="⚠️ V4.5 默认禁用，仅观察"
+            help="V4.5 默认禁用，仅观察"
           />
           <ConfigField
             label="OI 增长阈值"

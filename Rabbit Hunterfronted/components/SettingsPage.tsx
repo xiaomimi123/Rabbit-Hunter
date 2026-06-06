@@ -180,8 +180,15 @@ export const SettingsPage: React.FC = () => {
             <CheckCircle size={18} className="text-[#00FF9D] mt-0.5" />
             <div className="flex-1">
               <p className="text-sm text-[#00FF9D] font-medium">API 配置已生效</p>
-              <p className="text-xs text-white/40 mt-1">
-                {status.testnet ? '当前使用测试网模式' : '当前使用实盘模式（⚠️ 注意风险）'}
+              <p className="text-xs text-white/40 mt-1 inline-flex items-center gap-1.5">
+                {status.testnet
+                  ? '当前使用测试网模式'
+                  : (
+                    <>
+                      <AlertTriangle size={11} strokeWidth={1.6} className="text-warn" />
+                      <span>当前使用实盘模式 — 注意风险</span>
+                    </>
+                  )}
               </p>
             </div>
           </div>
@@ -222,8 +229,9 @@ export const SettingsPage: React.FC = () => {
                       </a>{" "}
                       创建实盘 API Key
                     </li>
-                    <li className="mt-2">
-                      ⚠️ <strong>重要</strong>：测试网和实盘的 API Key 不能混用！
+                    <li className="mt-2 inline-flex items-start gap-1.5">
+                      <AlertTriangle size={11} strokeWidth={1.6} className="text-warn mt-[3px] shrink-0" />
+                      <span><strong>重要</strong>：测试网和实盘的 API Key 不能混用</span>
                     </li>
                   </ul>
                 </div>
@@ -295,8 +303,9 @@ export const SettingsPage: React.FC = () => {
                 {showSecret ? <EyeOff size={18} /> : <Eye size={18} />}
               </button>
             </div>
-            <p className="text-[10px] text-white/30 mt-1.5">
-              ⚠️ Secret 只显示一次，请妥善保管
+            <p className="text-[10px] text-white/30 mt-1.5 inline-flex items-center gap-1">
+              <AlertTriangle size={10} strokeWidth={1.6} className="text-warn" />
+              <span>Secret 只显示一次，请妥善保管</span>
             </p>
           </div>
 

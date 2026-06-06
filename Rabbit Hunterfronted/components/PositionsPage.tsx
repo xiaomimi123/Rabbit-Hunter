@@ -16,6 +16,9 @@ import { PnlDisplay } from '../ui/PnlDisplay';
 import { SideBadge } from '../ui/Badge';
 import { LoadingSkeleton } from '../ui/LoadingSkeleton';
 import { toast } from './Toast';
+import ConfirmModal from './ui/ConfirmModal';
+import { useUIStore } from '../services/store';
+import { SystemState } from '../types';
 
 // ─── account balance sub-query ────────────────────────────────────────────────
 
@@ -33,7 +36,15 @@ function useAccountBalance() {
 export default function PositionsPage() {
   const [closing, setClosing] = useState<string | null>(null);
   const [closingAll, setClosingAll] = useState(false);
+  const [confirmTarget, setConfirmTarget] = useState<
+    | { kind: 'single'; pos: Position }
+    | { kind: 'all' }
+    | { kind: 'emergency' }
+    | null
+  >(null);
+
   const invalidatePositions = useInvalidatePositions();
+  const isLive = useUIStore((s) => s.systemState) === SystemState.LIVE;
 
   const { data: positions = [], isLoading, error } = usePositions();
   const { data: accountBalance } = useAccountBalance();
@@ -41,48 +52,33 @@ export default function PositionsPage() {
   const totalUnrealized = positions.reduce((s, p) => s + (p.pnl ?? 0), 0);
   const totalRealized   = positions.reduce((s, p) => s + (p.realizedPnl ?? 0), 0);
 
-  async function handleClose(pos: Position) {
-    if (!confirm(`确定要平仓 ${pos.symbol} 吗？`)) return;
-    const key = pos.id ?? pos.symbol;
-    setClosing(key);
+  async function executeClose() {
+    if (!confirmTarget) return;
     try {
-      await tradeAPI.close(pos.symbol, 'MARKET');
-      toast.success(`平仓成功: ${pos.symbol}`);
+      if (confirmTarget.kind === 'single') {
+        const pos = confirmTarget.pos;
+        const key = pos.id ?? pos.symbol;
+        setClosing(key);
+        await tradeAPI.close(pos.symbol, 'MARKET');
+        toast.success(`平仓成功: ${pos.symbol}`);
+      } else {
+        setClosingAll(true);
+        await Promise.all(positions.map((p) => tradeAPI.close(p.symbol, 'MARKET')));
+        toast.success(confirmTarget.kind === 'emergency' ? '紧急全平已执行' : '批量平仓成功');
+      }
       await invalidatePositions();
+      setConfirmTarget(null);
     } catch (err: any) {
-      toast.error(`平仓失败: ${err?.message ?? err}`);
+      toast.error(`操作失败: ${err?.message ?? err}`);
     } finally {
       setClosing(null);
-    }
-  }
-
-  async function handleCloseAll() {
-    if (!confirm('确定要关闭所有持仓吗？')) return;
-    setClosingAll(true);
-    try {
-      await Promise.all(positions.map((p) => tradeAPI.close(p.symbol, 'MARKET')));
-      toast.success('批量平仓成功');
-      await invalidatePositions();
-    } catch (err: any) {
-      toast.error(`批量平仓失败: ${err?.message ?? err}`);
-    } finally {
       setClosingAll(false);
     }
   }
 
-  async function handleEmergencyClose() {
-    if (!confirm('⚠️ 紧急全平：立即市价关闭所有持仓。确认继续？')) return;
-    setClosingAll(true);
-    try {
-      await Promise.all(positions.map((p) => tradeAPI.close(p.symbol, 'MARKET')));
-      toast.success('紧急全平已执行');
-      await invalidatePositions();
-    } catch (err: any) {
-      toast.error(`紧急全平失败: ${err?.message ?? err}`);
-    } finally {
-      setClosingAll(false);
-    }
-  }
+  const handleClose = (pos: Position) => setConfirmTarget({ kind: 'single', pos });
+  const handleCloseAll = () => setConfirmTarget({ kind: 'all' });
+  const handleEmergencyClose = () => setConfirmTarget({ kind: 'emergency' });
 
   return (
     <div className="flex flex-col gap-3 h-full">
@@ -195,7 +191,7 @@ export default function PositionsPage() {
                   }
 
                   return (
-                    <tr key={pos.symbol} className="border-b border-terminal-border hover:bg-terminal-hover transition-colors">
+                    <tr key={posKey} className="border-b border-terminal-border hover:bg-terminal-hover transition-colors">
                       {/* Symbol */}
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
@@ -255,15 +251,11 @@ export default function PositionsPage() {
                           </span>
                         </div>
 
-                        {/* Progress bar: SL ← current → TP */}
+                        {/* Progress bar: SL ← current → TP (monotone, no gradient) */}
                         {sl && tp && (
-                          <div className="relative my-1.5 h-1.5 w-full bg-terminal-border rounded-full overflow-hidden">
+                          <div className="relative my-1.5 h-[2px] w-full bg-terminal-border">
                             <div
-                              className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-bear via-warn to-bull"
-                              style={{ width: '100%', opacity: 0.25 }}
-                            />
-                            <div
-                              className="absolute top-0 w-1.5 h-1.5 rounded-full bg-text-primary shadow"
+                              className="absolute top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full bg-text-primary"
                               style={{ left: `calc(${slTpPct}% - 3px)` }}
                             />
                           </div>
@@ -312,6 +304,45 @@ export default function PositionsPage() {
           )}
         </div>
       </div>
+
+      {/* Confirm modals (single / batch / emergency) */}
+      <ConfirmModal
+        open={confirmTarget?.kind === 'single'}
+        title="确认平仓"
+        description={isLive
+          ? '此操作将立即向 Binance 提交反向市价单。'
+          : '当前为影子模式，操作不会真实成交。'}
+        details={confirmTarget?.kind === 'single' ? [
+          { label: '交易对', value: confirmTarget.pos.symbol },
+          { label: '方向',   value: confirmTarget.pos.side === 'LONG' ? '做多' : '做空',
+            tone: confirmTarget.pos.side === 'LONG' ? 'bull' : 'bear' },
+          { label: '当前盈亏', value: (confirmTarget.pos.pnl ?? 0).toFixed(2) + ' USDT',
+            tone: (confirmTarget.pos.pnl ?? 0) >= 0 ? 'bull' : 'bear' },
+        ] : []}
+        confirmLabel="确认平仓"
+        destructive={isLive}
+        loading={closing != null}
+        onConfirm={executeClose}
+        onCancel={() => setConfirmTarget(null)}
+      />
+      <ConfirmModal
+        open={confirmTarget?.kind === 'all' || confirmTarget?.kind === 'emergency'}
+        title={confirmTarget?.kind === 'emergency' ? '紧急全平' : '批量平仓'}
+        description={confirmTarget?.kind === 'emergency'
+          ? '立刻市价关闭所有持仓。请确认你已检查市场流动性。'
+          : '将依次以市价单关闭每一个活跃持仓。'}
+        details={[
+          { label: '将关闭', value: `${positions.length} 个持仓` },
+          { label: '未实现盈亏', value: totalUnrealized.toFixed(2) + ' USDT',
+            tone: totalUnrealized >= 0 ? 'bull' : 'bear' },
+          { label: '模式', value: isLive ? '实盘' : '影子', tone: isLive ? 'bear' : 'warn' },
+        ]}
+        confirmLabel={confirmTarget?.kind === 'emergency' ? '紧急执行' : '全部平仓'}
+        destructive
+        loading={closingAll}
+        onConfirm={executeClose}
+        onCancel={() => setConfirmTarget(null)}
+      />
     </div>
   );
 }
