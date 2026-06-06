@@ -42,13 +42,24 @@ except ImportError:
     # 如果导入失败，使用默认函数
     def get_strategy_threshold(strategy_id: str) -> float:
         return 60.0
-    
+
     def check_strategy_threshold(strategy_id: str, score: float) -> tuple[bool, str]:
         min_score = get_strategy_threshold(strategy_id)
         if score >= min_score:
             return True, f"Score {score:.1f} >= {min_score:.1f} (Pass)"
         else:
             return False, f"Score {score:.1f} < {min_score:.1f} (Fail)"
+
+# v45: 导入活的 router — 让 backtest 重新执行 route_strategy()，而不是 replay
+# trade_scores_v43 里写好的 strategy_id/strategy_score（那是写入当时的 router 决定，
+# 改 router/weights/threshold 在 backtest 里看不到效果）。
+try:
+    from v44_strategy_router import route_strategy, StrategyResult  # type: ignore
+    _LIVE_ROUTER_AVAILABLE = True
+except ImportError:
+    route_strategy = None  # type: ignore
+    StrategyResult = None  # type: ignore
+    _LIVE_ROUTER_AVAILABLE = False
 
 
 @dataclass
@@ -61,6 +72,9 @@ class BacktestConfig:
     min_strategy_score: float = 60.0  # 最低策略分数（仅用于没有 strategy_id 的情况，有 strategy_id 时使用策略特定门槛）
     commission_rate: float = 0.0004  # 手续费率（0.04%）
     use_strategy_specific_thresholds: bool = True  # 是否使用策略特定门槛
+    # v45：在历史 features 上**重新执行**当前 route_strategy()，让代码改动直接反映到回测。
+    # False 时退回旧 "replay" 行为 — 仅当你想复现历史决策时用（例如对比 router 改动前后）。
+    use_live_router: bool = True
 
 
 @dataclass
@@ -234,51 +248,75 @@ class V44StrategyBacktester:
         try:
             # 提取基本信息
             symbol = record.get("symbol", "")
-            strategy_id = record.get("strategy_id", "")
-            side = record.get("side", "LONG")
-            strategy_score = float(record.get("strategy_score", 0) or 0)
             final_score = float(record.get("final_score", 0) or 0)
-            
-            # 检查策略特定门槛（使用新的配置）
-            if self.config.use_strategy_specific_thresholds:
-                # 如果 strategy_id 存在，使用策略特定门槛；否则使用默认门槛
-                if strategy_id and strategy_id != "WAIT":
-                    min_score = get_strategy_threshold(strategy_id)
-                    passed, threshold_msg = check_strategy_threshold(strategy_id, strategy_score)
-                    if not passed:
-                        # 分数不够，跳过这笔交易
-                        return None
-                else:
-                    # 如果没有 strategy_id，使用默认门槛（向后兼容）
-                    if strategy_score < self.config.min_strategy_score:
-                        return None
-            else:
-                # 使用统一门槛（旧逻辑）
-                if strategy_score < self.config.min_strategy_score:
-                    return None
-            
-            # 提取决策信息
+
+            # ── 提取 features / decision_policy（双格式：dict 或 JSON 字符串）──
             decision_policy = record.get("decision_policy", {})
             if isinstance(decision_policy, str):
                 import json
                 try:
                     decision_policy = json.loads(decision_policy)
-                except:
+                except Exception:
                     decision_policy = {}
-            
-            # 检查是否允许交易
-            should_trade = decision_policy.get("should_trade", False)
-            if not should_trade:
-                return None
-            
-            # 提取特征
+
             features = record.get("features", {})
             if isinstance(features, str):
                 import json
                 try:
                     features = json.loads(features)
-                except:
+                except Exception:
                     features = {}
+
+            # ── v45: 重新执行 router on historical features，而不是 replay 数据库行 ──
+            # 让 router/weights/threshold 改动**直接**反映到回测；之前的 replay 模式
+            # 让 "改一行 router 看不到任何效果" 成为常态。
+            use_live = self.config.use_live_router and _LIVE_ROUTER_AVAILABLE
+            if use_live:
+                # 用 trade_scores_v43 行里能拿到的字段重建 score_result
+                score_result = {
+                    "final_score":       record.get("final_score", 0) or 0,
+                    "structure_score":   record.get("structure_score", 0) or 0,
+                    "volatility_score":  record.get("volatility_score", 0) or 0,
+                    "sentiment_score":   record.get("sentiment_score", 0) or 0,
+                    "manipulation_score":record.get("manipulation_score", 0) or 0,
+                    "block_reason":      record.get("block_reason"),
+                }
+                try:
+                    strategy_result = route_strategy(features, score_result)  # type: ignore[misc]
+                except Exception as e:
+                    # router 异常 — 当作 WAIT 处理（跳过这笔）
+                    print(f"  [BACKTEST] route_strategy 异常 {symbol}: {e}")
+                    return None
+                strategy_id = strategy_result.id
+                strategy_score = float(strategy_result.score or 0)
+                side = strategy_result.side
+                # router 标记 WAIT/不可交易 → 跳过
+                if strategy_id == "WAIT" or side == "NONE":
+                    return None
+            else:
+                # 旧 replay 行为 — 仅在 use_live_router=False 时
+                strategy_id = record.get("strategy_id", "")
+                side = record.get("side", "LONG")
+                strategy_score = float(record.get("strategy_score", 0) or 0)
+
+            # ── 检查策略特定门槛 ──
+            if self.config.use_strategy_specific_thresholds:
+                if strategy_id and strategy_id != "WAIT":
+                    passed, _ = check_strategy_threshold(strategy_id, strategy_score)
+                    if not passed:
+                        return None
+                else:
+                    if strategy_score < self.config.min_strategy_score:
+                        return None
+            else:
+                if strategy_score < self.config.min_strategy_score:
+                    return None
+
+            # ── should_trade 检查（仅 replay 模式有意义；live router 已经隐含通过）──
+            if not use_live:
+                should_trade = decision_policy.get("should_trade", False)
+                if not should_trade:
+                    return None
             
             # 获取入场时间和价格
             created_at_str = record.get("created_at", "")
