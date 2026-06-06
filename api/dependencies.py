@@ -6,11 +6,62 @@ API 依赖注入模块
   - get_supabase()        → Supabase 客户端（已废弃，返回 None）
   - get_supabase_optional() → 同上
   - check_kill_switch()   → 检查 Kill Switch 状态
+  - require_auth()        → Bearer token 校验（v45 新增）
 """
 
 import os
-from fastapi import HTTPException, status
+import secrets
+from typing import Optional
+from fastapi import Header, HTTPException, status
 from scripts.local_db import get_local_db, LocalDB
+
+
+# ============================================
+# Bearer Token 鉴权（v45 新增）
+# ============================================
+
+def _read_bearer_token() -> Optional[str]:
+    """运行时读取 API_BEARER_TOKEN，避免模块加载时锁死值（便于测试 + 热重载）"""
+    tok = os.environ.get("API_BEARER_TOKEN", "").strip()
+    return tok or None
+
+
+async def require_auth(authorization: Optional[str] = Header(default=None)) -> None:
+    """
+    FastAPI 依赖：要求 Authorization: Bearer <API_BEARER_TOKEN> 头。
+
+    行为模型：
+      - 未设置 API_BEARER_TOKEN → 跳过校验（兼容默认 127.0.0.1 单机模式）
+      - 设置了 API_BEARER_TOKEN → 缺失/不匹配返回 401
+
+    比较用 secrets.compare_digest，避免时序侧信道。
+    """
+    expected = _read_bearer_token()
+    if expected is None:
+        return  # 未配置 token = 走默认本机模式
+
+    if not authorization:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing Authorization header",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    parts = authorization.split(None, 1)
+    if len(parts) != 2 or parts[0].lower() != "bearer":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid Authorization scheme (expected 'Bearer <token>')",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    provided = parts[1].strip()
+    if not secrets.compare_digest(provided, expected):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid bearer token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
 
 # ============================================

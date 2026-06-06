@@ -175,7 +175,8 @@ async def save_binance_config(
         api_key_lower = api_key_trimmed.lower()
         is_testnet_key = api_key_lower.startswith("lc")
 
-        print(f"[DEBUG] API Key 验证: testnet={request.testnet}, key_prefix={api_key_trimmed[:5]}, is_testnet_key={is_testnet_key}")
+        # 日志不打印 API Key 的任何前缀 — 即使 5 字符也会落入 stdout / 监控聚合系统
+        print(f"[DEBUG] API Key 验证: testnet={request.testnet}, is_testnet_key={is_testnet_key}")
 
         if request.testnet and not is_testnet_key:
             print(f"[INFO] 测试网模式已启用，API Key 不以 'lc' 开头（这是正常的，某些测试网 Key 格式不同）")

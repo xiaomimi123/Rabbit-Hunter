@@ -20,8 +20,9 @@ if "%PY_CMD%"=="" (
 )
 
 echo [INFO] 使用 Python 命令: %PY_CMD%
-echo [INFO] 服务地址: http://localhost:8000
-echo [INFO] API 文档: http://localhost:8000/docs
+echo [INFO] 服务地址: http://127.0.0.1:8000  (默认仅本机访问)
+echo [INFO] 远程访问：设置 API_BIND_HOST=0.0.0.0 + API_BEARER_TOKEN=<token>
+echo [INFO] /docs 默认关闭，设置 API_ENABLE_DOCS=true 开启
 echo [INFO] 按 Ctrl+C 停止服务
 echo.
 echo ========================================
@@ -50,8 +51,11 @@ echo.
 echo [INFO] 启动 FastAPI 服务...
 echo.
 
-REM 启动服务
-%PY_CMD% -m uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
+REM 启动服务 — 默认绑 127.0.0.1（仅本机），用环境变量覆盖
+REM 想开发热重载：手动加 --reload；想暴露到 LAN：先设 API_BEARER_TOKEN 再设 API_BIND_HOST
+if "%API_BIND_HOST%"=="" set "API_BIND_HOST=127.0.0.1"
+if "%API_PORT%"=="" set "API_PORT=8000"
+%PY_CMD% -m uvicorn api.main:app --host %API_BIND_HOST% --port %API_PORT%
 
 if %ERRORLEVEL% NEQ 0 (
     echo.
