@@ -173,6 +173,25 @@ def _fetch_klines_ohlcv(binance_symbol: str, interval: str, limit: int) -> list[
         return []
 
 
+# v45: 公开 API — scorer._build_ai_training_row 通过这两个名字引用
+# 之前 scorer 的 ImportError 让每次 ai_training_data 写入静默失败
+def fetch_klines_ohlcv(binance_symbol: str, interval: str, limit: int) -> list[dict]:
+    """公开包装：返回 OHLCV dict 列表（oldest→newest）。"""
+    return _fetch_klines_ohlcv(binance_symbol, interval, limit)
+
+
+def fetch_klines_full(
+    binance_symbol: str, interval: str, limit: int
+) -> tuple[list[float], list[float], list[float]]:
+    """公开包装：返回 (highs, lows, closes) 三个并列列表（oldest→newest）。
+    用于 scorer._build_ai_training_row 给 v41_risk_manager 喂数据。"""
+    bars = _fetch_klines_ohlcv(binance_symbol, interval, limit)
+    highs = [b["high"] for b in bars]
+    lows = [b["low"] for b in bars]
+    closes = [b["close"] for b in bars]
+    return highs, lows, closes
+
+
 # ---------------------------------------------------------------------------
 # Single-symbol deep collection
 # ---------------------------------------------------------------------------

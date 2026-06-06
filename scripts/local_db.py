@@ -30,6 +30,7 @@ RETENTION_DAYS = {
     "trade_scores_v43": 30,
     "market_snapshot": 7,
     "paper_trades": 90,
+    "ai_training_data": 30,
     # positions_v43: OPEN 永久保留，CLOSED 保留 90 天（见 prune_old_data）
 }
 
@@ -39,9 +40,11 @@ _SCHEMA = """
 PRAGMA journal_mode=WAL;
 PRAGMA synchronous=NORMAL;
 
+-- v45: trade_scores_v43 是 append-only 时间序列 — symbol 不再 UNIQUE
+-- （之前 UNIQUE + INSERT OR IGNORE = 每个 symbol 只保留首条评分，后续全丢）
 CREATE TABLE IF NOT EXISTS trade_scores_v43 (
     id                       INTEGER PRIMARY KEY AUTOINCREMENT,
-    symbol                   TEXT    NOT NULL UNIQUE,
+    symbol                   TEXT    NOT NULL,
     final_score              REAL,
     structure_score          REAL,
     volatility_score         REAL,
@@ -64,6 +67,61 @@ CREATE TABLE IF NOT EXISTS trade_scores_v43 (
     created_at               TEXT,
     updated_at               TEXT
 );
+-- 加索引以补偿失去 UNIQUE 后查询变慢
+CREATE INDEX IF NOT EXISTS idx_trade_scores_v43_symbol     ON trade_scores_v43(symbol);
+CREATE INDEX IF NOT EXISTS idx_trade_scores_v43_created_at ON trade_scores_v43(created_at);
+
+-- v45: ai_training_data — scorer 的 shadow-mode 时间序列（之前根本没建表，每次写都静默失败）
+CREATE TABLE IF NOT EXISTS ai_training_data (
+    id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+    symbol                   TEXT    NOT NULL,
+    price                    REAL,
+    funding_rate             REAL,
+    long_short_ratio         REAL,
+    oi_value                 REAL,
+    oi_change_1h             REAL,
+    price_change_1h          REAL,
+    is_oi_divergence         INTEGER,
+    market_regime            TEXT,
+    risk_reasons             TEXT,   -- JSON list
+    is_trade_allowed         INTEGER,
+    technical_signal         TEXT,
+    cvd_15m                  REAL,
+    cvd_1h                   REAL,
+    cvd_value                REAL,
+    market_phase             TEXT,
+    kill_zone_signal         TEXT,
+    exit_clarity_score       REAL,
+    confidence_level         INTEGER,
+    price_breakout           INTEGER,
+    time_stop_loss_triggered INTEGER,
+    profit_1h                REAL,
+    -- V4.1
+    atr_value                REAL,
+    atr_multiplier           REAL,
+    structure_gap            REAL,
+    structure_gap_method     TEXT,
+    phase_age_candles        INTEGER,
+    phase_age_percent        REAL,
+    v41_block_reason         TEXT,
+    chandelier_stop_price    REAL,
+    position_size_coin       REAL,
+    phase_4h                 TEXT,
+    phase_1h                 TEXT,
+    -- V4.2
+    is_golden_wick           INTEGER,
+    -- AI judges (DeepSeek / 本地 LR)
+    ai_score                 REAL,
+    ai_allowed               INTEGER,
+    ai_reason                TEXT,
+    ai_version               TEXT,
+    -- 训练标签
+    training_tag             TEXT,
+    created_at               TEXT,
+    updated_at               TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_ai_training_data_symbol     ON ai_training_data(symbol);
+CREATE INDEX IF NOT EXISTS idx_ai_training_data_created_at ON ai_training_data(created_at);
 
 CREATE TABLE IF NOT EXISTS positions_v43 (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -88,6 +146,8 @@ CREATE TABLE IF NOT EXISTS positions_v43 (
     ai_confidence    REAL,
     ai_sl_multiplier REAL,
     ai_tp_multiplier REAL,
+    highest_price    REAL,    -- LONG 持仓的 trailing-stop 参考
+    lowest_price     REAL,    -- SHORT 持仓的 trailing-stop 参考（v45 新增）
     created_at       TEXT,
     updated_at       TEXT
 );
@@ -140,6 +200,120 @@ _lock = threading.Lock()
 _conn: Optional[sqlite3.Connection] = None
 
 
+def _apply_migrations(conn: sqlite3.Connection) -> None:
+    """对已存在的 DB 做就地结构迁移。所有迁移必须是幂等的（重复跑无副作用）。"""
+
+    # ── A) ADD COLUMN 类型 — PRAGMA 探测后再 ALTER ──────────────────────
+    add_column_migrations = [
+        # (表名, 列名, 列类型)
+        ("positions_v43", "highest_price", "REAL"),
+        ("positions_v43", "lowest_price",  "REAL"),
+    ]
+    for table, column, col_type in add_column_migrations:
+        try:
+            cols = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+        except Exception as e:
+            print(f"[LocalDB] 迁移探测失败 {table}: {e}")
+            continue
+        if column in cols:
+            continue
+        try:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}")
+            print(f"[LocalDB] 迁移：已为 {table} 增加列 {column} {col_type}")
+        except Exception as e:
+            print(f"[LocalDB] 迁移失败 {table}.{column}: {e}")
+
+    # ── B) trade_scores_v43 — 去掉 symbol 的 UNIQUE 约束（变 append-only） ─
+    # SQLite 不支持 DROP CONSTRAINT，得 RENAME + 新建 + 复制 + DROP
+    try:
+        row = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='trade_scores_v43'"
+        ).fetchone()
+        if row and row["sql"]:
+            create_sql = row["sql"]
+            # 检测 "symbol ... UNIQUE" 模式（容忍空格 / 换行 / 大小写）
+            symbol_line = ""
+            for line in create_sql.splitlines():
+                low = line.lower()
+                if "symbol" in low and ("text" in low or "varchar" in low):
+                    symbol_line = low
+                    break
+            if "unique" in symbol_line:
+                print("[LocalDB] 迁移：检测到 trade_scores_v43.symbol UNIQUE — 开始重建")
+                _rebuild_trade_scores_v43_drop_unique(conn)
+    except Exception as e:
+        print(f"[LocalDB] trade_scores_v43 UNIQUE 检测失败: {e}")
+
+
+def _rebuild_trade_scores_v43_drop_unique(conn: sqlite3.Connection) -> None:
+    """RENAME 旧表 → CREATE 新表（无 UNIQUE）→ INSERT SELECT → DROP 旧表。
+    用事务保证整个过程原子，失败回滚。"""
+    new_table_sql = """
+        CREATE TABLE trade_scores_v43 (
+            id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+            symbol                   TEXT    NOT NULL,
+            final_score              REAL,
+            structure_score          REAL,
+            volatility_score         REAL,
+            sentiment_score          REAL,
+            manipulation_score       REAL,
+            phase                    TEXT,
+            side                     TEXT,
+            strategy_id              TEXT,
+            should_trade             INTEGER DEFAULT 1,
+            block_reason             TEXT,
+            confidence               REAL,
+            position_size_multiplier REAL,
+            features                 TEXT,
+            decision_policy          TEXT,
+            reason                   TEXT,
+            ai_reasoning             TEXT,
+            ai_sl_multiplier         REAL,
+            ai_tp_multiplier         REAL,
+            price                    REAL,
+            created_at               TEXT,
+            updated_at               TEXT
+        )
+    """
+    try:
+        old_cols = [
+            r["name"]
+            for r in conn.execute("PRAGMA table_info(trade_scores_v43)").fetchall()
+        ]
+    except Exception as e:
+        print(f"[LocalDB] 读取旧 trade_scores_v43 列失败，跳过重建: {e}")
+        return
+
+    # 计算新表的列（去掉 id）
+    new_cols = [
+        "symbol", "final_score", "structure_score", "volatility_score", "sentiment_score",
+        "manipulation_score", "phase", "side", "strategy_id", "should_trade", "block_reason",
+        "confidence", "position_size_multiplier", "features", "decision_policy", "reason",
+        "ai_reasoning", "ai_sl_multiplier", "ai_tp_multiplier", "price", "created_at", "updated_at",
+    ]
+    common_cols = [c for c in new_cols if c in old_cols]
+    if not common_cols:
+        print("[LocalDB] 旧表无可迁移列，跳过 — 留作手动处理")
+        return
+
+    col_csv = ", ".join(common_cols)
+    try:
+        conn.execute("BEGIN")
+        conn.execute("ALTER TABLE trade_scores_v43 RENAME TO trade_scores_v43_old_unique")
+        conn.execute(new_table_sql)
+        conn.execute(
+            f"INSERT INTO trade_scores_v43 ({col_csv}) SELECT {col_csv} FROM trade_scores_v43_old_unique"
+        )
+        conn.execute("DROP TABLE trade_scores_v43_old_unique")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_trade_scores_v43_symbol ON trade_scores_v43(symbol)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_trade_scores_v43_created_at ON trade_scores_v43(created_at)")
+        conn.commit()
+        print(f"[LocalDB] 迁移：trade_scores_v43 重建完成，迁移列 {len(common_cols)} 个")
+    except Exception as e:
+        conn.rollback()
+        print(f"[LocalDB] trade_scores_v43 重建失败已回滚: {e}")
+
+
 def get_connection() -> sqlite3.Connection:
     global _conn
     if _conn is None:
@@ -147,6 +321,7 @@ def get_connection() -> sqlite3.Connection:
         _conn = sqlite3.connect(str(_DB_PATH), check_same_thread=False)
         _conn.row_factory = sqlite3.Row
         _conn.executescript(_SCHEMA)
+        _apply_migrations(_conn)
         _conn.commit()
         print(f"[LocalDB] SQLite 初始化完成: {_DB_PATH}")
     return _conn
@@ -337,13 +512,18 @@ class _Query:
         return _Result(rows)
 
     def _do_insert(self) -> _Result:
+        """普通 INSERT — 不带 OR IGNORE。
+
+        v45 前为 INSERT OR IGNORE，配合 trade_scores_v43.symbol UNIQUE 导致每个 symbol
+        只保留首条记录。现在 trade_scores_v43 已经是 append-only（UNIQUE 已被迁移移除），
+        若有 UNIQUE 冲突应该噪声暴露而不是静默丢数据。需要"upsert"语义时显式调 upsert()。"""
         rows = self._data if isinstance(self._data, list) else [self._data]
         inserted = []
         for row in rows:
             row = _serialize(row)
             cols = ", ".join(row.keys())
             placeholders = ", ".join("?" * len(row))
-            sql = f"INSERT OR IGNORE INTO {self._table} ({cols}) VALUES ({placeholders})"
+            sql = f"INSERT INTO {self._table} ({cols}) VALUES ({placeholders})"
             self._conn.execute(sql, list(row.values()))
             inserted.append(row)
         self._conn.commit()

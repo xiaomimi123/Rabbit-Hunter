@@ -2,6 +2,11 @@
 
 币安合约量化交易系统 — 规则引擎 + OpenAI 智能决策层
 
+> **v45 起的入口约定**：唯一受支持的采集器入口是
+> `python -m scripts.tasks.collector_main`（或 `start_collector.bat`）。
+> 旧的 `scripts/collector.py` 已归档为 `scripts/_legacy_collector.py`，
+> 直接运行会打印 deprecation 信息并退出。
+
 ---
 
 ## 系统架构
@@ -112,6 +117,18 @@ AI 在规则引擎放行后做二次判断，可以：
 - SL: 1.2x–3.0x ATR
 - TP: 2.0x–6.0x ATR，且 TP ≥ SL × 1.5（最低 1.5:1 风险收益比）
 - 仓位: 0.3x–1.2x
+
+### AI 实现分工（v45）
+
+仓库里历史上存在三套 "AI 给交易打分/审查" 的实现。v45 统一了角色分工：
+
+| 实现 | 文件 | 角色 | 默认 | 开启方式 |
+|------|------|------|------|----------|
+| **OpenAI Assistant** | `scripts/ai/trading_assistant.py` | 二次决策（规则放行后再审，能调 SL/TP/仓位） | 开 | 配 `OPENAI_API_KEY` |
+| **DeepSeek**（opt-in） | `scripts/deepseek_ai.py` | 特征打分（产生 `ai_score`） | 关 | `DEEPSEEK_ENABLED=true` |
+| **本地 LR**（deprecated） | `scripts/ai_judge.py` | DeepSeek 的离线兜底 | 关 | `AI_JUDGE_ENABLED=true`（不推荐，需训练 npz） |
+
+新功能围绕前两条构建；本地 LR 仅为向后兼容保留。
 
 ---
 

@@ -690,7 +690,9 @@ class StrategyScorer:
 
     def _init_ai_judges(self) -> None:
         """Lazy-initialise AI judges.  Called once at the start of run()."""
-        ai_judge_enabled = os.environ.get("AI_JUDGE_ENABLED", "1") not in ("0", "false", "False")
+        # v45: 默认关闭本地 LR AIJudge — 未训练的模型会污染 ai_score
+        # 显式 AI_JUDGE_ENABLED=true 才启用（scripts/ai_judge.py 头有完整说明）
+        ai_judge_enabled = os.environ.get("AI_JUDGE_ENABLED", "0") not in ("0", "false", "False")
         deepseek_enabled = os.environ.get("DEEPSEEK_ENABLED", "0") in ("1", "true", "True")
 
         if ai_judge_enabled:
@@ -962,7 +964,18 @@ class StrategyScorer:
                             v43_decision_result["ai_confidence"] = ai_result.confidence
                             v43_decision_result["ai_reasoning"] = ai_result.reasoning
                     except Exception as ai_err:
-                        print(f"[AI] {ccxt_symbol} AI 决策异常，继续规则引擎: {ai_err}")
+                        # decide() 现在内部捕获自己的异常并返回 execute=False，
+                        # 所以这里只会兜住罕见的 import/类型错误。仍然遵守 AI_FAIL_OPEN。
+                        ai_fail_open = os.environ.get("AI_FAIL_OPEN", "false").lower() in ("1", "true")
+                        if ai_fail_open:
+                            print(
+                                f"[AI] {ccxt_symbol} AI 决策异常 (AI_FAIL_OPEN=true)，继续规则引擎: {ai_err}"
+                            )
+                        else:
+                            print(
+                                f"[AI] {ccxt_symbol} AI 决策异常 (AI_FAIL_OPEN=false)，跳过: {ai_err}"
+                            )
+                            should_trade = False
                 # ─────────────────────────────────────────────────────────────
 
                 # Auto-trade via position manager

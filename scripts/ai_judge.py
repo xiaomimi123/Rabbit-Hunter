@@ -1,11 +1,27 @@
 """
+⚠️  DEPRECATED (v45) — 本地逻辑回归 AI Judge，默认关闭
+
+  v45 起 AI 决策架构统一为：
+    1) 二次决策：scripts/ai/trading_assistant.py（OpenAI Assistant + Vector Store 记忆）
+    2) 特征打分：scripts/deepseek_ai.py（DeepSeek，opt-in 通过 DEEPSEEK_ENABLED=true）
+
+  本文件（基于 npz 权重的逻辑回归本地推理器）只是 DeepSeek 离线时的最后兜底，
+  默认 AI_JUDGE_ENABLED=0 关闭。除非：
+    - 你确实训练过 models/ai_judge_lr_v1.npz（用 scripts/train_ai_judge.py），且
+    - 你信任它输出的 ai_score 喂回决策链路
+  否则**不要打开**。未训练的模型会输出噪声分数，污染下游交易决策。
+
+  保留本文件只是为了向后兼容旧训练流程；新功能不再围绕它构建。
+
+──────────────────────────────────────────────────────────────────────────────
+
 在线推理：AI Judge（Rabbit Hunter 4.0）
 
 输入：ai_training_data 的一行特征（dict）
 输出：ai_score/ai_allowed/ai_reason/ai_version
 
 特性：
-- 如果模型文件不存在：返回 None（collector 会写空，不影响运行）
+- 如果模型文件不存在：返回 None（不影响运行）
 - 推理不依赖 sklearn（读取 npz 的 w/b）
 """
 
