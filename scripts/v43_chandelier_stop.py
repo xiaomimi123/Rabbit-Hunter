@@ -42,31 +42,43 @@ def initialize_position(
     features: Dict[str, Any],
     price: float,
     atr: float,
+    side: str = "LONG",
 ) -> Dict[str, Any]:
     """
-    开仓时初始化止损
-    
+    开仓时初始化止损（v45：side-aware，支持 LONG/SHORT 对称数学）
+
+    LONG:  stop = price - k * atr，跟踪 highest_price
+    SHORT: stop = price + k * atr，跟踪 lowest_price
+
     Args:
         features: 特征字典
         price: 当前价格
         atr: ATR 值
-    
+        side: "LONG" 或 "SHORT"（默认 LONG 保持向后兼容）
+
     Returns:
         position: 持仓字典
     """
     phase = features.get("phase", "P1_NO_WHALE")
     phase_age = features.get("phase_age", 0)
-    
-    # 动态 k 值
     k = dynamic_k_by_phase(phase, phase_age)
-    
-    stop_price = price - k * atr
-    
+
+    side_u = side.upper()
+    if side_u == "LONG":
+        stop_price = price - k * atr
+    elif side_u == "SHORT":
+        stop_price = price + k * atr
+    else:
+        raise ValueError(f"无效 side: {side}（必须是 LONG 或 SHORT）")
+
     return {
         "entry_price": price,
         "stop_price": stop_price,
         "k": k,
-        "highest_price": price,  # 用于跟踪最高价
+        "side": side_u,
+        # 对称初始化：LONG 跟最高，SHORT 跟最低
+        "highest_price": price if side_u == "LONG" else None,
+        "lowest_price":  price if side_u == "SHORT" else None,
         "phase": phase,
         "phase_age": phase_age,
         "atr_shock_detected": False,
@@ -77,62 +89,79 @@ def initialize_position(
 
 def update_chandelier_stop(
     position: Dict[str, Any],
-    current_high: float,
+    current_price: float,
     atr: float,
     atr_history: Optional[List[float]] = None,
     bars_since_entry: int = 0,
 ) -> Dict[str, Any]:
     """
-    ATR Chandelier  trailing stop
-    
-    规则：
-    1. 止损只上移，不下移
-    2. 新止损 = 最高价 - k * ATR
-    3. 如果新止损 > 当前止损，更新
-    4. ⚠️ ATR Shock Guard：防止异常拉盘/插针导致止损被合法上移
-    
+    ATR Chandelier trailing stop（v45：side-aware）
+
+    LONG:
+        - 跟踪 highest_price_since_entry
+        - new_stop = highest - k * effective_atr
+        - 止损只**上移**（new_stop > current → update）
+    SHORT:
+        - 跟踪 lowest_price_since_entry
+        - new_stop = lowest + k * effective_atr
+        - 止损只**下移**（new_stop < current → update）— 价越跌、止损越紧
+
+    ATR Shock Guard：ATR 短期突变 (>50%) 期间冻结 3 根 K 线，避免插针/拉盘
+    把止损"合法地"挪到不利位置然后被下一根回调扫掉。方向无关。
+
     Args:
-        position: 持仓字典
-        current_high: 当前最高价
+        position: 持仓字典（需含 side / entry_price / stop_price，建议含 highest_price 或 lowest_price）
+        current_price: 当前价（替代旧的 current_high — 现在对 LONG 视为高、对 SHORT 视为低）
         atr: 当前 ATR
-        atr_history: ATR 历史（用于检测异常）
-        bars_since_entry: 开仓后的 K 线数
-    
+        atr_history: ATR 历史（用于检测突变）
+        bars_since_entry: 开仓以来的 K 线数
+
     Returns:
         position: 更新后的持仓字典
     """
-    k = position.get("k", 2.0)
-    highest_price = max(position.get("highest_price", position["entry_price"]), current_high)
-    position["highest_price"] = highest_price
-    
-    # ✅ 修复 2：第一步先检查 ATR shock（改变逻辑顺序）
-    # 防止异常拉盘/插针 → ATR 突然放大 → 止损被合法上移 → 下一根回调被扫
+    side = (position.get("side") or "LONG").upper()
+    k = position.get("k") or position.get("atr_k") or 2.0
+    entry = position.get("entry_price", current_price)
+
+    # ── 跟踪 极值（方向感知）─────────────────────────────────
+    if side == "LONG":
+        highest_price = max(position.get("highest_price") or entry, current_price)
+        position["highest_price"] = highest_price
+        reference = highest_price
+    else:  # SHORT
+        existing_low = position.get("lowest_price")
+        lowest_price = min(existing_low if existing_low is not None else entry, current_price)
+        position["lowest_price"] = lowest_price
+        reference = lowest_price
+
+    # ── ATR Shock Guard ──────────────────────────────────────
     if atr_history and len(atr_history) >= 3:
-        atr_change_rate = (atr - atr_history[-3]) / atr_history[-3] if atr_history[-3] > 0 else 0
-        
-        # 如果 ATR 在短时间内大幅增加（> 50%），可能是异常拉盘/插针
+        baseline = atr_history[-3]
+        atr_change_rate = (atr - baseline) / baseline if baseline > 0 else 0
         if atr_change_rate > 0.5:
-            # 在冻结期间，完全不动止损（直接返回）
+            # ATR 突变期 — 冻结
             if position.get("atr_shock_freeze_until", 0) > bars_since_entry:
-                # 仍在冻结期 → 不更新任何东西，直接返回
                 return position
-            else:
-                # 新的冻结期开始
-                position["atr_shock_freeze_until"] = bars_since_entry + 3
-                position["atr_shock_detected"] = True
-                position["atr_shock_atr"] = atr_history[-3]  # 保存异常前的 ATR
-                # ✅ 关键：异常刚检测到时，不更新止损，直接返回
-                return position
-    
-    # ✅ 第二步：如果不在冻结期，才计算新的止损
-    # （此时 ATR 变化已经安定下来，不会被异常波动影响）
+            position["atr_shock_freeze_until"] = bars_since_entry + 3
+            position["atr_shock_detected"] = True
+            position["atr_shock_atr"] = baseline
+            return position
+
+    # ── 计算 new_stop 并按方向单边 ratchet ────────────────────
     effective_atr = position.get("atr_shock_atr", atr) if position.get("atr_shock_detected", False) else atr
-    new_stop = highest_price - k * effective_atr
-    
-    # ⚠️ 关键：止损只上移，不下移
-    if new_stop > position.get("stop_price", position["entry_price"]):
-        position["stop_price"] = new_stop
-    
+    current_stop = position.get("stop_price", entry)
+
+    if side == "LONG":
+        new_stop = reference - k * effective_atr
+        # 单向：只上移
+        if new_stop > current_stop:
+            position["stop_price"] = new_stop
+    else:  # SHORT
+        new_stop = reference + k * effective_atr
+        # 单向：只下移（止损越来越紧 → 锁定利润）
+        if new_stop < current_stop:
+            position["stop_price"] = new_stop
+
     return position
 
 

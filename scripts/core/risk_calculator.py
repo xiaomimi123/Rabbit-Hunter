@@ -68,28 +68,30 @@ def calculate_position_size(
     Core idea: fix account-level risk (e.g. 1.5 %); the wider the stop
     distance, the smaller the position.
 
-    Short positions use half the risk ratio to account for unlimited
-    upside risk and slippage.
+    v45: 删除原本静默的 SHORT 半仓 — 之前 effective_risk = risk * 0.5 (SHORT)，
+    叠加调用方已经做过的乘数（v44 VULTURE 的 position_size=0.5），SHORT 实际仅
+    跑到 0.25x。SHORT 风控应由调用方显式表达（v44 strategy config 的 position_size
+    字段），不是这里偷偷减半。is_short 参数保留以兼容旧签名，但不再产生隐式效果。
 
     Args:
         account_balance:  Total account balance in quote currency.
         entry_price:      Trade entry price.
         stop_loss_price:  Stop-loss price.
         risk_per_trade:   Fraction of balance to risk (default 0.015 = 1.5 %).
-        is_short:         If True, effective risk is halved.
+        is_short:         保留兼容；v45 起不影响结果（SHORT 风控走 strategy multiplier）
 
     Returns:
         Position size in base currency units; 0.0 if inputs are invalid.
     """
+    _ = is_short  # 显式标记不再使用（防 linter 抱怨）
     if account_balance <= 0 or entry_price <= 0:
         return 0.0
 
-    effective_risk = risk_per_trade * (0.5 if is_short else 1.0)
     distance = abs(entry_price - stop_loss_price)
     if distance <= 0:
         return 0.0
 
-    return (account_balance * effective_risk) / distance
+    return (account_balance * risk_per_trade) / distance
 
 
 def check_funding_trap(

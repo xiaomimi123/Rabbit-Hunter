@@ -214,11 +214,12 @@ class V43PositionManager:
                 stop_price = entry_price + (atr_value * stop_loss_atr_multiplier)
             atr_k = stop_loss_atr_multiplier
         else:
-            # V4.3 原有逻辑：使用 initialize_position
+            # V4.3 原有逻辑：使用 initialize_position（v45：side-aware）
             position_init = initialize_position(
                 features=features,
                 price=entry_price,
                 atr=atr_value,
+                side=side,
             )
             stop_price = position_init.get("stop_price")
             atr_k = position_init.get("atr_k")
@@ -436,21 +437,9 @@ class V43PositionManager:
         position["current_price"] = current_price
         position["updated_at"] = datetime.now().isoformat()
         
-        # 跟踪极值（v45 起 lowest_price 字段已存在）
-        if position["side"] == "LONG":
-            if position.get("highest_price") is None or current_price > position["highest_price"]:
-                position["highest_price"] = current_price
-        else:  # SHORT
-            if position.get("lowest_price") is None or current_price < position["lowest_price"]:
-                position["lowest_price"] = current_price
+        # v45：update_chandelier_stop 现在自己处理 side 感知的极值跟踪
+        # （根据 position["side"] 自动选 highest 或 lowest），这里不再需要做镜像处理。
 
-        # 更新 Chandelier Stop 的参考极值
-        # 注意：v45 仅修了字段对称性。chandelier_stop 内部对 SHORT 的数学仍未修，
-        # 因此当前 ENABLE_SHORT_TRADING=false 的默认值下，下面这条 SHORT 路径
-        # 实际只会被遗留 OPEN SHORT 持仓触发。
-        current_high = position.get("highest_price") if position["side"] == "LONG" else current_price
-        current_low = position.get("lowest_price") if position["side"] == "SHORT" else current_price
-        
         # 计算 ATR 历史（用于 ATR Shock Guard）
         atr_history = None
         if ohlcv_15m and len(ohlcv_15m) >= 20:
@@ -462,11 +451,11 @@ class V43PositionManager:
                 atr_history = [calculate_atr(highs[:i+1], lows[:i+1], closes[:i+1]) for i in range(14, len(highs))]
             except Exception:
                 pass
-        
-        # 更新止损
+
+        # 更新止损 — side-aware（v45）
         updated_position = update_chandelier_stop(
             position=position,
-            current_high=current_high if position["side"] == "LONG" else current_low,
+            current_price=current_price,
             atr=current_atr,
             atr_history=atr_history,
             bars_since_entry=self._calculate_bars_since_entry(position),

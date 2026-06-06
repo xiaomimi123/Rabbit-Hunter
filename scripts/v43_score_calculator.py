@@ -105,36 +105,41 @@ def calculate_volatility_score(features: Dict[str, Any]) -> Tuple[float, str]:
 
 def calculate_sentiment_score(features: Dict[str, Any]) -> float:
     """
-    计算市场情绪分数（含负奖励）
-    
+    计算市场情绪分数（v45：funding 符号修复 — 反向计算）
+
+    v45 修复：旧代码 funding_penalty = clamp(-funding*10, -1, 0) 然后 `- funding_penalty`，
+    实际上让正费率（多头过热，理应看空）反而**抬高**了情绪分。修复为对称 signed 信号：
+      - funding > 0（多头付费给空头，过热）→ 看空 → 拉低 sentiment
+      - funding < 0（空头付费给多头，空头拥挤）→ 看多 → 抬高 sentiment
+
     Args:
-        features: 特征字典
-    
+        features: 特征字典（funding 单位：decimal，如 0.0001 = 0.01%）
+
     Returns:
         sentiment_score: 情绪分数 (0-1)
     """
-    # 资金费率惩罚：费率越高，惩罚越大
+    # ── funding 信号（signed，方向感知）──────────────────────
     funding = features.get("funding", 0.0)
-    funding_penalty = clamp(-funding * 10.0, -1.0, 0.0)
-    
-    # 多空比：比例越极端，情绪越强烈（但需要反向思考）
-    # 多空比越高，做多情绪越强（但也要考虑是否过度拥挤）
+    # 经验：±0.1%（0.001）映射到 ±1
+    funding_signal = clamp(-float(funding) * 10.0, -1.0, 1.0)
+
+    # ── 多空比 ──────────────────────────────────────────────
     ls_ratio = features.get("ls_ratio", 1.0)
-    # 简化：多空比在 1.0-2.0 之间为最佳，超过 2.5 为过度拥挤
     if 1.0 <= ls_ratio <= 2.0:
         ls_score = 1.0
     elif ls_ratio > 2.5:
         ls_score = 0.3  # 过度拥挤，降低分数
     else:
         ls_score = clamp((ls_ratio - 0.5) / 1.5, 0.0, 1.0)
-    
-    # OI 变化：正变化表示资金流入
+
+    # ── OI 变化 ─────────────────────────────────────────────
     oi_change = features.get("oi_change", 0.0)
     oi_score = clamp(oi_change / 10.0, 0.0, 1.0)  # 假设最大 OI 变化为 10%
-    
-    # 综合：ls_score + oi_score - funding_penalty
-    sentiment_score = (ls_score + oi_score - funding_penalty) / 3.0
-    
+
+    # ── 综合 ────────────────────────────────────────────────
+    # ls/oi 在 [0,1]，funding_signal 在 [-1,1]
+    # 取均值后 clamp 回 [0,1]
+    sentiment_score = (ls_score + oi_score + funding_signal) / 3.0
     return clamp(sentiment_score, 0.0, 1.0)
 
 

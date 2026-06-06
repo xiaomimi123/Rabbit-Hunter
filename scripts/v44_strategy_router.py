@@ -300,9 +300,11 @@ def route_strategy(
             
             # OI 下降幅度贡献：下降 3% = 30分，下降 10% = 100分（线性）
             oi_contribution = min(abs(oi_change_decimal) / oi_contribution_max, 1.0) * 100
-            
-            # 结构分数贡献（0-100 分）
-            structure_contribution = structure_score * 100 if structure_score > 0 else 0
+
+            # 结构分数贡献（structure_score 已经在 L168-173 被转换到 0-100，
+            # 这里不能再乘 100 — v45 修复：之前的 *100 让 VULTURE 分数飙到 ~3000，
+            # 等于任何 P3B/P4 候选都能过 70 阈值）
+            structure_contribution = structure_score if structure_score > 0 else 0
             
             # 综合分数：OI 贡献和结构分数加权平均（使用动态配置的权重）
             if structure_contribution > 0:
