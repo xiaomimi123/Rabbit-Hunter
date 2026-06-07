@@ -42,28 +42,23 @@ _EXCLUDED_SYMBOLS: frozenset[str] = frozenset({"BTCUSDT", "ETHUSDT", "BNBUSDT", 
 
 def scan_all_markets_via_public_api() -> dict[str, dict]:
     """
-    Layer-1 (coarse scan): fetch all 24 h tickers from Binance Futures in one
-    HTTP call.
+    Layer-1 (coarse scan): 24h tickers — 通过 exchange_endpoints facade，
+    交易所由 env EXCHANGE=binance|okx 切换（v0.5.2 起默认 okx）。
 
     Returns a dict {binance_symbol: ticker_dict} limited to USDT-margined
-    perpetuals.
+    perpetuals. ticker_dict 字段对齐 Binance 习惯：
+      {symbol, lastPrice, priceChangePercent, quoteVolume, volume, _exchange}
 
-    Raises an exception on network failure (caller should handle gracefully).
+    Raises an exception on network failure (caller handles gracefully).
     """
-    url = "https://fapi.binance.com/fapi/v1/ticker/24hr"
     try:
-        response = requests.get(url, timeout=15)
-        response.raise_for_status()
-        all_tickers = response.json()
+        from exchange_endpoints import fetch_all_tickers  # type: ignore[import-not-found]
+    except ImportError:
+        from .exchange_endpoints import fetch_all_tickers  # type: ignore[import-not-found]
+    try:
+        return fetch_all_tickers()
     except Exception as e:  # noqa: BLE001
         raise Exception(f"全市场扫描失败: {e}") from e
-
-    result: dict[str, dict] = {}
-    for ticker in all_tickers:
-        symbol = ticker.get("symbol", "")
-        if symbol.endswith("USDT"):
-            result[symbol] = ticker
-    return result
 
 
 def detect_movers(

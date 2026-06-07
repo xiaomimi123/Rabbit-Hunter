@@ -40,156 +40,67 @@ _DEFAULT_MAX_CONCURRENCY: int = 10
 
 
 # ---------------------------------------------------------------------------
-# Low-level fetch helpers (stateless pure functions)
+# Low-level fetch helpers — v0.5.2 起全部走 exchange_endpoints facade
+# 模块按 env EXCHANGE 切换 Binance/OKX 后端，业务代码无感知。
+# 这里保留原函数名作为 thin wrappers，外部 import 路径不变。
 # ---------------------------------------------------------------------------
 
+try:
+    from exchange_endpoints import (  # type: ignore[import-not-found]
+        fetch_price_and_funding   as _ee_fetch_price_and_funding,
+        fetch_open_interest       as _ee_fetch_oi,
+        fetch_ls_ratio            as _ee_fetch_ls_ratio,
+        fetch_price_change_1h     as _ee_fetch_price_change_1h,
+        fetch_oi_change_1h        as _ee_fetch_oi_change_1h,
+        fetch_klines_ohlcv        as _ee_fetch_klines_ohlcv,
+        fetch_klines_full         as _ee_fetch_klines_full,
+    )
+except ImportError:
+    from .exchange_endpoints import (  # type: ignore[import-not-found]
+        fetch_price_and_funding   as _ee_fetch_price_and_funding,
+        fetch_open_interest       as _ee_fetch_oi,
+        fetch_ls_ratio            as _ee_fetch_ls_ratio,
+        fetch_price_change_1h     as _ee_fetch_price_change_1h,
+        fetch_oi_change_1h        as _ee_fetch_oi_change_1h,
+        fetch_klines_ohlcv        as _ee_fetch_klines_ohlcv,
+        fetch_klines_full         as _ee_fetch_klines_full,
+    )
+
+
 def _fetch_price_and_funding(binance_symbol: str) -> dict:
-    """Fetch last price and funding rate via Binance public REST API."""
-    base = "https://fapi.binance.com"
-    ticker = requests.get(
-        f"{base}/fapi/v1/ticker/24hr", params={"symbol": binance_symbol}, timeout=10
-    )
-    ticker.raise_for_status()
-    t = ticker.json()
-    price = float(t["lastPrice"])
-
-    funding = requests.get(
-        f"{base}/fapi/v1/premiumIndex", params={"symbol": binance_symbol}, timeout=10
-    )
-    funding.raise_for_status()
-    f = funding.json()
-    funding_rate = float(f.get("lastFundingRate", 0.0))
-
-    return {"price": price, "funding_rate": funding_rate}
+    """{price, funding_rate} — exchange-agnostic（facade 处理 OKX/Binance）。"""
+    return _ee_fetch_price_and_funding(binance_symbol)
 
 
 def _fetch_oi(binance_symbol: str) -> float | None:
-    """Fetch open interest via Binance public REST API."""
-    resp = requests.get(
-        "https://fapi.binance.com/fapi/v1/openInterest",
-        params={"symbol": binance_symbol},
-        timeout=10,
-    )
-    if resp.status_code == 400:
-        return None
-    resp.raise_for_status()
-    data = resp.json()
-    try:
-        return float(data["openInterest"])
-    except Exception:  # noqa: BLE001
-        return None
+    return _ee_fetch_oi(binance_symbol)
 
 
 def _fetch_ls_ratio(binance_symbol: str) -> float | None:
-    """Fetch global long/short account ratio via Binance public REST API."""
-    try:
-        resp = requests.get(
-            "https://fapi.binance.com/futures/data/globalLongShortAccountRatio",
-            params={"symbol": binance_symbol, "period": "5m", "limit": 1},
-            timeout=10,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        if isinstance(data, list) and data:
-            return float(data[0].get("longShortRatio", 1.0))
-        if isinstance(data, dict):
-            return float(data.get("longShortRatio", 1.0))
-        return None
-    except requests.exceptions.HTTPError as e:
-        if e.response is not None and e.response.status_code == 404:
-            return None  # symbol doesn't support this endpoint
-        return None
-    except Exception:  # noqa: BLE001
-        return None
+    return _ee_fetch_ls_ratio(binance_symbol)
 
 
 def _fetch_price_change_1h(binance_symbol: str) -> float | None:
-    """Compute 1-hour price change % from Binance kline API."""
-    try:
-        resp = requests.get(
-            "https://fapi.binance.com/fapi/v1/klines",
-            params={"symbol": binance_symbol, "interval": "1h", "limit": 2},
-            timeout=10,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        if not isinstance(data, list) or len(data) < 2:
-            return None
-        prev_close = float(data[-2][4])
-        last_close = float(data[-1][4])
-        if prev_close == 0:
-            return None
-        return (last_close - prev_close) / prev_close * 100.0
-    except Exception:  # noqa: BLE001
-        return None
+    return _ee_fetch_price_change_1h(binance_symbol)
 
 
 def _fetch_oi_change_1h(binance_symbol: str) -> float | None:
-    """Compute 1-hour OI change % via Binance openInterestHist API."""
-    try:
-        resp = requests.get(
-            "https://fapi.binance.com/futures/data/openInterestHist",
-            params={"symbol": binance_symbol, "period": "1h", "limit": 2},
-            timeout=10,
-        )
-        if resp.status_code == 400:
-            return None
-        resp.raise_for_status()
-        data = resp.json()
-        if not isinstance(data, list) or len(data) < 2:
-            return None
-
-        def _oi(x: dict) -> float:
-            return float(x.get("sumOpenInterest") or x.get("openInterest") or 0)
-
-        prev, last = _oi(data[-2]), _oi(data[-1])
-        if prev == 0:
-            return None
-        return (last - prev) / prev * 100.0
-    except Exception:  # noqa: BLE001
-        return None
+    return _ee_fetch_oi_change_1h(binance_symbol)
 
 
 def _fetch_klines_ohlcv(binance_symbol: str, interval: str, limit: int) -> list[dict]:
-    """Fetch OHLCV klines (oldest→newest)."""
-    try:
-        resp = requests.get(
-            "https://fapi.binance.com/fapi/v1/klines",
-            params={"symbol": binance_symbol, "interval": interval, "limit": limit},
-            timeout=10,
-        )
-        resp.raise_for_status()
-        return [
-            {
-                "open": float(k[1]),
-                "high": float(k[2]),
-                "low": float(k[3]),
-                "close": float(k[4]),
-                "volume": float(k[5]),
-            }
-            for k in resp.json()
-        ]
-    except Exception:  # noqa: BLE001
-        return []
+    return _ee_fetch_klines_ohlcv(binance_symbol, interval, limit)
 
 
-# v45: 公开 API — scorer._build_ai_training_row 通过这两个名字引用
-# 之前 scorer 的 ImportError 让每次 ai_training_data 写入静默失败
+# v45: 公开 wrappers — scorer._build_ai_training_row 引用这两个名字
 def fetch_klines_ohlcv(binance_symbol: str, interval: str, limit: int) -> list[dict]:
-    """公开包装：返回 OHLCV dict 列表（oldest→newest）。"""
-    return _fetch_klines_ohlcv(binance_symbol, interval, limit)
+    return _ee_fetch_klines_ohlcv(binance_symbol, interval, limit)
 
 
 def fetch_klines_full(
     binance_symbol: str, interval: str, limit: int
 ) -> tuple[list[float], list[float], list[float]]:
-    """公开包装：返回 (highs, lows, closes) 三个并列列表（oldest→newest）。
-    用于 scorer._build_ai_training_row 给 v41_risk_manager 喂数据。"""
-    bars = _fetch_klines_ohlcv(binance_symbol, interval, limit)
-    highs = [b["high"] for b in bars]
-    lows = [b["low"] for b in bars]
-    closes = [b["close"] for b in bars]
-    return highs, lows, closes
+    return _ee_fetch_klines_full(binance_symbol, interval, limit)
 
 
 # ---------------------------------------------------------------------------
