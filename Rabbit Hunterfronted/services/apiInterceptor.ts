@@ -113,12 +113,27 @@ async function fetchWithRetry(
 
 /**
  * 统一的 API 请求函数
+ *
+ * URL 解析：
+ *   - 绝对 URL（http/https 开头）→ 原样使用
+ *   - 已经带 API_BASE 前缀（services/api.ts 自己加过了）→ 原样使用，防止 /api/api/... double-prefix
+ *   - 其它（纯相对路径，如 '/v43/...'）→ 在前面加 API_BASE
+ *
+ * 这个三态判断是 v0.5.4 修的，之前 Docker 模式（VITE_API_URL=/api）下
+ * services/api.ts 自己加 /api 后 interceptor 又加一次，所有请求 404。
  */
 export async function apiRequest<T = any>(
   endpoint: string,
   options: RequestConfig = {}
 ): Promise<T> {
-  const url = endpoint.startsWith('http') ? endpoint : `${API_BASE}${endpoint}`;
+  let url: string;
+  if (endpoint.startsWith('http')) {
+    url = endpoint;
+  } else if (API_BASE && endpoint.startsWith(API_BASE)) {
+    url = endpoint;  // services/api.ts 已经拼好了，别再加
+  } else {
+    url = `${API_BASE}${endpoint}`;
+  }
 
   // 请求去重：如果相同的请求正在进行，返回同一个 Promise
   const requestKey = getRequestKey(endpoint, options);

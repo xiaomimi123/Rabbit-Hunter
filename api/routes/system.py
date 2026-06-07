@@ -92,6 +92,57 @@ async def root():
 # ============================================
 
 
+@router.get("/api/v43/system-state")
+async def get_system_state(supabase=Depends(get_supabase_optional)) -> dict:
+    """前端 sidebar StatusRow 用：collector_running / api_online / testnet。
+
+    collector 是否在跑用 market_snapshot 最近写入时间推断（≤120s = 在跑）。
+    """
+    api_online = True  # 能进到这里就说明 api 在响应
+    collector_running = False
+    last_collector_write = None
+    try:
+        from datetime import datetime, timezone, timedelta
+        r = (
+            supabase.table("market_snapshot")
+            .select("updated_at")
+            .order("updated_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        if r.data:
+            last_str = r.data[0].get("updated_at") or ""
+            try:
+                last_dt = datetime.fromisoformat(last_str.replace("Z", "+00:00"))
+                if last_dt.tzinfo is None:
+                    last_dt = last_dt.replace(tzinfo=timezone.utc)
+                age = (datetime.now(timezone.utc) - last_dt).total_seconds()
+                collector_running = age <= 120  # 2 分钟内有写就算活
+                last_collector_write = last_str
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+    # 当前 active exchange 的 testnet 状态
+    is_testnet = False
+    try:
+        from scripts.exchange_config_manager import get_exchange_config_manager
+        mgr = get_exchange_config_manager(supabase)
+        cfg = mgr.get_config(mgr.get_active_exchange())
+        if cfg:
+            is_testnet = bool(cfg.get("testnet", False))
+    except Exception:
+        pass
+
+    return {
+        "api_online":           api_online,
+        "collector_running":    collector_running,
+        "last_collector_write": last_collector_write,
+        "testnet":              is_testnet,
+    }
+
+
 @router.get("/api/v43/system/exchange")
 async def get_active_exchange_endpoint(supabase=Depends(get_supabase_optional)) -> dict:
     """返回当前 active exchange（OKX / Binance）。前端顶栏徽章用。
