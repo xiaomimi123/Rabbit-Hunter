@@ -169,6 +169,17 @@ class BinanceTrader:
         return symbol.replace("/", "")
 
     @staticmethod
+    def to_ccxt_symbol(symbol: str) -> str:
+        """与 OkxTrader.to_ccxt_symbol 同接口 — 让 api/routes 等调用方
+        无需感知 active exchange 就能拿正确的 ccxt 调用 symbol。
+        Binance 永续：unified 直接是 'BTC/USDT'。"""
+        if "/" in symbol:
+            return symbol
+        if symbol.endswith("USDT"):
+            return f"{symbol[:-4]}/USDT"
+        return symbol
+
+    @staticmethod
     def _is_duplicate_order_error(err: Exception) -> bool:
         """Binance 在 clientOrderId 已存在 / 之前重试已成功时返回的错误."""
         msg = str(err)

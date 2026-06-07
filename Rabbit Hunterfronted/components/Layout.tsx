@@ -25,6 +25,7 @@ import {
 import { ViewType, SystemState } from '../types';
 import { useUIStore } from '../services/store';
 import { useSystemStatus } from '../hooks/useSystemStatus';
+import { useExchange } from '../hooks/useExchange';
 import ConfirmModal from './ui/ConfirmModal';
 
 // ─── nav config ──────────────────────────────────────────────────────────────
@@ -92,12 +93,42 @@ const TopBar: React.FC<TopBarProps> = ({
       </div>
     </div>
 
-    {/* Right: SHADOW / LIVE switch */}
+    {/* Right: active exchange badge + SHADOW/LIVE switch */}
     <div className="flex items-center gap-3">
+      <ExchangeBadge />
       <ModeSwitch mode={systemMode} onRequestChange={onRequestModeChange} />
     </div>
   </header>
 );
+
+// ─── exchange badge ─────────────────────────────────────────────────────────
+
+const ExchangeBadge: React.FC = () => {
+  const { data, isLoading } = useExchange();
+  if (isLoading || !data) {
+    return (
+      <div className="inline-flex items-center px-2 py-1 rounded border border-terminal-border text-text-muted text-[10px] uppercase tracking-micro num">
+        …
+      </div>
+    );
+  }
+  const isOkx = data.exchange === 'okx';
+  // 配色：OKX 暖琥珀 accent；Binance 用中性 — 区分但不刺眼
+  const tone = isOkx
+    ? 'bg-primary/10 border-primary/30 text-primary'
+    : 'bg-white/[0.04] border-white/10 text-text-secondary';
+  return (
+    <div
+      title={`信号源 + 交易所: ${data.label}${data.testnet ? '（测试网）' : ''}`}
+      className={`inline-flex items-center gap-1 px-2 py-1 rounded border ${tone} text-[10px] uppercase tracking-micro font-medium`}
+    >
+      <span>{data.label}</span>
+      {data.testnet && (
+        <span className="text-warn text-[9px]">·TEST</span>
+      )}
+    </div>
+  );
+};
 
 // ─── mode switch ─────────────────────────────────────────────────────────────
 

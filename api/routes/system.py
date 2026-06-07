@@ -88,6 +88,25 @@ async def root():
 
 
 # ============================================
+# 当前 active exchange（v0.5.2）
+# ============================================
+
+
+@router.get("/api/v43/system/exchange")
+async def get_active_exchange_endpoint() -> dict:
+    """返回当前 active exchange（OKX / Binance）。前端顶栏徽章用。"""
+    import os as _os
+    name = (_os.environ.get("EXCHANGE", "okx") or "okx").lower()
+    return {
+        "exchange": name,
+        "label":    name.upper(),                 # 前端直接展示
+        "testnet":  _os.environ.get(
+            "OKX_TESTNET" if name == "okx" else "BINANCE_TESTNET", "false"
+        ).lower() in ("1", "true"),
+    }
+
+
+# ============================================
 # 币安配置端点
 # ============================================
 

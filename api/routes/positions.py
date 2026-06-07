@@ -75,30 +75,28 @@ async def open_v43_position(
         )
 
     try:
-        from scripts.binance_trader import BinanceTrader  # type: ignore[import-not-found]
+        # v0.5.2: 通过 factory 拿 active exchange 的 trader（OKX 或 Binance）
+        from scripts.exchange_factory import get_trader, get_active_exchange  # type: ignore[import-not-found]
 
-        api_key = os.environ.get("BINANCE_API_KEY")
-        api_secret = os.environ.get("BINANCE_API_SECRET")
-        if not api_key or not api_secret:
+        active = get_active_exchange()
+        if active == "binance":
+            key_env, secret_env = "BINANCE_API_KEY", "BINANCE_API_SECRET"
+        else:
+            key_env, secret_env = "OKX_API_KEY", "OKX_API_SECRET"
+
+        if not os.environ.get(key_env) or not os.environ.get(secret_env):
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="BINANCE_API_KEY / BINANCE_API_SECRET 未配置",
+                detail=f"{key_env} / {secret_env} 未配置（当前 EXCHANGE={active}）",
             )
 
-        testnet = os.environ.get("BINANCE_TESTNET", "false").lower() == "true"
-        leverage = int(os.environ.get("BINANCE_LEVERAGE", "10"))
-        trader = BinanceTrader(
-            api_key=api_key,
-            api_secret=api_secret,
-            testnet=testnet,
-            leverage=leverage,
-        )
+        trader = get_trader()  # 自动读 env 拿凭据 + testnet + leverage
 
         # 获取当前市场价格
         entry_price = request.price
         if entry_price is None:
-            binance_symbol = request.symbol.replace("/", "")
-            ticker = trader.exchange.fetch_ticker(binance_symbol)
+            ccxt_symbol = trader.to_ccxt_symbol(request.symbol)
+            ticker = trader.exchange.fetch_ticker(ccxt_symbol)
             entry_price = ticker.get("last")
             if not entry_price:
                 raise HTTPException(
@@ -178,12 +176,15 @@ async def close_v43_position(
 
     try:
         from scripts.v43_position_manager import V43PositionManager  # type: ignore[import-not-found]
-        from scripts.binance_trader import BinanceTrader  # type: ignore[import-not-found]
+        from scripts.exchange_factory import get_trader, get_active_exchange  # type: ignore[import-not-found]
 
-        # 初始化交易器（如果配置了币安 API）
+        # v0.5.2：按 active exchange 拿 trader
+        active = get_active_exchange()
+        key_env = "BINANCE_API_KEY" if active == "binance" else "OKX_API_KEY"
+        secret_env = "BINANCE_API_SECRET" if active == "binance" else "OKX_API_SECRET"
         trader = None
-        if os.environ.get("BINANCE_API_KEY") and os.environ.get("BINANCE_API_SECRET"):
-            trader = BinanceTrader()
+        if os.environ.get(key_env) and os.environ.get(secret_env):
+            trader = get_trader()
 
         # 初始化持仓管理器
         position_manager = V43PositionManager(
@@ -195,8 +196,8 @@ async def close_v43_position(
         exit_price = 0.0
         try:
             if trader:
-                binance_symbol = request.symbol.replace("/", "")
-                ticker = trader.exchange.fetch_ticker(binance_symbol)
+                ccxt_symbol = trader.to_ccxt_symbol(request.symbol)
+                ticker = trader.exchange.fetch_ticker(ccxt_symbol)
                 exit_price = float(ticker.get("last") or 0)
         except Exception:
             pass

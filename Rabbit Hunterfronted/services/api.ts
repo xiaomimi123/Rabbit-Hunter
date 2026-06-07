@@ -258,7 +258,15 @@ export const systemAPI = {
       newMode,
       confirmation: true,
     });
-  }
+  },
+
+  /**
+   * v0.5.2: 当前 active exchange — 顶栏徽章用
+   * 返回 { exchange: 'okx' | 'binance', label: 'OKX' | 'BINANCE', testnet: bool }
+   */
+  getExchange: async () => {
+    return apiGet(`${API_BASE}/v43/system/exchange`);
+  },
 };
 
 // ============== 权重管理 API ==============
