@@ -57,18 +57,38 @@ class KillQueueManager:
         self.subscribers: List[Callable] = []
     
     def _init_supabase(self):
-        """初始化 Supabase 客户端"""
+        """初始化 DB 客户端。
+
+        v0.5.1：之前缺 SUPABASE_URL/KEY 时只打 WARNING 然后 self.supabase=None，
+        让 WS 后台广播任务每 5s 拿空数据 + dataFreshness=ERROR。
+        现在 fallback 到 LocalDB（SQLite + Supabase 兼容 API），让背景任务真的能跑。
+        路由仍然可以通过 manager.supabase = supabase 覆盖。
+        """
         try:
             SUPABASE_URL = os.environ.get("SUPABASE_URL")
             SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
-            
+
             if SUPABASE_URL and SUPABASE_KEY:
                 self.supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
                 print("[INFO] KillQueueManager: Supabase 客户端初始化成功")
-            else:
-                print("[WARNING] KillQueueManager: Supabase 配置缺失")
+                return
         except Exception as e:
             print(f"[ERROR] KillQueueManager: Supabase 初始化失败: {e}")
+
+        # Fallback：用本机 SQLite（LocalDB 提供 Supabase 兼容查询链）
+        try:
+            from local_db import get_local_db  # type: ignore[import-not-found]
+        except ImportError:
+            try:
+                from scripts.local_db import get_local_db  # type: ignore[import-not-found]
+            except ImportError:
+                print("[WARNING] KillQueueManager: 既无 Supabase 也无 LocalDB → 队列将永远为空")
+                return
+        try:
+            self.supabase = get_local_db()
+            print("[INFO] KillQueueManager: 已 fallback 到本机 SQLite (LocalDB)")
+        except Exception as e:
+            print(f"[ERROR] KillQueueManager: LocalDB fallback 失败: {e}")
     
     def get_kill_queue(
         self,

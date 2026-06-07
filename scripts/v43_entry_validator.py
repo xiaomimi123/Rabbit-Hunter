@@ -142,18 +142,31 @@ class EntryValidator:
                 price_change_1h=price_change_1h,
             )
             
-            # 3. 计算分数
+            # 3. 计算分数（v0.5.1：calculate_scores 是 aggregate_score + 当前 weights 的 wrapper）
             scores = calculate_scores(features)
-            
-            # 4. 硬约束检查
-            hard_filter_result = pass_hard_filters(features, scores)
-            
-            # 5. 决策策略
+
+            # 4. 硬约束检查（v0.5.1：pass_hard_filters 实际只接受 features 一个参数）
+            hard_filter_result = pass_hard_filters(features)
+
+            # 5. 决策策略（v0.5.1：实际签名是 (score_result, market_regime, account_stage, opportunity_density)）
+            try:
+                from v43_decision_policy import detect_market_regime, get_account_stage  # type: ignore[import-not-found]
+            except ImportError:
+                from scripts.v43_decision_policy import detect_market_regime, get_account_stage  # type: ignore[import-not-found]
+            # 用 features 推 regime；account_stage 默认 GROWTH（验证场景下没有真实余额）
+            try:
+                market_regime = detect_market_regime(features)
+            except Exception:
+                market_regime = "NEUTRAL"
+            try:
+                account_stage = get_account_stage(account_balance=10000.0 * (risk / 2.0))
+            except Exception:
+                account_stage = "GROWTH"
             decision = decision_policy(
-                scores["final_score"],
-                features,
-                leverage=leverage,
-                risk_percentage=risk
+                scores,
+                market_regime,
+                account_stage,
+                opportunity_density=1.0,
             )
             
             # 6. 格式化评分结果

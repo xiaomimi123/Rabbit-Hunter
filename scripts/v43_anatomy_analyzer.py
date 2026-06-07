@@ -297,15 +297,30 @@ class AnatomyAnalyzer:
             return []
     
     def _analyze_structural_gap(self, features: Dict[str, Any], candles: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """分析结构缺口"""
+        """分析结构缺口（v0.5.1：修复签名 — 之前传 symbol 字符串当 current_price，恒返回 0）"""
         try:
-            from v41_structure_analyzer import calculate_structure_gap
-            gap_size, gap_type = calculate_structure_gap(features.get("symbol", ""))
-            
+            from v41_structure_analyzer import calculate_structure_gap  # type: ignore[import-not-found]
+
+            # 从 features / candles 提取真实输入
+            current_price = float(features.get("price") or 0.0)
+            highs_1h = [float(c.get("high", 0)) for c in candles if c.get("high") is not None]
+            lows_1h  = [float(c.get("low", 0))  for c in candles if c.get("low")  is not None]
+            closes_1h = [float(c.get("close", 0)) for c in candles if c.get("close") is not None]
+
+            if current_price <= 0 or not highs_1h:
+                return {"size": 0.0, "type": "UNKNOWN", "direction": "UNKNOWN"}
+
+            gap_size, gap_type = calculate_structure_gap(
+                current_price=current_price,
+                highs_1h=highs_1h,
+                lows_1h=lows_1h,
+                closes_1h=closes_1h,
+            )
+
             return {
-                "size": round(gap_size * 100, 2),  # 转换为百分比
-                "type": gap_type,
-                "direction": "UP" if gap_size > 0 else "DOWN",
+                "size": round(float(gap_size or 0.0) * 100, 2),
+                "type": gap_type or "UNKNOWN",
+                "direction": "UP" if (gap_size or 0.0) > 0 else "DOWN",
             }
         except:
             return {

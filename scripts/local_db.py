@@ -162,16 +162,27 @@ CREATE TABLE IF NOT EXISTS ai_weights_v43 (
     updated_at          TEXT
 );
 
+-- v0.5.1：补齐 scorer._build_snapshot_row 真正写入的全部字段（之前缺 9 个
+-- 导致 collector 每次 upsert market_snapshot 都 OperationalError → 全表 0 行）
 CREATE TABLE IF NOT EXISTS market_snapshot (
-    id           INTEGER PRIMARY KEY AUTOINCREMENT,
-    symbol       TEXT    NOT NULL UNIQUE,
-    price        REAL,
-    funding_rate REAL,
-    oi_value     REAL,
-    ls_ratio     REAL,
-    phase        TEXT,
-    created_at   TEXT,
-    updated_at   TEXT
+    id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+    symbol                  TEXT    NOT NULL UNIQUE,
+    price                   REAL,
+    funding_rate            REAL,
+    oi_value                REAL,
+    ls_ratio                REAL,
+    phase                   TEXT,
+    risk_score              REAL,
+    risk_level              TEXT,
+    regime                  TEXT,
+    ai_score                REAL,
+    ai_allowed              INTEGER,
+    ai_reason               TEXT,
+    ai_version              TEXT,
+    p3a_match_score         REAL,
+    ai_effective_threshold  REAL,
+    created_at              TEXT,
+    updated_at              TEXT
 );
 
 CREATE TABLE IF NOT EXISTS paper_trades (
@@ -208,6 +219,16 @@ def _apply_migrations(conn: sqlite3.Connection) -> None:
         # (表名, 列名, 列类型)
         ("positions_v43", "highest_price", "REAL"),
         ("positions_v43", "lowest_price",  "REAL"),
+        # v0.5.1：market_snapshot 补 scorer._build_snapshot_row 真正写入的列
+        ("market_snapshot", "risk_score",             "REAL"),
+        ("market_snapshot", "risk_level",             "TEXT"),
+        ("market_snapshot", "regime",                 "TEXT"),
+        ("market_snapshot", "ai_score",               "REAL"),
+        ("market_snapshot", "ai_allowed",             "INTEGER"),
+        ("market_snapshot", "ai_reason",              "TEXT"),
+        ("market_snapshot", "ai_version",             "TEXT"),
+        ("market_snapshot", "p3a_match_score",        "REAL"),
+        ("market_snapshot", "ai_effective_threshold", "REAL"),
     ]
     for table, column, col_type in add_column_migrations:
         try:
@@ -390,8 +411,10 @@ def _deserialize_row(row: dict) -> dict:
 # ─── Supabase 兼容查询构建器 ──────────────────────────────────────────────────
 
 class _Result:
-    def __init__(self, data: list[dict]):
+    def __init__(self, data: list[dict], count: Optional[int] = None):
         self.data = data
+        # v0.5.1：兼容 supabase-py 的 .select(count="exact") 返回的 .count 属性
+        self.count = count
 
 
 class _Query:
@@ -420,9 +443,12 @@ class _Query:
 
     # ── 过滤器 ────────────────────────────────────────────────────────────────
 
-    def select(self, cols: str = "*") -> "_Query":
+    def select(self, cols: str = "*", count: Optional[str] = None) -> "_Query":
+        """v0.5.1: 增加 count 关键字兼容 supabase-py 的 .select("*", count="exact")。
+        count 值此处实际不影响 SQL 生成 — _Result.count 会在 execute() 时填上。"""
         self._op = "select"
         self._cols = cols
+        self._count_mode = count
         return self
 
     def eq(self, col: str, val: Any) -> "_Query":
@@ -448,6 +474,16 @@ class _Query:
 
     def limit(self, n: int) -> "_Query":
         self._limit_n = n
+        return self
+
+    def range(self, start: int, end: int) -> "_Query":
+        """Supabase-py 的 `.range(start, end)` 兼容（包含上下界）→ offset+limit。
+
+        v0.5.1：kill_queue_manager 用 .range() 做分页，之前 LocalDB 没实现导致
+        AttributeError，让 /api/v43/kill-queue 永远返回 dataFreshness=ERROR。
+        """
+        self._offset_n = max(0, int(start))
+        self._limit_n = max(0, int(end) - int(start) + 1)
         return self
 
     def offset(self, n: int) -> "_Query":
@@ -509,7 +545,17 @@ class _Query:
         sql = f"SELECT {self._cols} FROM {self._table} {where_sql} {order_sql} {limit_sql} {offset_sql}"
         cur = self._conn.execute(sql, params)
         rows = [_deserialize_row(dict(r)) for r in cur.fetchall()]
-        return _Result(rows)
+
+        # v0.5.1：若 .select(count="exact") 被调用，再额外跑一次 COUNT(*) 拿总数
+        total_count: Optional[int] = None
+        if getattr(self, "_count_mode", None) == "exact":
+            try:
+                count_sql = f"SELECT COUNT(*) AS c FROM {self._table} {where_sql}"
+                row = self._conn.execute(count_sql, params).fetchone()
+                total_count = int(row["c"]) if row else 0
+            except Exception:
+                total_count = None
+        return _Result(rows, count=total_count)
 
     def _do_insert(self) -> _Result:
         """普通 INSERT — 不带 OR IGNORE。

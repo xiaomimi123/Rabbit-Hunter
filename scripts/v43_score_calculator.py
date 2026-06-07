@@ -213,11 +213,34 @@ def aggregate_score(features: Dict[str, Any], weights: Dict[str, float]) -> Dict
     }
 
 
+# v0.5.1 兼容 wrapper：旧代码（v43_kill_queue_manager / v43_anatomy_analyzer /
+# v43_entry_validator）import 的是 `calculate_scores(features)`，而本模块实际
+# 只导出 `aggregate_score(features, weights)`。整个 review 期间这些 import
+# 全部 ImportError，对应 API 路由形同虚设。在此提供一个 thin wrapper：
+#   - 自动从 v43_weight_manager 加载当前 weights（DB > config > 默认）
+#   - 再调用 aggregate_score 拼出完整 score_result dict
+# 旧调用方完全无需改动。
+def calculate_scores(features: Dict[str, Any]) -> Dict[str, Any]:
+    """Compat shim — equivalent to `aggregate_score(features, load_weights())`.
+
+    Provided so that 4+ pre-existing callers (KillQueueManager / AnatomyAnalyzer
+    / EntryValidator …) stop ImportError-ing. Prefer aggregate_score directly
+    in new code.
+    """
+    try:
+        # 优先用 scripts/ 裸名（已通过 PYTHONPATH 在容器里就绪）
+        from v43_weight_manager import load_weights  # type: ignore[import-not-found]
+    except ImportError:
+        from scripts.v43_weight_manager import load_weights  # type: ignore[import-not-found]
+    return aggregate_score(features, load_weights())
+
+
 __all__ = [
     "calculate_structure_score",
     "calculate_volatility_score",
     "calculate_sentiment_score",
     "calculate_manipulation_score",
     "aggregate_score",
+    "calculate_scores",
 ]
 

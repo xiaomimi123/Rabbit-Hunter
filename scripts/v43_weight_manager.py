@@ -255,12 +255,25 @@ def get_next_version(current_version: str = "v4.3.0") -> str:
     return "v4.3.1"
 
 
+# v0.5.1 兼容 wrapper：旧代码 import `get_current_weights`，本模块实际只导出
+# `load_weights`。Review 期间这条 import 在 5 个位置 ImportError，把
+# AnatomyPanel / EntryValidator / KillQueueManager 全砸了。提供 alias 接通：
+def get_current_weights() -> Dict[str, float]:
+    """Compat alias — equivalent to load_weights() with default config path.
+
+    Provided so that pre-existing callers (anatomy / entry_validator / kill_queue)
+    keep working without per-site rewrites. Prefer load_weights() in new code.
+    """
+    return load_weights()
+
+
 __all__ = [
     "load_weights",
     "save_weights",
     "save_weights_to_database",
     "validate_weights",
     "get_next_version",
+    "get_current_weights",
     "DEFAULT_WEIGHTS",
     "WEIGHT_CONSTRAINTS",
 ]
