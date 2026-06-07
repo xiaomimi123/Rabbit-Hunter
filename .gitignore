@@ -3,6 +3,14 @@
 .env.local
 .env.*.local
 
+# Runtime data (v0.5.0 Docker / 本机 SQLite)
+data/
+*.sqlite
+*.db
+*.db-shm
+*.db-wal
+ai_trade_log.jsonl
+
 # 密钥文件（绝不上传）
 .binance_key
 *.key

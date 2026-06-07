@@ -1,0 +1,87 @@
+# Rabbit Hunter — 本地 Docker 部署栈
+#
+# 启动：
+#   1) cp .env.example .env  # 编辑配置 — 至少填 BINANCE_API_KEY/SECRET（测试网 OK）
+#   2) docker compose up -d
+#   3) 浏览器访问 http://localhost:5173
+#
+# 安全：
+#   - 默认所有端口绑到 host 127.0.0.1（仅本机访问）
+#   - API 在容器内绑 0.0.0.0 是 docker 端口转发的硬要求，已显式 API_ALLOW_REMOTE_NO_AUTH=true
+#   - 想暴露到 LAN：(1) 改下面 ports 为 "0.0.0.0:5173:80"，(2) 设 API_BEARER_TOKEN + VITE_API_TOKEN
+#
+# 日志查看：
+#   docker compose logs -f api
+#   docker compose logs -f collector
+
+services:
+  # ── API 后端 ──────────────────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rabbit-hunter-api
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      API_BIND_HOST: 0.0.0.0
+      API_PORT: 8000
+      API_ALLOW_REMOTE_NO_AUTH: "true"   # docker 网络隔离 + ports 仅 127.0.0.1
+      AI_TRADE_LOG_PATH: /app/data/ai_trade_log.jsonl
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - ./data:/app/data
+    networks:
+      - rh
+
+  # ── 采集器 + 交易循环 ─────────────────────────────────────────────
+  collector:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rabbit-hunter-collector
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      AI_TRADE_LOG_PATH: /app/data/ai_trade_log.jsonl
+    # 入口换成 collector_main（共享 api 的镜像，省一次构建）
+    command: ["python", "-m", "scripts.tasks.collector_main"]
+    # 禁用从 Dockerfile 继承的 HTTP healthcheck — collector 没有 HTTP 端口
+    # 进程存活由 restart: unless-stopped 兜底；要实质性监控请用进程级 metrics
+    healthcheck:
+      disable: true
+    volumes:
+      - ./data:/app/data
+    networks:
+      - rh
+    depends_on:
+      - api
+
+  # ── 前端 ──────────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./Rabbit Hunterfronted
+      dockerfile: Dockerfile
+      args:
+        # VITE_API_URL=/api → nginx 反代到 api:8000；前端代码无需感知后端 host
+        VITE_API_URL: /api
+        VITE_WS_URL: /ws/v43
+        # 想开启鉴权：把 API_BEARER_TOKEN 和这里 VITE_API_TOKEN 设成同一值
+        VITE_API_TOKEN: ${API_BEARER_TOKEN:-}
+    container_name: rabbit-hunter-frontend
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5173:80"
+    networks:
+      - rh
+    depends_on:
+      - api
+
+networks:
+  rh:
+    driver: bridge
+
+# 持久化数据由 host 的 ./data 目录承载 — git 已忽略
