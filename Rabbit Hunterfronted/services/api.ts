@@ -298,6 +298,16 @@ export const exchangeConfigAPI = {
 };
 
 
+// ============== Paper Trades API (v0.5.4 — 影子模式虚拟仓位) ==============
+
+export const paperTradesAPI = {
+  /** 获取所有 paper trades + 聚合 KPI（胜率/累计虚拟 PnL/平均持仓）*/
+  list: async (statusFilter: 'all' | 'open' | 'closed' = 'all', limit: number = 200) => {
+    return apiGet(`${API_BASE}/v43/paper-trades?status=${statusFilter}&limit=${limit}`);
+  },
+};
+
+
 // ============== AI Provider Config API (v0.5.3) ==============
 
 export const aiConfigAPI = {

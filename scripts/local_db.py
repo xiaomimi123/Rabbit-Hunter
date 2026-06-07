@@ -185,18 +185,45 @@ CREATE TABLE IF NOT EXISTS market_snapshot (
     updated_at              TEXT
 );
 
+-- v0.5.4：paper_trades 大幅扩展 — 之前 9 列只够离线回测；现在要支持在线 SHADOW
+-- 模式实时开虚拟仓 + 跟踪 SL/TP 触发 + 结算
 CREATE TABLE IF NOT EXISTS paper_trades (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    symbol      TEXT,
-    side        TEXT,
-    entry_price REAL,
-    exit_price  REAL,
-    pnl         REAL,
-    pnl_percent REAL,
-    strategy_id TEXT,
-    reason      TEXT,
-    created_at  TEXT
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    symbol              TEXT    NOT NULL,
+    side                TEXT,                    -- LONG / SHORT
+    entry_price         REAL,
+    entry_time          TEXT,
+    current_price       REAL,                    -- 实时跟踪用
+    exit_price          REAL,
+    exit_time           TEXT,
+    exit_reason         TEXT,                    -- TP_HIT / SL_HIT / HORIZON_TIMEOUT / MANUAL
+    status              TEXT    DEFAULT 'OPEN',  -- OPEN / CLOSED
+    -- 风险参数（开仓时锁定）
+    stop_loss           REAL,
+    take_profit         REAL,
+    atr_k               REAL,
+    position_size_usdt  REAL,                    -- 虚拟仓位价值
+    leverage            INTEGER DEFAULT 10,
+    horizon_hours       INTEGER DEFAULT 24,
+    -- 来源信号
+    strategy_id         TEXT,
+    signal_score        REAL,
+    source_score_id     INTEGER,                 -- 关联 trade_scores_v43.id
+    -- AI 决策快照
+    ai_confidence       REAL,
+    ai_sl_multiplier    REAL,
+    ai_tp_multiplier    REAL,
+    ai_reason           TEXT,
+    reason              TEXT,                    -- 总体说明
+    -- 结算
+    pnl                 REAL,                    -- 虚拟 PnL（USDT）
+    pnl_percent         REAL,                    -- 虚拟收益率
+    holding_hours       REAL,
+    created_at          TEXT,
+    updated_at          TEXT
 );
+-- 注意：paper_trades 的索引在 _apply_migrations 跑完 ALTER TABLE 之后再创建
+-- （老 DB 的 paper_trades 缺 status 列，先 INDEX 会挂）
 
 -- v0.5.3：补 created_at（_serialize 会自动注，不补会让 system_settings 写崩）
 CREATE TABLE IF NOT EXISTS system_settings (
@@ -211,6 +238,20 @@ CREATE TABLE IF NOT EXISTS system_settings (
 
 _lock = threading.Lock()
 _conn: Optional[sqlite3.Connection] = None
+
+
+def _create_post_migration_indexes(conn: sqlite3.Connection) -> None:
+    """v0.5.4：依赖 ALTER TABLE 加的列的索引在这里建（必须 migration 跑完后才行）。"""
+    indexes = [
+        "CREATE INDEX IF NOT EXISTS idx_paper_trades_symbol     ON paper_trades(symbol)",
+        "CREATE INDEX IF NOT EXISTS idx_paper_trades_status     ON paper_trades(status)",
+        "CREATE INDEX IF NOT EXISTS idx_paper_trades_created_at ON paper_trades(created_at)",
+    ]
+    for sql in indexes:
+        try:
+            conn.execute(sql)
+        except Exception as e:
+            print(f"[LocalDB] 索引创建跳过: {sql.split('(')[0].strip()}: {e}")
 
 
 def _apply_migrations(conn: sqlite3.Connection) -> None:
@@ -233,6 +274,36 @@ def _apply_migrations(conn: sqlite3.Connection) -> None:
         ("market_snapshot", "ai_effective_threshold", "REAL"),
         # v0.5.3：system_settings 也需要 created_at（_serialize 自动注）
         ("system_settings", "created_at",             "TEXT"),
+        # v0.5.4：paper_trades 扩展 — SHADOW 模式在线 paper trading 用
+        ("paper_trades", "entry_time",         "TEXT"),
+        ("paper_trades", "current_price",      "REAL"),
+        ("paper_trades", "exit_time",          "TEXT"),
+        ("paper_trades", "exit_reason",        "TEXT"),
+        ("paper_trades", "status",             "TEXT"),
+        ("paper_trades", "stop_loss",          "REAL"),
+        ("paper_trades", "take_profit",        "REAL"),
+        ("paper_trades", "atr_k",              "REAL"),
+        ("paper_trades", "position_size_usdt", "REAL"),
+        ("paper_trades", "leverage",           "INTEGER"),
+        ("paper_trades", "horizon_hours",      "INTEGER"),
+        ("paper_trades", "signal_score",       "REAL"),
+        ("paper_trades", "source_score_id",    "INTEGER"),
+        ("paper_trades", "ai_confidence",      "REAL"),
+        ("paper_trades", "ai_sl_multiplier",   "REAL"),
+        ("paper_trades", "ai_tp_multiplier",   "REAL"),
+        ("paper_trades", "ai_reason",          "TEXT"),
+        ("paper_trades", "holding_hours",      "REAL"),
+        ("paper_trades", "updated_at",         "TEXT"),
+        # v0.5.4：scorer 实际写入 trade_scores_v43 的字段 schema 没有 — 写时全静默挂
+        ("trade_scores_v43", "weights",                   "TEXT"),
+        ("trade_scores_v43", "weights_version",           "TEXT"),
+        ("trade_scores_v43", "ai_decision_id",            "INTEGER"),
+        ("trade_scores_v43", "opportunity_density_score", "REAL"),
+        ("trade_scores_v43", "executed",                  "INTEGER"),
+        ("trade_scores_v43", "strategy_score",            "REAL"),
+        # ai_training_data 也缺 scorer 写的两列
+        ("ai_training_data", "p3a_match_score",        "REAL"),
+        ("ai_training_data", "ai_effective_threshold", "REAL"),
     ]
     for table, column, col_type in add_column_migrations:
         try:
@@ -347,6 +418,7 @@ def get_connection() -> sqlite3.Connection:
         _conn.row_factory = sqlite3.Row
         _conn.executescript(_SCHEMA)
         _apply_migrations(_conn)
+        _create_post_migration_indexes(_conn)
         _conn.commit()
         print(f"[LocalDB] SQLite 初始化完成: {_DB_PATH}")
     return _conn

@@ -26,6 +26,8 @@ import { ViewType, SystemState } from '../types';
 import { useUIStore } from '../services/store';
 import { useSystemStatus } from '../hooks/useSystemStatus';
 import { useExchange } from '../hooks/useExchange';
+import { useSystemMode } from '../hooks/useSystemMode';
+import { toast } from './Toast';
 import ConfirmModal from './ui/ConfirmModal';
 
 // ─── nav config ──────────────────────────────────────────────────────────────
@@ -315,18 +317,36 @@ interface LayoutProps {
 
 const Layout: React.FC<LayoutProps> = ({ children, activeView, onViewChange }) => {
   const [collapsed, setCollapsed] = useState(false);
-  const systemState = useUIStore((s) => s.systemState);
-  const setSystemState = useUIStore((s) => s.setSystemState);
 
-  // SHADOW → LIVE 走二次确认；LIVE → SHADOW 直接降级（安全方向）
+  // v0.5.4: SHADOW/LIVE 状态走后端 API（DB 持久化），不再仅 localStorage
+  const { mode, setMode } = useSystemMode();
+  const systemState = mode === 'LIVE' ? SystemState.LIVE : SystemState.SHADOW;
+
   const [pendingLive, setPendingLive] = useState(false);
 
   const requestModeChange = (target: SystemState) => {
     if (target === SystemState.LIVE) {
       setPendingLive(true);
     } else {
-      setSystemState(SystemState.SHADOW);
+      // LIVE → SHADOW 直接降级（安全方向，不弹确认）
+      setMode.mutate('SHADOW', {
+        onSuccess: () => toast.success('已切换到影子模式 — 信号会写虚拟仓位'),
+        onError:   (e: any) => toast.error(`切换失败: ${e?.message ?? e}`),
+      });
     }
+  };
+
+  const confirmLive = () => {
+    setMode.mutate('LIVE', {
+      onSuccess: () => {
+        toast.success('已切换到实盘 — 信号将下真实订单');
+        setPendingLive(false);
+      },
+      onError: (e: any) => {
+        toast.error(e?.response?.detail ?? e?.message ?? '切换失败');
+        setPendingLive(false);
+      },
+    });
   };
 
   return (
@@ -351,7 +371,7 @@ const Layout: React.FC<LayoutProps> = ({ children, activeView, onViewChange }) =
       <ConfirmModal
         open={pendingLive}
         title="切换到实盘模式"
-        description="开启后，所有策略信号将下达真实订单到 Binance。请确认你已检查 API key、leverage、风险参数。"
+        description="开启后，信号将下达真实订单到当前 active exchange（OKX）。后端会先检查 API key 是否能鉴权 — 如果失败会拒绝切换。"
         details={[
           { label: '当前模式', value: '影子',  tone: 'warn' },
           { label: '目标模式', value: '实盘',  tone: 'bear' },
@@ -359,10 +379,8 @@ const Layout: React.FC<LayoutProps> = ({ children, activeView, onViewChange }) =
         confirmLabel="切换到实盘"
         cancelLabel="保持影子"
         destructive
-        onConfirm={() => {
-          setSystemState(SystemState.LIVE);
-          setPendingLive(false);
-        }}
+        loading={setMode.isPending}
+        onConfirm={confirmLive}
         onCancel={() => setPendingLive(false)}
       />
     </div>

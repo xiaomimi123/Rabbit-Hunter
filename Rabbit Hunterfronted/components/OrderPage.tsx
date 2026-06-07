@@ -18,8 +18,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Loader2, ShieldCheck, AlertTriangle, Lightbulb } from 'lucide-react';
 import { tradeAPI, accountAPI, entryValidationAPI } from '../services/api';
 import { useKillQueue } from '../hooks/useKillQueue';
-import { useUIStore } from '../services/store';
-import { SystemState } from '../types';
+import { useSystemMode } from '../hooks/useSystemMode';
 import {
   Card, EmptyState, NumberCell, Pill, SectionHeader, StatTile,
 } from './ui/Primitives';
@@ -38,8 +37,7 @@ const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v
 // ─── component ────────────────────────────────────────────────────────────────
 
 const OrderPage: React.FC = () => {
-  const systemState = useUIStore((s) => s.systemState);
-  const isLive = systemState === SystemState.LIVE;
+  const { isLive } = useSystemMode();
 
   // form state — 数字用字符串，提交时再 parse（防 NaN 直接提交）
   const [symbol, setSymbol] = useState<string>('');

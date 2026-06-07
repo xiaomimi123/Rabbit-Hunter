@@ -978,27 +978,54 @@ class StrategyScorer:
                             should_trade = False
                 # ─────────────────────────────────────────────────────────────
 
-                # Auto-trade via position manager
-                if should_trade and self.v43_position_manager:
+                # v0.5.4: SHADOW 时走 PaperPositionManager（写虚拟仓位到 paper_trades）
+                # LIVE 时走 V43PositionManager（真下单）
+                if should_trade:
+                    # 读 system_state（DB）
+                    is_shadow = True
+                    try:
+                        sr = self.supabase.table("system_settings").select("value").eq("key", "system_state").execute()
+                        if sr.data:
+                            is_shadow = (sr.data[0].get("value") or "SHADOW").upper() != "LIVE"
+                    except Exception:
+                        is_shadow = True  # 出错时默认 SHADOW，安全姿态
+
                     try:
                         atr_val = float(v43_features.get("atr") or v43_features.get("atr_1h") or 0.0)
                         account_balance = self._account_balance_cache.get("balance", 10000.0)
-                        position = self.v43_position_manager.open_position(
-                            symbol=ccxt_symbol,
-                            side=side,
-                            entry_price=price,
-                            features=v43_features,
-                            decision_result=v43_decision_result,
-                            account_balance=account_balance,
-                            atr_value=atr_val,
-                            write_queue=self.write_queue,
-                        )
-                        if position:
-                            print(f"[V4.3] 自动开仓成功: {ccxt_symbol} {side} @ {price}")
+
+                        if is_shadow:
+                            # SHADOW — 写虚拟仓位
+                            try:
+                                from paper_position_manager import PaperPositionManager  # type: ignore[import-not-found]
+                            except ImportError:
+                                from scripts.paper_position_manager import PaperPositionManager  # type: ignore[import-not-found]
+                            paper_pm = PaperPositionManager(supabase_client=self.supabase)
+                            position = paper_pm.open_position(
+                                symbol=ccxt_symbol, side=side, entry_price=price,
+                                features=v43_features, decision_result=v43_decision_result,
+                                account_balance=account_balance, atr_value=atr_val,
+                                write_queue=self.write_queue,
+                                signal_score=float(final_score) if final_score is not None else None,
+                            )
+                            if position:
+                                print(f"[V4.3 SHADOW] 已开虚拟仓: {ccxt_symbol} {side} @ {price}（不下真单）")
+                        elif self.v43_position_manager:
+                            # LIVE — 真下单
+                            position = self.v43_position_manager.open_position(
+                                symbol=ccxt_symbol, side=side, entry_price=price,
+                                features=v43_features, decision_result=v43_decision_result,
+                                account_balance=account_balance, atr_value=atr_val,
+                                write_queue=self.write_queue,
+                            )
+                            if position:
+                                print(f"[V4.3 LIVE] 自动开仓成功: {ccxt_symbol} {side} @ {price}")
+                            else:
+                                print(f"[WARNING] LIVE 开仓失败: {ccxt_symbol}（可能已有持仓或计算失败）")
                         else:
-                            print(f"[WARNING] 自动开仓失败: {ccxt_symbol}（可能已有持仓或计算失败）")
+                            print(f"[WARNING] LIVE 模式但 v43_position_manager 未注入，跳过: {ccxt_symbol}")
                     except Exception as trade_err:
-                        print(f"[ERROR] 自动开仓异常: {ccxt_symbol} - {trade_err}")
+                        print(f"[ERROR] 开仓异常: {ccxt_symbol} - {trade_err}")
             else:
                 if os.environ.get("V43_DEBUG", "0") in ("1", "true", "True") or final_score > 0.0:
                     decision_status = "BLOCKED" if block_reason else "SKIP"

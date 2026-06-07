@@ -92,6 +92,56 @@ async def root():
 # ============================================
 
 
+# ============================================
+# Paper Trades 查询 (v0.5.4) — SHADOW 模式虚拟仓位
+# ============================================
+
+
+@router.get("/api/v43/paper-trades")
+async def get_paper_trades(
+    status_filter: str = Query("all", alias="status"),
+    limit: int = Query(200, ge=1, le=1000),
+    supabase=Depends(get_supabase_optional),
+) -> dict:
+    """所有虚拟仓位 + KPI 聚合。status=open|closed|all。"""
+    try:
+        q = supabase.table("paper_trades").select("*").order("created_at", desc=True).limit(int(limit))
+        if status_filter.lower() == "open":
+            q = q.eq("status", "OPEN")
+        elif status_filter.lower() == "closed":
+            q = q.eq("status", "CLOSED")
+        r = q.execute()
+        rows = r.data or []
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"读 paper_trades 失败: {e}")
+
+    # 聚合 — 仅基于 CLOSED 算胜率 / PnL
+    closed = [x for x in rows if (x.get("status") or "").upper() == "CLOSED"]
+    open_rows = [x for x in rows if (x.get("status") or "").upper() == "OPEN"]
+    wins = [x for x in closed if (x.get("pnl") or 0) > 0]
+    losses = [x for x in closed if (x.get("pnl") or 0) < 0]
+
+    total_pnl = sum(float(x.get("pnl") or 0) for x in closed)
+    win_rate = (len(wins) / len(closed) * 100) if closed else 0.0
+    avg_hold = (
+        sum(float(x.get("holding_hours") or 0) for x in closed) / len(closed)
+    ) if closed else 0.0
+
+    return {
+        "status": "success",
+        "data": rows,
+        "kpi": {
+            "total_closed":      len(closed),
+            "total_open":        len(open_rows),
+            "wins":              len(wins),
+            "losses":            len(losses),
+            "win_rate_pct":      round(win_rate, 2),
+            "total_pnl_usdt":    round(total_pnl, 4),
+            "avg_holding_hours": round(avg_hold, 2),
+        },
+    }
+
+
 @router.get("/api/v43/system-state")
 async def get_system_state(supabase=Depends(get_supabase_optional)) -> dict:
     """前端 sidebar StatusRow 用：collector_running / api_online / testnet。
@@ -141,6 +191,74 @@ async def get_system_state(supabase=Depends(get_supabase_optional)) -> dict:
         "last_collector_write": last_collector_write,
         "testnet":              is_testnet,
     }
+
+
+# ============================================
+# SHADOW / LIVE 模式（v0.5.4）— 真持久化的系统状态
+# ============================================
+#
+# 之前 SHADOW/LIVE 只是前端 useUIStore 的 localStorage 字段，后端完全不认。
+# 这里把 system_state 行写进 system_settings 表，让 scorer / API trade 路由
+# 都能读到 → 真正实现"影子模式不下真单"。
+
+
+@router.get("/api/v43/system/mode")
+async def get_system_mode(supabase=Depends(get_supabase_optional)) -> dict:
+    """读当前 SHADOW/LIVE 模式（DB 持久化，默认 SHADOW = 安全姿态）。"""
+    state = "SHADOW"
+    try:
+        r = (
+            supabase.table("system_settings")
+            .select("value")
+            .eq("key", "system_state")
+            .execute()
+        )
+        if r.data:
+            v = (r.data[0].get("value") or "").strip().upper()
+            if v in ("SHADOW", "LIVE"):
+                state = v
+    except Exception:
+        pass
+    return {"mode": state, "is_live": state == "LIVE", "is_shadow": state == "SHADOW"}
+
+
+class SystemModeRequest(BaseModel):
+    mode: str   # "SHADOW" | "LIVE"
+
+
+@router.post("/api/v43/system/mode")
+async def set_system_mode(
+    body: SystemModeRequest,
+    supabase=Depends(get_supabase_optional),
+) -> dict:
+    """切换 SHADOW/LIVE。切到 LIVE 要求当前 active exchange 已经鉴权可用。"""
+    target = body.mode.strip().upper()
+    if target not in ("SHADOW", "LIVE"):
+        raise HTTPException(status_code=400, detail=f"mode 必须是 SHADOW 或 LIVE，收到 {body.mode!r}")
+
+    # 切到 LIVE 时检查交易器鉴权 — 防止 OKX passphrase 错的情况下用户切实盘
+    if target == "LIVE":
+        try:
+            from scripts.exchange_factory import get_trader
+            trader = get_trader()
+            bal = trader.fetch_balance() if hasattr(trader, "fetch_balance") else {}
+            if bal.get("error"):
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"无法切换到 LIVE：交易器鉴权失败 — {bal['error'][:120]}",
+                )
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=422, detail=f"无法切换到 LIVE：{e}")
+
+    try:
+        supabase.table("system_settings").upsert(
+            {"key": "system_state", "value": target}, on_conflict="key",
+        ).execute()
+        return {"mode": target, "success": True}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"切换失败: {e}")
 
 
 @router.get("/api/v43/system/exchange")

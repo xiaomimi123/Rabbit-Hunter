@@ -16,12 +16,12 @@ import { useUIStore } from '../services/store';
 import { useKillQueue } from '../hooks/useKillQueue';
 import { usePositions } from '../hooks/usePositions';
 import { useSystemStatus } from '../hooks/useSystemStatus';
-import { SystemState } from '../types';
+import { useSystemMode } from '../hooks/useSystemMode';
 import { Card, EmptyState, NumberCell, Pill, SectionHeader, StatTile } from './ui/Primitives';
 
 const Dashboard: React.FC = () => {
-  const systemState = useUIStore((s) => s.systemState);
   const setActiveView = useUIStore((s) => s.setActiveView);
+  const { isLive } = useSystemMode();
 
   const { data: signals = [], isLoading: signalsLoading } = useKillQueue(50, 0);
   const { data: positions = [], isLoading: positionsLoading } = usePositions();
@@ -34,9 +34,8 @@ const Dashboard: React.FC = () => {
   );
 
   const todayCount = signals.length;
-  const liveOrShadow = systemState === SystemState.LIVE ? '实盘' : '影子';
-  const liveTone: 'up' | 'down' | 'flat' =
-    systemState === SystemState.LIVE ? 'down' : 'flat';
+  const liveOrShadow = isLive ? '实盘' : '影子';
+  const liveTone: 'up' | 'down' | 'flat' = isLive ? 'down' : 'flat';
 
   return (
     <div className="space-y-8">

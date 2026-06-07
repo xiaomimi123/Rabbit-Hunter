@@ -125,11 +125,21 @@ async def main() -> None:
         openai_assistant=openai_assistant,
     )
 
+    # v0.5.4: paper trading 监视器 — SHADOW 模式下虚拟仓位的实时 SL/TP 触发
+    try:
+        from tasks.paper_monitor import PaperMonitor  # type: ignore[import-not-found]
+    except ImportError:
+        from scripts.tasks.paper_monitor import PaperMonitor  # type: ignore[import-not-found]
+    paper_monitor = PaperMonitor(
+        supabase=db,
+        interval_seconds=int(os.environ.get("PAPER_MONITOR_INTERVAL_SECONDS", "30")),
+    )
+
     # ── Run all tasks ──────────────────────────────────────────────────────────
     writer.start()
     print("[INFO] DatabaseWriter 已启动")
 
-    coroutines = [scanner.run(), deep_collector.run(), scorer.run()]
+    coroutines = [scanner.run(), deep_collector.run(), scorer.run(), paper_monitor.run()]
 
     print("[INFO] 所有任务已启动，按 Ctrl+C 停止")
     try:
