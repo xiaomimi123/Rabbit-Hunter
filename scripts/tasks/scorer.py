@@ -678,11 +678,99 @@ class StrategyScorer:
         self._ai_judge: Any = None
         self._deepseek_judge: Any = None
         self._p3a_matcher: Any = None
+        # v0.5.5: balance 默认 fallback 改成 PAPER_INITIAL_BALANCE_USDT（用户可配）
+        # 真账户余额会在 _refresh_account_balance() 启动 + 周期刷新时覆盖
+        _default_bal = float(os.environ.get("PAPER_INITIAL_BALANCE_USDT", "1000"))
         self._account_balance_cache: dict[str, Any] = {
-            "balance": 10000.0,
+            "balance": _default_bal,
+            "source":  "default",
             "last_update": 0.0,
             "update_interval": 30.0,
         }
+        # v0.5.5: mode 决议加 cache（避免每个 symbol 都查一次 DB）+ 上报 last_active_mode
+        self._mode_cache: dict[str, Any] = {"mode": "SHADOW", "last_check": 0.0, "ttl": 5.0}
+
+    # v0.5.5：SHADOW/LIVE 决议 + 真账户余额刷新（统一在这里，让 audit 列出的 silent
+    # default 风险变成可见的）—— 调用方有 scorer 路由开仓判断（line ~986）和 AI 跳过判断（~944）
+
+    def _resolve_system_mode(self) -> str:
+        """读 system_settings.system_state，返回 'SHADOW' or 'LIVE'。
+        失败时降级 SHADOW + WARN + 写 last_active_mode 让 UI 能看到真相。"""
+        import time
+        now = time.monotonic()
+        if (now - self._mode_cache["last_check"]) < self._mode_cache["ttl"]:
+            return self._mode_cache["mode"]
+
+        mode = "SHADOW"
+        source = "default_no_row"
+        try:
+            sr = (
+                self.supabase.table("system_settings")
+                .select("value").eq("key", "system_state").execute()
+            )
+            if sr.data:
+                v = (sr.data[0].get("value") or "").strip().upper()
+                if v in ("SHADOW", "LIVE"):
+                    mode = v
+                    source = "db"
+                else:
+                    source = f"db_unparseable:{v[:20]}"
+        except Exception as e:
+            source = f"error:{type(e).__name__}:{str(e)[:60]}"
+            print(f"[WARN][scorer] _resolve_system_mode 失败 — 安全降级 SHADOW: {source}")
+
+        self._mode_cache.update({"mode": mode, "last_check": now})
+        self._report_effective_mode(mode, source)
+        return mode
+
+    def _report_effective_mode(self, mode: str, source: str):
+        """写 scorer 当前生效的 mode 到 system_settings.last_active_mode，
+        UI 可读出来跟 desired mode 对比 — round-trip 校验。"""
+        try:
+            value = f"{mode}|{source}|{datetime.now(timezone.utc).isoformat()}"
+            self.supabase.table("system_settings").upsert(
+                {"key": "last_active_mode", "value": value},
+                on_conflict="key",
+            ).execute()
+        except Exception:
+            pass  # best-effort，不要因为日志写失败而影响主流程
+
+    def _refresh_account_balance(self):
+        """v0.5.5: 从真账户拉 balance，给 paper 仓位规模算用。OKX 鉴权失败时
+        fallback 到 PAPER_INITIAL_BALANCE_USDT env。每 update_interval 秒最多调一次。"""
+        import time
+        now = time.monotonic()
+        if (now - self._account_balance_cache["last_update"]) < self._account_balance_cache["update_interval"]:
+            return
+
+        bal = None
+        source = "default"
+        try:
+            try:
+                from exchange_factory import get_trader  # type: ignore[import-not-found]
+            except ImportError:
+                from scripts.exchange_factory import get_trader  # type: ignore[import-not-found]
+            trader = get_trader()
+            if trader and hasattr(trader, "fetch_balance"):
+                resp = trader.fetch_balance()
+                # _safe API 既可能 raise，也可能返 dict 带 "error"
+                if isinstance(resp, dict) and not resp.get("error"):
+                    b = resp.get("balance") or resp.get("availableBalance")
+                    if b is not None and float(b) > 0:
+                        bal = float(b)
+                        source = "trader"
+        except Exception as e:
+            print(f"[WARN][scorer] fetch_balance 失败，用 PAPER_INITIAL_BALANCE_USDT 兜底: {e}")
+
+        if bal is None:
+            bal = float(os.environ.get("PAPER_INITIAL_BALANCE_USDT", "1000"))
+            source = "env_fallback"
+
+        self._account_balance_cache.update({
+            "balance":     bal,
+            "source":      source,
+            "last_update": now,
+        })
 
     # ------------------------------------------------------------------
     # Initialisation helpers
@@ -941,7 +1029,11 @@ class StrategyScorer:
                 )
 
                 # ── OpenAI AI Layer (second opinion + TP/SL tuning) ──────────
-                if self.openai_assistant:
+                # v0.5.5: SHADOW 模式默认跳过 AI — paper KPI 反映规则引擎本身效果，
+                # 不被 AI 决策污染。要在 SHADOW 也用 AI 测试时设 AI_SKIP_IN_SHADOW=false。
+                _ai_skip_in_shadow = os.environ.get("AI_SKIP_IN_SHADOW", "true").lower() in ("1", "true")
+                _ai_gated_by_shadow = _ai_skip_in_shadow and self._resolve_system_mode() == "SHADOW"
+                if self.openai_assistant and not _ai_gated_by_shadow:
                     try:
                         ai_result = await self.openai_assistant.decide(
                             symbol=ccxt_symbol,
@@ -981,18 +1073,14 @@ class StrategyScorer:
                 # v0.5.4: SHADOW 时走 PaperPositionManager（写虚拟仓位到 paper_trades）
                 # LIVE 时走 V43PositionManager（真下单）
                 if should_trade:
-                    # 读 system_state（DB）
-                    is_shadow = True
-                    try:
-                        sr = self.supabase.table("system_settings").select("value").eq("key", "system_state").execute()
-                        if sr.data:
-                            is_shadow = (sr.data[0].get("value") or "SHADOW").upper() != "LIVE"
-                    except Exception:
-                        is_shadow = True  # 出错时默认 SHADOW，安全姿态
+                    # v0.5.5: 走 _resolve_system_mode 统一决议（带 cache、WARN log、上报 last_active_mode）
+                    is_shadow = self._resolve_system_mode() == "SHADOW"
 
                     try:
                         atr_val = float(v43_features.get("atr") or v43_features.get("atr_1h") or 0.0)
-                        account_balance = self._account_balance_cache.get("balance", 10000.0)
+                        # v0.5.5: balance 从真账户拉（OKX/Binance），失败回退 PAPER_INITIAL_BALANCE_USDT
+                        self._refresh_account_balance()
+                        account_balance = self._account_balance_cache.get("balance", 1000.0)
 
                         if is_shadow:
                             # SHADOW — 写虚拟仓位
@@ -1150,11 +1238,37 @@ class StrategyScorer:
         Main coroutine.  Consumes enriched_queue, scores each item, and
         enqueues write tasks.  Designed to run as an asyncio task.
         """
-        print("[StrategyScorer] 启动")
+        # v0.5.5: 启动 banner — 让运营看清 active exchange + 当前 system_state
+        try:
+            try:
+                from exchange_factory import get_active_exchange  # type: ignore[import-not-found]
+            except ImportError:
+                from scripts.exchange_factory import get_active_exchange  # type: ignore[import-not-found]
+            active_ex = get_active_exchange()
+        except Exception:
+            active_ex = os.environ.get("EXCHANGE", "okx")
+        startup_mode = self._resolve_system_mode()  # 同时也写一次 last_active_mode
+        ai_skip = os.environ.get("AI_SKIP_IN_SHADOW", "true").lower() in ("1", "true")
+        print(
+            f"[StrategyScorer] 启动 | exchange={active_ex.upper()} | mode={startup_mode} | "
+            f"AI_SKIP_IN_SHADOW={ai_skip} | "
+            f"PAPER_INITIAL_BALANCE_USDT={os.environ.get('PAPER_INITIAL_BALANCE_USDT', '1000')}"
+        )
         self._init_ai_judges()
+
+        # v0.5.5: 每 30s 周期性写一次 last_active_mode，让 UI 能持续看到 scorer 仍活着
+        # cache 5s 去重，开销可控
+        _last_mode_heartbeat = 0.0
 
         while True:
             try:
+                # 心跳：每 30s 把当前 effective mode 重写一次 last_active_mode
+                import time as _time
+                _now = _time.monotonic()
+                if _now - _last_mode_heartbeat > 30:
+                    self._resolve_system_mode()  # 写 last_active_mode
+                    _last_mode_heartbeat = _now
+
                 item = await self.enriched_queue.get()
                 try:
                     await self._process_symbol(item)

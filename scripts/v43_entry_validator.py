@@ -75,24 +75,30 @@ class EntryValidator:
             price_change_1h = None
             
             try:
-                import ccxt
-                # 创建临时 exchange 实例获取数据
-                exchange = ccxt.binanceusdm({
-                    "enableRateLimit": True,
-                    "options": {"defaultType": "future"}
-                })
-                
+                # v0.5.5: 走 exchange_factory，OKX 模式下用 OKX 公开端点
+                # 不再硬编码 ccxt.binanceusdm
+                try:
+                    from exchange_factory import get_trader  # type: ignore[import-not-found]
+                except ImportError:
+                    from scripts.exchange_factory import get_trader  # type: ignore[import-not-found]
+                _factory_trader = get_trader()
+                exchange = _factory_trader.exchange if (_factory_trader and hasattr(_factory_trader, "exchange")) else None
+                if exchange is None:
+                    # 兜底（factory 完全挂）
+                    import ccxt
+                    exchange = ccxt.binanceusdm({"enableRateLimit": True, "options": {"defaultType": "future"}})
+
                 # 获取 ticker 数据
                 ticker = exchange.fetch_ticker(symbol)
                 price = float(ticker.get("last") or ticker.get("close") or 0.0)
-                
+
                 # 尝试获取 funding rate（如果可用）
                 try:
                     funding_info = exchange.fetch_funding_rate(symbol)
                     funding_rate = float(funding_info.get("fundingRate", 0.0)) if funding_info else None
                 except Exception:
                     pass
-                
+
             except Exception as e:
                 print(f"[WARNING] EntryValidator: 无法从 API 获取数据: {e}")
                 # 如果 API 获取失败，尝试从数据库获取最新记录

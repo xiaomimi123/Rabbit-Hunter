@@ -74,6 +74,29 @@ async def open_v43_position(
             detail="Kill Switch 已开启，禁止交易",
         )
 
+    # v0.5.5: SHADOW 模式拒绝手动下单（双层防御 — 前端 disable + 后端拒绝）
+    # 手动下单仅在 LIVE 可用；试盘要观察策略请用 SHADOW 自动开虚拟仓
+    try:
+        sr = (
+            supabase.table("system_settings")
+            .select("value").eq("key", "system_state").execute()
+        )
+        if sr.data:
+            current_mode = (sr.data[0].get("value") or "").strip().upper()
+            if current_mode != "LIVE":
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="当前为影子模式（SHADOW），手动下单已禁用。切换到 LIVE 模式后再下单，或等待 scorer 自动开虚拟仓位。",
+                )
+    except HTTPException:
+        raise
+    except Exception:
+        # DB 读失败时 fail-closed —— 安全姿态，拒绝下单
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="无法读取 system_state，拒绝手动下单（fail-closed）",
+        )
+
     try:
         # v0.5.2: 通过 factory 拿 active exchange 的 trader（OKX 或 Binance）
         from scripts.exchange_factory import get_trader, get_active_exchange  # type: ignore[import-not-found]

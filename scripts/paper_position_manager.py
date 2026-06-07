@@ -44,6 +44,36 @@ class PaperPositionManager:
         self.positions_cache: Dict[str, Dict[str, Any]] = {}
         self.last_sync_time = _utcnow()
 
+    # ─── v0.5.5: leverage 从 active exchange 配置拉（DB > env > 10）─────────────
+
+    def _resolve_leverage(self) -> int:
+        """读 active exchange 的 leverage（DB > env > default 10），
+        避免 BINANCE_LEVERAGE env 抢占 OKX 用户的 leverage。"""
+        try:
+            try:
+                from exchange_config_manager import get_exchange_config_manager  # type: ignore[import-not-found]
+            except ImportError:
+                from scripts.exchange_config_manager import get_exchange_config_manager  # type: ignore[import-not-found]
+            mgr = get_exchange_config_manager(self.supabase)
+            active = mgr.get_active_exchange()
+            cfg = mgr.get_config(active) or {}
+            lev = cfg.get("leverage")
+            if lev:
+                return int(lev)
+        except Exception:
+            pass
+
+        # env fallback — 按 active exchange 选对的 env，不要无脑取 BINANCE_*
+        env_active = (os.environ.get("EXCHANGE", "okx") or "okx").lower()
+        env_key = "OKX_LEVERAGE" if env_active == "okx" else "BINANCE_LEVERAGE"
+        env_val = (os.environ.get(env_key) or "").strip()
+        if env_val:
+            try:
+                return int(env_val)
+            except ValueError:
+                pass
+        return 10
+
     # ─────────────────────────────────────────────────────────────────
     # 读
     # ─────────────────────────────────────────────────────────────────
@@ -177,8 +207,8 @@ class PaperPositionManager:
         effective_risk = risk_per_trade * effective_multiplier
         position_size_usdt = account_balance * effective_risk
 
-        leverage = int(os.environ.get("BINANCE_LEVERAGE",
-                       os.environ.get("OKX_LEVERAGE", "10")))
+        # v0.5.5: leverage 走 active exchange 的实际配置，不再让 BINANCE env 抢占 OKX
+        leverage = self._resolve_leverage()
         horizon_hours = int(os.environ.get("PAPER_HORIZON_HOURS", "24"))
 
         now = _utcnow_iso()

@@ -19,6 +19,7 @@ import { toast } from './Toast';
 import ConfirmModal from './ui/ConfirmModal';
 import { useSystemMode } from '../hooks/useSystemMode';
 import { usePaperTrades } from '../hooks/usePaperTrades';
+import { useExchange } from '../hooks/useExchange';
 import { Card, EmptyState, NumberCell, Pill, StatTile } from './ui/Primitives';
 
 // ─── account balance sub-query ────────────────────────────────────────────────
@@ -49,6 +50,8 @@ export default function PositionsPage() {
 
   const invalidatePositions = useInvalidatePositions();
   const { isLive } = useSystemMode();
+  const { data: exchangeInfo } = useExchange();
+  const exLabel = exchangeInfo?.label || 'broker';
 
   const { data: positions = [], isLoading, error } = usePositions();
   const { data: accountBalance } = useAccountBalance();
@@ -141,8 +144,8 @@ export default function PositionsPage() {
         open={confirmTarget?.kind === 'single'}
         title="确认平仓"
         description={isLive
-          ? '此操作将立即向 Binance 提交反向市价单。'
-          : '当前为影子模式，操作不会真实成交。'}
+          ? `此操作将立即向 ${exLabel} 提交反向市价单。`
+          : '当前为影子模式，操作不会真实成交（仅更新虚拟仓位状态）。'}
         details={confirmTarget?.kind === 'single' ? [
           { label: '交易对', value: confirmTarget.pos.symbol },
           { label: '方向',   value: confirmTarget.pos.side === 'LONG' ? '做多' : '做空',

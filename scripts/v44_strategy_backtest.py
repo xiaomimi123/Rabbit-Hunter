@@ -119,6 +119,18 @@ def _ccxt_to_binance_symbol(ccxt_symbol: str) -> str:
     return ccxt_symbol.replace("/", "").upper()
 
 
+def _active_exchange() -> str:
+    """v0.5.5: 与 exchange_endpoints 一致的 active exchange 决议 — DB > env > 'okx'。"""
+    try:
+        try:
+            from exchange_factory import get_active_exchange  # type: ignore[import-not-found]
+        except ImportError:
+            from scripts.exchange_factory import get_active_exchange  # type: ignore[import-not-found]
+        return (get_active_exchange() or "okx").lower()
+    except Exception:
+        return (os.environ.get("EXCHANGE", "okx") or "okx").lower()
+
+
 def _fetch_klines_range(
     binance_symbol: str,
     interval: str,
@@ -126,12 +138,20 @@ def _fetch_klines_range(
     end_ms: int,
 ) -> List[Dict[str, Any]]:
     """
-    抓取 [start_ms, end_ms] 区间的 OHLC bars。
-    返回 [{open_time, open, high, low, close, volume}, ...]，
-    若失败返回 []（调用方应回退到 snapshot 模式）。
+    抓取 [start_ms, end_ms] 区间的 OHLC bars，按 active exchange 分发。
+    v0.5.5：OKX 模式不再硬编码 fapi.binance.com。
 
-    分页处理：Binance 单次最多 1500 bars。
+    返回 [{open_time, open, high, low, close, volume}, ...]，
+    失败返回 []（调用方应回退到 snapshot 模式）。
     """
+    if _active_exchange() == "okx":
+        return _fetch_klines_range_okx(binance_symbol, interval, start_ms, end_ms)
+    return _fetch_klines_range_binance(binance_symbol, interval, start_ms, end_ms)
+
+
+def _fetch_klines_range_binance(
+    binance_symbol: str, interval: str, start_ms: int, end_ms: int,
+) -> List[Dict[str, Any]]:
     import requests
     bars: List[Dict[str, Any]] = []
     cursor = start_ms
@@ -144,41 +164,101 @@ def _fetch_klines_range(
             resp = requests.get(
                 "https://fapi.binance.com/fapi/v1/klines",
                 params={
-                    "symbol": binance_symbol,
-                    "interval": interval,
-                    "startTime": cursor,
-                    "endTime": end_ms,
-                    "limit": 1500,
+                    "symbol": binance_symbol, "interval": interval,
+                    "startTime": cursor, "endTime": end_ms, "limit": 1500,
                 },
                 timeout=10,
             )
             resp.raise_for_status()
             page = resp.json()
         except Exception as e:
-            print(f"  [BACKTEST] OHLC 抓取失败 {binance_symbol} {interval}: {e}")
+            print(f"  [BACKTEST] OHLC 抓取失败 (binance) {binance_symbol} {interval}: {e}")
             return []
-
         if not page:
             break
-
         for row in page:
             bars.append({
                 "open_time": int(row[0]),
-                "open":  float(row[1]),
-                "high":  float(row[2]),
-                "low":   float(row[3]),
-                "close": float(row[4]),
-                "volume":float(row[5]),
+                "open": float(row[1]), "high": float(row[2]),
+                "low":  float(row[3]), "close": float(row[4]),
+                "volume": float(row[5]),
             })
-
         last_open = int(page[-1][0])
         next_cursor = last_open + bar_ms
         if next_cursor <= cursor:
-            break  # 防卡死
+            break
         cursor = next_cursor
         if len(page) < 1500:
-            break  # 末页
+            break
+    return bars
 
+
+def _fetch_klines_range_okx(
+    binance_symbol: str, interval: str, start_ms: int, end_ms: int,
+) -> List[Dict[str, Any]]:
+    """OKX history-candles API：按 [start, end] 拉，OKX 单次 100，需要分页。"""
+    import requests
+    # 复用 exchange_endpoints 的 symbol/interval mapping
+    try:
+        from tasks.exchange_endpoints import binance_symbol_to_okx_inst, to_okx_interval  # type: ignore[import-not-found]
+    except ImportError:
+        from scripts.tasks.exchange_endpoints import binance_symbol_to_okx_inst, to_okx_interval  # type: ignore[import-not-found]
+
+    inst_id = binance_symbol_to_okx_inst(binance_symbol)
+    okx_bar = to_okx_interval(interval)
+    bar_ms = _INTERVAL_MS.get(interval, 900_000)
+
+    bars: List[Dict[str, Any]] = []
+    # OKX history-candles 是 "before/after" 分页 — after = 比某个 ts 之后的（更老）
+    # 简单做法：往回拉一页一页直到 cursor < start_ms
+    cursor_end = end_ms
+    safety_loops = 0
+    while cursor_end > start_ms and safety_loops < 30:
+        safety_loops += 1
+        try:
+            resp = requests.get(
+                "https://www.okx.com/api/v5/market/history-candles",
+                params={
+                    "instId": inst_id, "bar": okx_bar,
+                    "before": str(start_ms), "after": str(cursor_end),
+                    "limit": "100",
+                },
+                timeout=10,
+            )
+            resp.raise_for_status()
+            payload = resp.json()
+            if payload.get("code") != "0":
+                print(f"  [BACKTEST] OKX K 线返回 code={payload.get('code')} msg={payload.get('msg')}")
+                return bars
+            page = payload.get("data") or []
+        except Exception as e:
+            print(f"  [BACKTEST] OHLC 抓取失败 (okx) {binance_symbol} {interval}: {e}")
+            return bars
+        if not page:
+            break
+
+        # OKX 返回最新在前；插到 bars 头部（保持 oldest→newest）
+        for row in page:
+            ts = int(row[0])
+            if ts < start_ms:
+                continue
+            bars.append({
+                "open_time": ts,
+                "open": float(row[1]), "high": float(row[2]),
+                "low":  float(row[3]), "close": float(row[4]),
+                "volume": float(row[5]),
+            })
+
+        oldest_ts = int(page[-1][0])
+        if oldest_ts <= cursor_end - bar_ms:
+            cursor_end = oldest_ts
+        else:
+            break  # 防卡死
+        if len(page) < 100:
+            break
+
+    # 排序成 oldest→newest
+    bars.sort(key=lambda b: b["open_time"])
     return bars
 
 

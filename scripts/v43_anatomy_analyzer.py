@@ -85,23 +85,34 @@ class AnatomyAnalyzer:
         elif self.exchange:
             self.public_exchange = self.exchange
         else:
-            # 创建新的公共 exchange（不需要 API Key）
+            # v0.5.5: 走 exchange_factory，按 active exchange (OKX/Binance) 创建公共 exchange
+            # 不再硬编码 ccxt.binanceusdm — OKX 模式下不会再默默查 Binance 数据
+            self.public_exchange = None
             try:
-                self.public_exchange = ccxt.binanceusdm({
-                    "enableRateLimit": True,
-                    "options": {
-                        "defaultType": "future",
-                        "adjustForTimeDifference": True,  # 自动调整时间差
-                    }
-                })
-                # 测试连接
-                self.public_exchange.load_markets()
-                # 向后兼容：同时设置 self.exchange
-                self.exchange = self.public_exchange
+                try:
+                    from exchange_factory import get_trader  # type: ignore[import-not-found]
+                except ImportError:
+                    from scripts.exchange_factory import get_trader  # type: ignore[import-not-found]
+                _factory_trader = get_trader()
+                if _factory_trader and hasattr(_factory_trader, "exchange"):
+                    self.public_exchange = _factory_trader.exchange
+                    print(f"[AnatomyAnalyzer] 公共 exchange = {type(_factory_trader).__name__}")
             except Exception as e:
-                print(f"[WARNING] AnatomyAnalyzer: Exchange 初始化失败: {e}")
-                self.public_exchange = None
-                self.exchange = None  # 确保设置为 None，避免后续错误
+                print(f"[WARNING] AnatomyAnalyzer: factory.get_trader 失败，回退 ccxt.binanceusdm: {e}")
+
+            if self.public_exchange is None:
+                # 最后兜底（factory 也挂了）— 至少保留功能可用
+                try:
+                    self.public_exchange = ccxt.binanceusdm({
+                        "enableRateLimit": True,
+                        "options": {"defaultType": "future", "adjustForTimeDifference": True},
+                    })
+                    self.public_exchange.load_markets()
+                except Exception as e:
+                    print(f"[WARNING] AnatomyAnalyzer: 兜底 binanceusdm 也失败: {e}")
+                    self.public_exchange = None
+            # 向后兼容：同时设置 self.exchange
+            self.exchange = self.public_exchange
     
     def analyze_symbol(
         self,

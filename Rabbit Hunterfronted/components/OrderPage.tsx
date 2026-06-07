@@ -154,7 +154,7 @@ const OrderPage: React.FC = () => {
         {!isLive && (
           <div className="mt-2 inline-flex items-center gap-2 text-[12px] text-warn">
             <AlertTriangle size={14} strokeWidth={1.6} />
-            当前为影子模式 — 提交不会真实下单
+            当前为影子模式 — 手动下单已禁用。SHADOW 想观察策略请等 scorer 自动开虚拟仓位，或切到 LIVE。
           </div>
         )}
       </header>
@@ -274,10 +274,11 @@ const OrderPage: React.FC = () => {
               </button>
               <button
                 onClick={onExecuteRequest}
-                disabled={!!formError}
-                className={isLive ? 'btn-bear' : 'btn-primary'}
+                disabled={!!formError || !isLive}
+                title={!isLive ? '影子模式下手动下单已禁用 — 切换到 LIVE 后再试' : undefined}
+                className={isLive ? 'btn-bear' : 'btn-primary opacity-40 cursor-not-allowed'}
               >
-                {isLive ? '下单（实盘）' : '下单（影子）'}
+                {isLive ? '下单（实盘）' : '下单已禁用（SHADOW）'}
               </button>
             </div>
           </div>

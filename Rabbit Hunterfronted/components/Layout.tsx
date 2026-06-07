@@ -322,6 +322,10 @@ const Layout: React.FC<LayoutProps> = ({ children, activeView, onViewChange }) =
   const { mode, setMode } = useSystemMode();
   const systemState = mode === 'LIVE' ? SystemState.LIVE : SystemState.SHADOW;
 
+  // v0.5.5: active exchange label，给 ConfirmModal 显示真实 broker
+  const { data: exchangeInfo } = useExchange();
+  const exLabel = exchangeInfo?.label ?? '...';
+
   const [pendingLive, setPendingLive] = useState(false);
 
   const requestModeChange = (target: SystemState) => {
@@ -371,7 +375,7 @@ const Layout: React.FC<LayoutProps> = ({ children, activeView, onViewChange }) =
       <ConfirmModal
         open={pendingLive}
         title="切换到实盘模式"
-        description="开启后，信号将下达真实订单到当前 active exchange（OKX）。后端会先检查 API key 是否能鉴权 — 如果失败会拒绝切换。"
+        description={`开启后，信号将下达真实订单到当前 active exchange (${exLabel})。后端会先检查 API key 是否能鉴权 — 如果失败会拒绝切换。`}
         details={[
           { label: '当前模式', value: '影子',  tone: 'warn' },
           { label: '目标模式', value: '实盘',  tone: 'bear' },
