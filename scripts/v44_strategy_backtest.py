@@ -75,6 +75,10 @@ class BacktestConfig:
     # v45：在历史 features 上**重新执行**当前 route_strategy()，让代码改动直接反映到回测。
     # False 时退回旧 "replay" 行为 — 仅当你想复现历史决策时用（例如对比 router 改动前后）。
     use_live_router: bool = True
+    # v45：用 Binance 15m OHLC bar.high/low 检查 stop/TP 触发，消除"两次 snapshot 之间
+    # 的 3% wick 被漏掉"的 winner bias。False 时退回旧 snapshot 路径。
+    use_ohlc_for_exits: bool = True
+    ohlc_interval: str = "15m"
 
 
 @dataclass
@@ -97,6 +101,109 @@ class SimulatedTrade:
     pnl_percent: float
     exit_reason: str
     holding_hours: float
+    # v45: 退出路径来源 ("ohlc_bar" / "snapshot" / "timeout") — 用于审计
+    exit_source: str = "snapshot"
+
+
+# v45: OHLC 抓取 — 用 Binance fapi/v1/klines 直接抓历史 bar，
+# 替代旧的 market_snapshot 稀疏采样。bar.high/low 能捕获到 snapshot 之间的 wick。
+
+_INTERVAL_MS = {
+    "1m": 60_000, "3m": 180_000, "5m": 300_000, "15m": 900_000,
+    "30m": 1_800_000, "1h": 3_600_000, "4h": 14_400_000, "1d": 86_400_000,
+}
+
+
+def _ccxt_to_binance_symbol(ccxt_symbol: str) -> str:
+    """BTC/USDT → BTCUSDT。"""
+    return ccxt_symbol.replace("/", "").upper()
+
+
+def _fetch_klines_range(
+    binance_symbol: str,
+    interval: str,
+    start_ms: int,
+    end_ms: int,
+) -> List[Dict[str, Any]]:
+    """
+    抓取 [start_ms, end_ms] 区间的 OHLC bars。
+    返回 [{open_time, open, high, low, close, volume}, ...]，
+    若失败返回 []（调用方应回退到 snapshot 模式）。
+
+    分页处理：Binance 单次最多 1500 bars。
+    """
+    import requests
+    bars: List[Dict[str, Any]] = []
+    cursor = start_ms
+    bar_ms = _INTERVAL_MS.get(interval, 900_000)
+    safety_loops = 0
+
+    while cursor < end_ms and safety_loops < 20:
+        safety_loops += 1
+        try:
+            resp = requests.get(
+                "https://fapi.binance.com/fapi/v1/klines",
+                params={
+                    "symbol": binance_symbol,
+                    "interval": interval,
+                    "startTime": cursor,
+                    "endTime": end_ms,
+                    "limit": 1500,
+                },
+                timeout=10,
+            )
+            resp.raise_for_status()
+            page = resp.json()
+        except Exception as e:
+            print(f"  [BACKTEST] OHLC 抓取失败 {binance_symbol} {interval}: {e}")
+            return []
+
+        if not page:
+            break
+
+        for row in page:
+            bars.append({
+                "open_time": int(row[0]),
+                "open":  float(row[1]),
+                "high":  float(row[2]),
+                "low":   float(row[3]),
+                "close": float(row[4]),
+                "volume":float(row[5]),
+            })
+
+        last_open = int(page[-1][0])
+        next_cursor = last_open + bar_ms
+        if next_cursor <= cursor:
+            break  # 防卡死
+        cursor = next_cursor
+        if len(page) < 1500:
+            break  # 末页
+
+    return bars
+
+
+def _bar_hits_exit_long(
+    bar: Dict[str, Any], stop_loss: Optional[float], take_profit: Optional[float]
+) -> Optional[Tuple[float, str]]:
+    """LONG 持仓：bar.low 触 SL → 止损；bar.high 触 TP → 止盈。
+    同一 bar 内两边都触发时，悲观假设：先触 SL（这是 backtest 的标准谨慎做法 — 真实
+    分钟内顺序不可知）。"""
+    if stop_loss is not None and bar["low"] <= stop_loss:
+        return stop_loss, "止损"
+    if take_profit is not None and bar["high"] >= take_profit:
+        return take_profit, "止盈"
+    return None
+
+
+def _bar_hits_exit_short(
+    bar: Dict[str, Any], stop_loss: Optional[float], take_profit: Optional[float]
+) -> Optional[Tuple[float, str]]:
+    """SHORT 持仓：bar.high 触 SL；bar.low 触 TP。同 bar 双触发时悲观假设先触 SL。"""
+    if stop_loss is not None and bar["high"] >= stop_loss:
+        return stop_loss, "止损"
+    if take_profit is not None and bar["low"] <= take_profit:
+        return take_profit, "止盈"
+    return None
 
 
 @dataclass
@@ -404,56 +511,90 @@ class V44StrategyBacktester:
             exit_time = None
             exit_price = None
             exit_reason = "未退出"
-            
+            exit_source = "snapshot"
+
             # 计算退出时间窗口
             horizon_end = entry_time + timedelta(hours=self.config.horizon_hours)
-            
-            # 在价格历史中查找退出点
-            for price_record in price_history:
-                price_time_str = price_record.get("created_at", "")
-                if not price_time_str:
-                    continue
-                
-                try:
-                    if price_time_str.endswith("Z"):
-                        price_time_str = price_time_str[:-1] + "+00:00"
-                    price_time = datetime.fromisoformat(price_time_str.replace("Z", "+00:00"))
-                    
-                    if price_time <= entry_time:
-                        continue
-                    
-                    if price_time > horizon_end:
+
+            # ── v45 路径 A：用 OHLC bar.high/low 精确检测触发 ────────
+            # 解决旧 snapshot 路径的 winner bias：两次 snapshot 之间的 wick 会被漏掉。
+            use_ohlc = self.config.use_ohlc_for_exits and (stop_loss is not None or take_profit is not None)
+            if use_ohlc:
+                start_ms = int(entry_time.timestamp() * 1000)
+                end_ms   = int(horizon_end.timestamp() * 1000)
+                bars = _fetch_klines_range(
+                    _ccxt_to_binance_symbol(symbol),
+                    self.config.ohlc_interval,
+                    start_ms, end_ms,
+                )
+                for bar in bars:
+                    bar_open_ts = bar["open_time"]
+                    if bar_open_ts < start_ms:
+                        continue  # 入场前的 bar 跳过
+                    hit = (
+                        _bar_hits_exit_long(bar, stop_loss, take_profit)
+                        if side == "LONG"
+                        else _bar_hits_exit_short(bar, stop_loss, take_profit)
+                    )
+                    if hit is not None:
+                        exit_price, exit_reason = hit
+                        # bar.open_time 是该 bar 起点；保守地把退出时间标在 bar 中点
+                        exit_time = datetime.fromtimestamp(bar_open_ts / 1000, tz=timezone.utc)
+                        exit_source = "ohlc_bar"
                         break
-                    
-                    current_price = float(price_record.get("price", 0))
-                    if current_price <= 0:
+                # bars 为空 → 抓取失败 → 退回 snapshot 路径
+                if not bars:
+                    use_ohlc = False
+                    print(f"  [BACKTEST] {symbol} OHLC 抓取为空，退回 snapshot 路径")
+
+            # ── 路径 B：snapshot 兜底（旧逻辑）────────────────────
+            if not use_ohlc and exit_time is None:
+                for price_record in price_history:
+                    price_time_str = price_record.get("created_at", "")
+                    if not price_time_str:
                         continue
-                    
-                    # 检查止损
-                    if side == "LONG":
-                        if current_price <= stop_loss:
-                            exit_time = price_time
-                            exit_price = stop_loss
-                            exit_reason = "止损"
+
+                    try:
+                        if price_time_str.endswith("Z"):
+                            price_time_str = price_time_str[:-1] + "+00:00"
+                        price_time = datetime.fromisoformat(price_time_str.replace("Z", "+00:00"))
+
+                        if price_time <= entry_time:
+                            continue
+
+                        if price_time > horizon_end:
                             break
-                        if take_profit and current_price >= take_profit:
-                            exit_time = price_time
-                            exit_price = take_profit
-                            exit_reason = "止盈"
-                            break
-                    else:  # SHORT
-                        if current_price >= stop_loss:
-                            exit_time = price_time
-                            exit_price = stop_loss
-                            exit_reason = "止损"
-                            break
-                        if take_profit and current_price <= take_profit:
-                            exit_time = price_time
-                            exit_price = take_profit
-                            exit_reason = "止盈"
-                            break
-                except Exception:
-                    continue
+
+                        current_price = float(price_record.get("price", 0))
+                        if current_price <= 0:
+                            continue
+
+                        # 检查止损
+                        if side == "LONG":
+                            if current_price <= stop_loss:
+                                exit_time = price_time
+                                exit_price = stop_loss
+                                exit_reason = "止损"
+                                break
+                            if take_profit and current_price >= take_profit:
+                                exit_time = price_time
+                                exit_price = take_profit
+                                exit_reason = "止盈"
+                                break
+                        else:  # SHORT
+                            if current_price >= stop_loss:
+                                exit_time = price_time
+                                exit_price = stop_loss
+                                exit_reason = "止损"
+                                break
+                            if take_profit and current_price <= take_profit:
+                                exit_time = price_time
+                                exit_price = take_profit
+                                exit_reason = "止盈"
+                                break
+                    except Exception:
+                        continue
+                exit_source = "snapshot"
             
             # 如果未退出，使用时间窗口结束时的价格
             if exit_time is None:
@@ -496,6 +637,12 @@ class V44StrategyBacktester:
             # 计算持仓时间
             holding_hours = (exit_time - entry_time).total_seconds() / 3600.0 if exit_time else 0
             
+            # 超时（snapshot 都没找到）→ 用 entry 价兜底，并标 timeout
+            if exit_time is not None and exit_source == "snapshot" and exit_reason == "时间窗口结束":
+                exit_source = "timeout"
+            elif exit_price == entry_price and exit_reason == "无价格数据":
+                exit_source = "timeout"
+
             return SimulatedTrade(
                 symbol=symbol,
                 strategy_id=strategy_id,
@@ -513,7 +660,8 @@ class V44StrategyBacktester:
                 pnl_usdt=pnl_usdt,
                 pnl_percent=pnl_percent,
                 exit_reason=exit_reason,
-                holding_hours=holding_hours
+                holding_hours=holding_hours,
+                exit_source=exit_source,
             )
             
         except Exception as e:
