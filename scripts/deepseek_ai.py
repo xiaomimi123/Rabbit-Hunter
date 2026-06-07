@@ -64,9 +64,14 @@ class DeepSeekJudge:
         enable_learning: bool = True,
         supabase: Optional[Any] = None,
     ) -> None:
-        self.api_key = api_key or os.environ.get("DEEPSEEK_API_KEY")
+        # v0.5.6: DB > env > None。DB 里 provider=deepseek+enabled=true 才用 DB key。
+        if api_key:
+            self.api_key = api_key
+            _db_model = None
+        else:
+            self.api_key, _db_model = self._resolve_from_db_or_env()
         self.base_url = (base_url or os.environ.get("DEEPSEEK_API_BASE") or "https://api.deepseek.com").rstrip("/")
-        self.model = os.environ.get("DEEPSEEK_MODEL") or model
+        self.model = os.environ.get("DEEPSEEK_MODEL") or _db_model or model
         self.timeout_seconds = float(os.environ.get("DEEPSEEK_TIMEOUT", timeout_seconds))
         self.max_tokens = int(os.environ.get("DEEPSEEK_MAX_TOKENS", str(max_tokens)))
         self.debug = os.environ.get("DEEPSEEK_DEBUG", "0") in ("1", "true", "True")
@@ -82,6 +87,21 @@ class DeepSeekJudge:
 
     def is_ready(self) -> bool:
         return bool(self.api_key)
+
+    @staticmethod
+    def _resolve_from_db_or_env():
+        """v0.5.6: SettingsPage 保存到 DB 的 ai_config 优先，没存才回 DEEPSEEK_API_KEY env。"""
+        try:
+            try:
+                from ai_config_manager import resolve_active_ai  # type: ignore[import-not-found]
+            except ImportError:
+                from scripts.ai_config_manager import resolve_active_ai  # type: ignore[import-not-found]
+            cfg = resolve_active_ai(expected_provider="deepseek")
+            if cfg.get("enabled") and cfg.get("api_key"):
+                return cfg["api_key"], cfg.get("model") or None
+        except Exception:
+            pass
+        return os.environ.get("DEEPSEEK_API_KEY"), None
 
     def _endpoint(self) -> str:
         # DeepSeek 文档：base_url 可设为 https://api.deepseek.com 或 https://api.deepseek.com/v1

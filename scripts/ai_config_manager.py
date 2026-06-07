@@ -49,7 +49,9 @@ class AIConfigManager:
         self._crypto = _CryptoHelper(supabase_client=supabase_client)
         self._cache: Optional[Dict[str, Any]] = None
         self._cache_time: Optional[datetime] = None
-        self._cache_ttl = timedelta(minutes=5)
+        # v0.5.6: 30s TTL — UI 改 provider 后 collector 进程必须 ≤30s 看到
+        # 5min 太长，跨进程没事件总线只能 polling
+        self._cache_ttl = timedelta(seconds=30)
 
     # ── 内部 ─────────────────────────────────────────────────────────
 
@@ -199,4 +201,37 @@ def get_ai_config_manager(supabase_client=None) -> AIConfigManager:
     return _manager
 
 
-__all__ = ["AIConfigManager", "get_ai_config_manager", "SUPPORTED_PROVIDERS"]
+def resolve_active_ai(expected_provider: Optional[str] = None) -> Dict[str, Any]:
+    """v0.5.6: 给 trading_assistant / deepseek_ai / scorer 等模块调 — DB > env > default。
+
+    Args:
+        expected_provider: 调用方期望的 provider（"deepseek" / "openai" / "anthropic"）。
+                           如果指定了但 DB/env 里的 provider 不匹配，返回 enabled=False。
+                           None 表示"不挑 provider，谁配置了就用谁"。
+
+    Returns: {
+        "provider": str,        # "deepseek" / "openai" / "anthropic" / "disabled"
+        "api_key":  str,        # 明文 key（已解密）
+        "model":    str,
+        "enabled":  bool,
+        "source":   str,        # "db" / "env" / "default"
+    }
+    """
+    cfg: Dict[str, Any] = {"provider": "disabled", "api_key": "", "model": "", "enabled": False, "source": "default"}
+    try:
+        try:
+            from local_db import get_local_db
+        except ImportError:
+            from scripts.local_db import get_local_db  # type: ignore[import-not-found]
+        db = get_local_db()
+        cfg = get_ai_config_manager(db).get_config() or cfg
+    except Exception:
+        pass
+
+    if expected_provider:
+        if (cfg.get("provider") or "").lower() != expected_provider.lower():
+            return {**cfg, "enabled": False, "api_key": ""}
+    return cfg
+
+
+__all__ = ["AIConfigManager", "get_ai_config_manager", "resolve_active_ai", "SUPPORTED_PROVIDERS"]

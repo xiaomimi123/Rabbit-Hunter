@@ -129,14 +129,29 @@ class TradingAssistant:
     """Wraps OpenAI Assistants API for per-signal trade decisions."""
 
     def __init__(self) -> None:
-        api_key = os.getenv("OPENAI_API_KEY")
+        # v0.5.6: SettingsPage 存 ai_config 的 openai key 优先；env 兜底
+        api_key = self._resolve_openai_key()
         if not api_key:
-            raise ValueError("OPENAI_API_KEY not set in environment")
+            raise ValueError("OPENAI key not set (try SettingsPage AI provider=openai 或 OPENAI_API_KEY env)")
 
         self.client = openai.AsyncOpenAI(api_key=api_key)
         self.assistant_id: Optional[str] = os.getenv("OPENAI_ASSISTANT_ID")
         self.vector_store_id: Optional[str] = os.getenv("OPENAI_VECTOR_STORE_ID")
         self._ready = False
+
+    @staticmethod
+    def _resolve_openai_key() -> Optional[str]:
+        try:
+            try:
+                from ai_config_manager import resolve_active_ai  # type: ignore[import-not-found]
+            except ImportError:
+                from scripts.ai_config_manager import resolve_active_ai  # type: ignore[import-not-found]
+            cfg = resolve_active_ai(expected_provider="openai")
+            if cfg.get("enabled") and cfg.get("api_key"):
+                return cfg["api_key"]
+        except Exception:
+            pass
+        return os.getenv("OPENAI_API_KEY")
 
     # ------------------------------------------------------------------
     # Initialization

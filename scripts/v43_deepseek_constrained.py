@@ -92,16 +92,36 @@ class DeepSeekConstrained:
         max_tokens: int = 1000,
         debug: bool = False,
     ) -> None:
-        self.api_key = api_key or os.environ.get("DEEPSEEK_API_KEY")
+        # v0.5.6: DB > env > None。SettingsPage 保存到 ai_config 的 deepseek key 优先。
+        if api_key:
+            self.api_key = api_key
+            _db_model = None
+        else:
+            self.api_key, _db_model = self._resolve_from_db_or_env()
         self.base_url = (base_url or os.environ.get("DEEPSEEK_API_BASE") or "https://api.deepseek.com").rstrip("/")
-        self.model = os.environ.get("DEEPSEEK_MODEL") or model
+        self.model = os.environ.get("DEEPSEEK_MODEL") or _db_model or model
         self.timeout_seconds = float(os.environ.get("DEEPSEEK_TIMEOUT", timeout_seconds))
         self.max_tokens = int(os.environ.get("DEEPSEEK_MAX_TOKENS", str(max_tokens)))
         self.debug = debug or os.environ.get("DEEPSEEK_DEBUG", "0") in ("1", "true", "True")
-    
+
     def is_ready(self) -> bool:
         """检查是否已配置 API Key"""
         return bool(self.api_key)
+
+    @staticmethod
+    def _resolve_from_db_or_env():
+        """v0.5.6: 从 ai_config_manager (DB) 拿 deepseek key，回退 env。"""
+        try:
+            try:
+                from ai_config_manager import resolve_active_ai  # type: ignore[import-not-found]
+            except ImportError:
+                from scripts.ai_config_manager import resolve_active_ai  # type: ignore[import-not-found]
+            cfg = resolve_active_ai(expected_provider="deepseek")
+            if cfg.get("enabled") and cfg.get("api_key"):
+                return cfg["api_key"], cfg.get("model") or None
+        except Exception:
+            pass
+        return os.environ.get("DEEPSEEK_API_KEY"), None
     
     def _endpoint(self) -> str:
         """获取 API 端点"""

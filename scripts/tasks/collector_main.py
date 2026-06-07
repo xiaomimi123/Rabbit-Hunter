@@ -74,11 +74,24 @@ async def main() -> None:
     ai_status = "ON" if openai_assistant else "OFF"
 
     print("[INFO] Rabbit Hunter Collector 启动中...")
+    # v0.5.6: AI provider 状态走 DB > env，反映 SettingsPage 真实保存的配置
+    try:
+        try:
+            from ai_config_manager import resolve_active_ai  # type: ignore[import-not-found]
+        except ImportError:
+            from scripts.ai_config_manager import resolve_active_ai  # type: ignore[import-not-found]
+        _deepseek_cfg = resolve_active_ai(expected_provider="deepseek")
+        _openai_cfg   = resolve_active_ai(expected_provider="openai")
+        _deepseek_on  = bool(_deepseek_cfg.get("enabled") and _deepseek_cfg.get("api_key"))
+        _openai_on    = bool(_openai_cfg.get("enabled") and _openai_cfg.get("api_key"))
+    except Exception:
+        _deepseek_on = cfg.deepseek_enabled
+        _openai_on   = bool(openai_assistant)
     print(f"[INFO] V4.3={'ON' if cfg.v43_enabled else 'OFF'} | "
           f"V4.4={'ON' if cfg.v44_enabled else 'OFF'} | "
           f"AutoTrade={'ON' if cfg.enable_auto_trading else 'OFF'} | "
-          f"DeepSeek={'ON' if cfg.deepseek_enabled else 'OFF'} | "
-          f"OpenAI={ai_status}")
+          f"DeepSeek={'ON' if _deepseek_on else 'OFF'} | "
+          f"OpenAI={'ON' if _openai_on else 'OFF'}")
 
     # 初始化本地 SQLite 数据库
     db = get_local_db()
@@ -135,11 +148,25 @@ async def main() -> None:
         interval_seconds=int(os.environ.get("PAPER_MONITOR_INTERVAL_SECONDS", "30")),
     )
 
+    # v0.5.6: Vector Store 自动上传 — 周期把 trade_log 推到 OpenAI，带 24h 冷却窗口
+    # 防 lookahead leak（刚平的单不会立刻进 vector store 影响下一笔决策）
+    memory_uploader = None
+    try:
+        try:
+            from ai.memory_uploader import MemoryAutoUploader  # type: ignore[import-not-found]
+        except ImportError:
+            from scripts.ai.memory_uploader import MemoryAutoUploader  # type: ignore[import-not-found]
+        memory_uploader = MemoryAutoUploader()
+    except Exception as e:
+        print(f"[WARNING] MemoryAutoUploader 初始化失败，本次启动不跑自动上传: {e}")
+
     # ── Run all tasks ──────────────────────────────────────────────────────────
     writer.start()
     print("[INFO] DatabaseWriter 已启动")
 
     coroutines = [scanner.run(), deep_collector.run(), scorer.run(), paper_monitor.run()]
+    if memory_uploader is not None:
+        coroutines.append(memory_uploader.run())
 
     print("[INFO] 所有任务已启动，按 Ctrl+C 停止")
     try:

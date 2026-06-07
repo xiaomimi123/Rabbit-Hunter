@@ -723,6 +723,21 @@ class StrategyScorer:
         self._report_effective_mode(mode, source)
         return mode
 
+    def _is_deepseek_enabled(self) -> bool:
+        """v0.5.6: 同时看 DB 的 ai_config (provider=deepseek + enabled) 和 env DEEPSEEK_ENABLED。
+        SettingsPage 保存了 deepseek 配置就视为启用，无需再设 env。"""
+        try:
+            try:
+                from ai_config_manager import resolve_active_ai  # type: ignore[import-not-found]
+            except ImportError:
+                from scripts.ai_config_manager import resolve_active_ai  # type: ignore[import-not-found]
+            cfg = resolve_active_ai(expected_provider="deepseek")
+            if cfg.get("enabled") and cfg.get("api_key"):
+                return True
+        except Exception:
+            pass
+        return os.environ.get("DEEPSEEK_ENABLED", "0") in ("1", "true", "True")
+
     def _report_effective_mode(self, mode: str, source: str):
         """写 scorer 当前生效的 mode 到 system_settings.last_active_mode，
         UI 可读出来跟 desired mode 对比 — round-trip 校验。"""
@@ -781,7 +796,8 @@ class StrategyScorer:
         # v45: 默认关闭本地 LR AIJudge — 未训练的模型会污染 ai_score
         # 显式 AI_JUDGE_ENABLED=true 才启用（scripts/ai_judge.py 头有完整说明）
         ai_judge_enabled = os.environ.get("AI_JUDGE_ENABLED", "0") not in ("0", "false", "False")
-        deepseek_enabled = os.environ.get("DEEPSEEK_ENABLED", "0") in ("1", "true", "True")
+        # v0.5.6: deepseek 启用走 DB > env。SettingsPage 保存 provider=deepseek+enabled=true 即生效。
+        deepseek_enabled = self._is_deepseek_enabled()
 
         if ai_judge_enabled:
             try:
