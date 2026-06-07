@@ -198,9 +198,11 @@ CREATE TABLE IF NOT EXISTS paper_trades (
     created_at  TEXT
 );
 
+-- v0.5.3：补 created_at（_serialize 会自动注，不补会让 system_settings 写崩）
 CREATE TABLE IF NOT EXISTS system_settings (
     key        TEXT PRIMARY KEY,
     value      TEXT,
+    created_at TEXT,
     updated_at TEXT
 );
 """
@@ -229,6 +231,8 @@ def _apply_migrations(conn: sqlite3.Connection) -> None:
         ("market_snapshot", "ai_version",             "TEXT"),
         ("market_snapshot", "p3a_match_score",        "REAL"),
         ("market_snapshot", "ai_effective_threshold", "REAL"),
+        # v0.5.3：system_settings 也需要 created_at（_serialize 自动注）
+        ("system_settings", "created_at",             "TEXT"),
     ]
     for table, column, col_type in add_column_migrations:
         try:

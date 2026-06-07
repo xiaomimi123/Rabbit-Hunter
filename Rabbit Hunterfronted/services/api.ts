@@ -269,6 +269,49 @@ export const systemAPI = {
   },
 };
 
+
+// ============== Exchange Config API (v0.5.3) ==============
+
+export const exchangeConfigAPI = {
+  /** 一次拉两个 exchange 的配置状态 + active */
+  getStatus: async () => {
+    return apiGet(`${API_BASE}/v43/exchange-config/status`);
+  },
+  /** 保存某 exchange 配置（OKX 必须带 passphrase；Binance 传空字符串）*/
+  save: async (
+    exchange: 'okx' | 'binance',
+    payload: { api_key: string; api_secret: string; api_passphrase?: string; testnet: boolean; leverage: number }
+  ) => {
+    return apiPost(`${API_BASE}/v43/exchange-config/${exchange}`, {
+      api_passphrase: '',
+      ...payload,
+    });
+  },
+  /** 删除某 exchange 配置（DB 删空 → 回退到 env 兜底）*/
+  remove: async (exchange: 'okx' | 'binance') => {
+    return apiDelete(`${API_BASE}/v43/exchange-config/${exchange}`);
+  },
+  /** 切换 active exchange（OKX <-> Binance）*/
+  setActive: async (exchange: 'okx' | 'binance') => {
+    return apiPost(`${API_BASE}/v43/exchange-config/active`, { exchange });
+  },
+};
+
+
+// ============== AI Provider Config API (v0.5.3) ==============
+
+export const aiConfigAPI = {
+  get: async () => {
+    return apiGet(`${API_BASE}/v43/ai-config`);
+  },
+  save: async (payload: { provider: string; api_key: string; model: string; enabled: boolean }) => {
+    return apiPost(`${API_BASE}/v43/ai-config`, payload);
+  },
+  remove: async () => {
+    return apiDelete(`${API_BASE}/v43/ai-config`);
+  },
+};
+
 // ============== 权重管理 API ==============
 
 export const weightsAPI = {

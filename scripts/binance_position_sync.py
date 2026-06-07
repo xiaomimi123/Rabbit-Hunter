@@ -85,26 +85,15 @@ class BinancePositionSync:
         )
 
     def _get_trader(self):
-        """获取交易器实例"""
+        """获取交易器实例 — v0.5.3：走 exchange_factory，自动按 active exchange 路由。"""
         if self.trader:
             return self.trader
-
-        config_manager = get_config_manager(self.supabase)
-        config = config_manager.get_config()
-        if not config:
-            return None
-
         try:
-            if BinanceTrader is None:
-                from binance_trader import BinanceTrader as _BT
-            else:
-                _BT = BinanceTrader
-            return _BT(
-                api_key=config["api_key"],
-                api_secret=config["api_secret"],
-                testnet=config["testnet"],
-                leverage=config.get("leverage", 10),
-            )
+            try:
+                from exchange_factory import get_trader  # type: ignore[import-not-found]
+            except ImportError:
+                from scripts.exchange_factory import get_trader  # type: ignore[import-not-found]
+            return get_trader()
         except Exception as e:
             print(f"[ERROR] 创建交易器失败: {e}")
             return None
@@ -117,20 +106,24 @@ class BinancePositionSync:
           - 成功 → ([...], None)
           - 瞬时错误 → (None, "TRANSIENT")
           - 永久错误 → (None, "PERMANENT")
+
+        v0.5.3 起：调 trader._get_positions() — BinanceTrader 和 OkxTrader 都返回
+        Binance-shape dict（symbol/positionAmt/entryPrice/markPrice/...），sync
+        逻辑下面那一大坨完全 exchange-agnostic。
         """
         try:
-            positions = trader.exchange.fapiPrivate_get_positionrisk()
-            # 兜底：broker 偶尔返回 None / 非 list — 视为瞬时（可能是中间网关）
+            positions = trader._get_positions()
+            # 兜底：trader 偶尔返回 None / 非 list — 视为瞬时
             if not isinstance(positions, list):
                 return None, "TRANSIENT"
             return positions, None
         except _CCXT_TRANSIENT as e:
-            print(f"[WARNING] broker positionRisk 瞬时错误: {type(e).__name__}: {e}")
+            print(f"[WARNING] broker positions 瞬时错误: {type(e).__name__}: {e}")
             return None, "TRANSIENT"
         except Exception as e:
-            # 区分 -1003（IP 限速）/ -2008（Invalid Api-Key）等
+            # 区分 -1003（Binance IP 限速）/ 50113（OKX timestamp）等
             msg = str(e)
-            if any(code in msg for code in ("-1003", "-1015", "-1021")):
+            if any(code in msg for code in ("-1003", "-1015", "-1021", "50113")):
                 print(f"[WARNING] broker 限速 / 时间戳错误（视为瞬时）: {e}")
                 return None, "TRANSIENT"
             print(f"[ERROR] broker positionRisk 永久错误: {e}")

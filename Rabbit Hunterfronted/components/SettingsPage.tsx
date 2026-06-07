@@ -1,423 +1,490 @@
 /**
- * 设置页面 - 币安 API 配置
- * 允许用户在前端配置币安 API Key 和 Secret
+ * SettingsPage v0.5.3 — 全部配置入口
+ *
+ * 四个 section：
+ *   1) Active Exchange 切换（OKX / Binance segmented）
+ *   2) OKX 配置（key/secret/passphrase/testnet/leverage）
+ *   3) Binance 配置（key/secret/testnet/leverage）
+ *   4) AI 大模型配置（provider/model/api_key/enabled）
+ *
+ * 所有配置都保存到 system_settings 表（敏感字段 Fernet 加密）。
+ * DB 没设时 fallback 到 env（OKX_* / BINANCE_* / OPENAI_API_KEY 等）。
+ * UI 上的 "source" 标签提示当前生效的是 db 还是 env。
+ *
+ * 简约高级风格延续 v0.5.0：单 accent + hairline + 无 emoji。
  */
 
-import React, { useEffect, useState } from 'react';
-import { Save, Trash2, Eye, EyeOff, CheckCircle, XCircle, AlertTriangle, Key, Shield } from 'lucide-react';
-import { binanceConfigAPI } from '../services/api';
+import React, { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { AlertTriangle, Check, Eye, EyeOff, Save, Trash2, RefreshCw } from 'lucide-react';
+import { exchangeConfigAPI, aiConfigAPI } from '../services/api';
+import { toast } from './Toast';
+import { Card, Pill, SectionHeader, StatTile } from './ui/Primitives';
 
-interface BinanceConfig {
-  api_key: string;
-  api_secret: string;
-  testnet: boolean;
-  leverage?: number;  // V4.5: 杠杆倍数（1-125）
+// ─── 类型 ─────────────────────────────────────────────────────────────
+
+interface ExchangeStatus {
+  configured:       boolean;
+  api_key_masked?:  string;
+  testnet?:         boolean;
+  leverage?:        number;
+  source?:          'db' | 'env' | 'unknown';
+  has_passphrase?:  boolean;
+}
+interface ExchangeStatusResp {
+  active:    'okx' | 'binance';
+  exchanges: { okx: ExchangeStatus; binance: ExchangeStatus };
+}
+interface AIStatusResp {
+  provider:            'openai' | 'deepseek' | 'anthropic' | 'disabled';
+  model:               string;
+  enabled:             boolean;
+  api_key_masked:      string;
+  source:              'db' | 'env' | 'default';
+  available_providers: string[];
 }
 
-interface ConfigStatus {
-  configured: boolean;
-  testnet: boolean;
-  api_key_masked?: string;  // API Key 的部分信息（前5位+后5位）
-  leverage?: number;  // 杠杆倍数
-}
+// ─── 主组件 ────────────────────────────────────────────────────────────
 
 export const SettingsPage: React.FC = () => {
-  const [config, setConfig] = useState<BinanceConfig>({
-    api_key: '',
-    api_secret: '',
-    testnet: false,
-    leverage: 10,
+  const qc = useQueryClient();
+
+  const { data: exStatusResp, isLoading: exLoading } = useQuery({
+    queryKey: ['exchangeStatus'],
+    queryFn:  () => exchangeConfigAPI.getStatus(),
+    refetchOnWindowFocus: true,
   });
-  const [showSecret, setShowSecret] = useState(false);
-  const [status, setStatus] = useState<ConfigStatus | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+  const exStatus: ExchangeStatusResp | null = exStatusResp?.data ?? null;
 
-  // 加载当前配置状态
-  useEffect(() => {
-    loadConfigStatus();
-  }, []);
+  const { data: aiStatusResp, isLoading: aiLoading } = useQuery({
+    queryKey: ['aiConfig'],
+    queryFn:  () => aiConfigAPI.get(),
+    refetchOnWindowFocus: true,
+  });
+  const aiStatus: AIStatusResp | null = aiStatusResp?.data ?? null;
 
-  const loadConfigStatus = async () => {
-    try {
-      setLoading(true);
-      const data = await binanceConfigAPI.getStatus();
-      setStatus(data);
-      
-      // 如果已配置，显示部分信息（不显示完整 Secret）
-      if (data.configured) {
-        setConfig(prev => ({
-          ...prev,
-          api_key: data.api_key_masked || '', // 显示部分 API Key（前5位+后5位）
-          api_secret: '', // 不显示已保存的 Secret（安全考虑）
-          testnet: data.testnet,
-          leverage: data.leverage || 10,
-        }));
-      }
-    } catch (err) {
-      console.error('Failed to load config:', err);
-      setError(err instanceof Error ? err.message : '加载配置状态失败');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSave = async () => {
-    if (!config.api_key || !config.api_secret) {
-      setError('请填写 API Key 和 Secret');
-      return;
-    }
-
-    try {
-      setSaving(true);
-      setError(null);
-      setSuccess(null);
-
-      const data = await binanceConfigAPI.save({
-        api_key: config.api_key,
-        api_secret: config.api_secret,
-        testnet: config.testnet,
-        leverage: config.leverage || 10,  // V4.5: 包含杠杆设置
-      });
-
-      setSuccess(data.message || '配置已保存并验证成功');
-      setStatus({ configured: true, testnet: config.testnet });
-      
-      // 清空输入框（安全考虑）
-      setConfig({
-        api_key: '',
-        api_secret: '',
-        testnet: config.testnet,
-        leverage: config.leverage || 10,
-      });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '保存配置失败');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleDelete = async () => {
-    if (!confirm('确定要删除币安 API 配置吗？删除后需要重新配置才能使用交易功能。')) {
-      return;
-    }
-
-    try {
-      setSaving(true);
-      setError(null);
-      setSuccess(null);
-
-      await binanceConfigAPI.delete();
-
-      setSuccess('配置已删除');
-      setStatus({ configured: false, testnet: false });
-      setConfig({
-        api_key: '',
-        api_secret: '',
-        testnet: false,
-        leverage: 10,
-      });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '删除配置失败');
-    } finally {
-      setSaving(false);
-    }
-  };
+  const setActive = useMutation({
+    mutationFn: (ex: 'okx' | 'binance') => exchangeConfigAPI.setActive(ex),
+    onSuccess: (_d, ex) => {
+      toast.success(`已切换到 ${ex.toUpperCase()}`);
+      qc.invalidateQueries({ queryKey: ['exchangeStatus'] });
+      qc.invalidateQueries({ queryKey: ['activeExchange'] });
+    },
+    onError: (e: any) => toast.error(`切换失败: ${e?.message ?? e}`),
+  });
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-      <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6">
-        {/* 页面标题 */}
-        <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-white flex items-center gap-3">
-            <Key size={28} className="text-[#7B61FF]" />
-            系统设置
-          </h1>
-          <p className="text-sm text-white/40 mt-2">配置币安 API 以启用交易功能</p>
-        </div>
-      </div>
+    <div className="space-y-8 max-w-3xl">
+      {/* hero */}
+      <header>
+        <div className="label-sm mb-1">系统设置</div>
+        <h1 className="text-[22px] font-medium text-text-primary tracking-tight">
+          交易所与 AI 模型
+        </h1>
+        <p className="text-[12px] text-text-muted mt-2 max-w-xl">
+          所有配置存入本机 SQLite，敏感字段（secret / passphrase / api_key）经 Fernet 加密。
+          DB 未配置的字段会回退到 .env，UI 上用 "source" 标签区分来源。
+        </p>
+      </header>
 
-      {/* 币安 API 配置卡片 */}
-      <div className="glass rounded-2xl p-8 space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-lg font-bold text-white flex items-center gap-2">
-              <Shield size={20} className="text-[#00FF9D]" />
-              币安 API 配置
-            </h2>
-            <p className="text-xs text-white/40 mt-1">
-              配置币安 API Key 和 Secret 以启用自动交易功能
-            </p>
-          </div>
-          
-          {status && (
-            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg ${
-              status.configured 
-                ? 'bg-[#00FF9D]/10 border border-[#00FF9D]/20' 
-                : 'bg-white/5 border border-white/10'
-            }`}>
-              {status.configured ? (
-                <>
-                  <CheckCircle size={14} className="text-[#00FF9D]" />
-                  <span className="text-xs font-mono text-[#00FF9D]">已配置</span>
-                </>
-              ) : (
-                <>
-                  <XCircle size={14} className="text-white/40" />
-                  <span className="text-xs font-mono text-white/40">未配置</span>
-                </>
-              )}
+      {/* 1) Active Exchange */}
+      <Card inset>
+        <SectionHeader
+          title="当前活跃交易所"
+          subtitle="决定信号源、订单执行、持仓同步走哪家"
+          right={
+            exStatus && (
+              <Pill tone={exStatus.active === 'okx' ? 'accent' : 'neutral'} size="md">
+                {exStatus.active.toUpperCase()}
+              </Pill>
+            )
+          }
+        />
+        <div className="mt-3">
+          {exLoading || !exStatus ? (
+            <div className="text-[12px] text-text-muted">加载中…</div>
+          ) : (
+            <div className="inline-flex rounded border border-terminal-border overflow-hidden">
+              {(['okx', 'binance'] as const).map((ex) => {
+                const active = exStatus.active === ex;
+                const configured = exStatus.exchanges[ex].configured;
+                return (
+                  <button
+                    key={ex}
+                    onClick={() => !active && setActive.mutate(ex)}
+                    disabled={setActive.isPending}
+                    className={`px-4 py-2 text-[12px] uppercase tracking-micro transition-colors ${
+                      active
+                        ? 'bg-primary/15 text-primary'
+                        : 'text-text-secondary hover:bg-terminal-hover hover:text-text-primary'
+                    } ${ex === 'binance' ? 'border-l border-terminal-border' : ''}`}
+                  >
+                    {ex.toUpperCase()}
+                    {!configured && (
+                      <span className="ml-1 text-warn text-[10px]">未配置</span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>
+      </Card>
 
-        {/* 配置状态提示 */}
-        {status?.configured && (
-          <div className="bg-[#00FF9D]/5 border border-[#00FF9D]/20 rounded-lg p-4 flex items-start gap-3">
-            <CheckCircle size={18} className="text-[#00FF9D] mt-0.5" />
-            <div className="flex-1">
-              <p className="text-sm text-[#00FF9D] font-medium">API 配置已生效</p>
-              <p className="text-xs text-white/40 mt-1 inline-flex items-center gap-1.5">
-                {status.testnet
-                  ? '当前使用测试网模式'
-                  : (
-                    <>
-                      <AlertTriangle size={11} strokeWidth={1.6} className="text-warn" />
-                      <span>当前使用实盘模式 — 注意风险</span>
-                    </>
-                  )}
-              </p>
-            </div>
-          </div>
-        )}
+      {/* 2) OKX */}
+      {exStatus && (
+        <ExchangeForm
+          exchange="okx"
+          title="OKX 配置"
+          status={exStatus.exchanges.okx}
+          requirePassphrase
+        />
+      )}
 
-        {/* 错误提示 */}
-        {error && (
-          <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 flex items-start gap-3">
-            <AlertTriangle size={18} className="text-red-500 mt-0.5" />
-            <div className="flex-1">
-              <p className="text-sm text-red-500 font-medium">配置失败</p>
-              <p className="text-xs text-white/60 mt-1 whitespace-pre-line">{error}</p>
-              {(error.includes("Invalid Api-Key") || error.includes("API Key 无效") || error.includes("-2008")) ? (
-                <div className="mt-3 p-3 bg-yellow-400/10 border border-yellow-400/30 rounded text-xs text-yellow-400">
-                  <p className="font-medium mb-2">📝 如何获取正确的 API Key：</p>
-                  <ul className="list-disc list-inside space-y-1 text-yellow-300/80">
-                    <li>
-                      <strong>测试网</strong>：访问{" "}
-                      <a
-                        href="https://testnet.binancefuture.com/"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="underline hover:text-yellow-400"
-                      >
-                        https://testnet.binancefuture.com/
-                      </a>{" "}
-                      创建测试网 API Key
-                    </li>
-                    <li>
-                      <strong>实盘</strong>：访问{" "}
-                      <a
-                        href="https://www.binance.com/"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="underline hover:text-yellow-400"
-                      >
-                        https://www.binance.com/
-                      </a>{" "}
-                      创建实盘 API Key
-                    </li>
-                    <li className="mt-2 inline-flex items-start gap-1.5">
-                      <AlertTriangle size={11} strokeWidth={1.6} className="text-warn mt-[3px] shrink-0" />
-                      <span><strong>重要</strong>：测试网和实盘的 API Key 不能混用</span>
-                    </li>
-                  </ul>
-                </div>
-              ) : null}
-            </div>
-          </div>
-        )}
+      {/* 3) Binance */}
+      {exStatus && (
+        <ExchangeForm
+          exchange="binance"
+          title="Binance 配置"
+          status={exStatus.exchanges.binance}
+        />
+      )}
 
-        {/* 成功提示 */}
-        {success && (
-          <div className="bg-[#00FF9D]/10 border border-[#00FF9D]/20 rounded-lg p-4 flex items-start gap-3">
-            <CheckCircle size={18} className="text-[#00FF9D] mt-0.5" />
-            <div className="flex-1">
-              <p className="text-sm text-[#00FF9D] font-medium">操作成功</p>
-              <p className="text-xs text-white/60 mt-1">{success}</p>
-            </div>
-          </div>
-        )}
-
-        {/* 配置表单 */}
-        <div className="space-y-4">
-          {/* API Key */}
-          <div>
-            <label className="block text-xs font-mono text-white/60 uppercase tracking-wider mb-2">
-              API Key
-              {status?.configured && status?.api_key_masked && (
-                <span className="ml-2 text-xs text-white/50 normal-case">
-                  (已配置: {status.api_key_masked})
-                </span>
-              )}
-            </label>
-            <input
-              type="text"
-              value={config.api_key}
-              onChange={(e) => setConfig(prev => ({ ...prev, api_key: e.target.value }))}
-              placeholder={status?.configured && status?.api_key_masked 
-                ? `当前: ${status.api_key_masked} (输入新值以更新)` 
-                : "输入币安 API Key"}
-              className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-white/30 focus:outline-none focus:border-[#7B61FF] transition-colors font-mono text-sm"
-              disabled={loading || saving}
-            />
-            {status?.configured && status?.api_key_masked && (
-              <p className="mt-1 text-xs text-white/50">
-                💡 已保存的 API Key: <span className="font-mono">{status.api_key_masked}</span>（输入新值可更新配置）
-              </p>
-            )}
-          </div>
-
-          {/* API Secret */}
-          <div>
-            <label className="block text-xs font-mono text-white/60 uppercase tracking-wider mb-2">
-              API Secret
-            </label>
-            <div className="relative">
-              <input
-                type={showSecret ? "text" : "password"}
-                value={config.api_secret}
-                onChange={(e) => setConfig(prev => ({ ...prev, api_secret: e.target.value }))}
-                placeholder="输入币安 API Secret"
-                className="w-full px-4 py-3 pr-12 bg-white/5 border border-white/10 rounded-lg text-white placeholder-white/30 focus:outline-none focus:border-[#7B61FF] transition-colors font-mono text-sm"
-                disabled={loading || saving}
-              />
-              <button
-                type="button"
-                onClick={() => setShowSecret(!showSecret)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white/60 transition-colors"
-                disabled={loading || saving}
-              >
-                {showSecret ? <EyeOff size={18} /> : <Eye size={18} />}
-              </button>
-            </div>
-            <p className="text-[10px] text-white/30 mt-1.5 inline-flex items-center gap-1">
-              <AlertTriangle size={10} strokeWidth={1.6} className="text-warn" />
-              <span>Secret 只显示一次，请妥善保管</span>
-            </p>
-          </div>
-
-          {/* 杠杆设置 - V4.5 */}
-          <div>
-            <label className="block text-xs font-mono text-white/60 uppercase tracking-wider mb-2">
-              杠杆倍数 (1-125)
-            </label>
-            <input
-              type="number"
-              min="1"
-              max="125"
-              value={config.leverage || 10}
-              onChange={(e) => {
-                const value = parseInt(e.target.value) || 10;
-                const clamped = Math.max(1, Math.min(125, value));
-                setConfig(prev => ({ ...prev, leverage: clamped }));
-              }}
-              placeholder="10"
-              className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-white/30 focus:outline-none focus:border-[#7B61FF] transition-colors font-mono text-sm"
-              disabled={loading || saving}
-            />
-            <p className="text-[10px] text-white/30 mt-1.5">
-              默认 10x，建议根据风险承受能力设置（1-125）
-            </p>
-          </div>
-
-          {/* 测试网开关 */}
-          <div className="flex items-center justify-between p-4 bg-white/5 rounded-lg border border-white/10">
-            <div>
-              <label className="text-sm font-medium text-white">测试网模式</label>
-              <p className="text-xs text-white/40 mt-1">
-                启用后使用币安测试网，不会产生真实交易
-              </p>
-            </div>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                checked={config.testnet}
-                onChange={(e) => setConfig(prev => ({ ...prev, testnet: e.target.checked }))}
-                className="sr-only peer"
-                disabled={loading || saving}
-              />
-              <div className="w-11 h-6 bg-white/10 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-[#7B61FF] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#00FF9D]" />
-            </label>
-          </div>
-        </div>
-
-        {/* 操作按钮 */}
-        <div className="flex items-center gap-3 pt-4 border-t border-white/10">
-          <button
-            onClick={handleSave}
-            disabled={loading || saving || !config.api_key || !config.api_secret}
-            className="flex items-center gap-2 px-6 py-3 bg-[#7B61FF] hover:bg-[#7B61FF]/80 disabled:bg-white/10 disabled:text-white/30 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors"
-          >
-            <Save size={16} />
-            {saving ? '保存中...' : '保存配置'}
-          </button>
-
-          {status?.configured && (
-            <button
-              onClick={handleDelete}
-              disabled={loading || saving}
-              className="flex items-center gap-2 px-6 py-3 bg-red-500/10 hover:bg-red-500/20 disabled:bg-white/5 disabled:text-white/30 disabled:cursor-not-allowed text-red-500 border border-red-500/20 font-medium rounded-lg transition-colors"
-            >
-              <Trash2 size={16} />
-              删除配置
-            </button>
-          )}
-
-          <button
-            onClick={loadConfigStatus}
-            disabled={loading || saving}
-            className="ml-auto px-4 py-2 text-white/60 hover:text-white text-sm font-mono disabled:opacity-50"
-          >
-            {loading ? '加载中...' : '刷新状态'}
-          </button>
-        </div>
-
-        {/* 安全提示 */}
-        <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-4 space-y-2">
-          <div className="flex items-start gap-2">
-            <AlertTriangle size={16} className="text-yellow-500 mt-0.5" />
-            <div className="flex-1">
-              <p className="text-xs font-medium text-yellow-500">安全提示</p>
-              <ul className="text-[10px] text-white/50 mt-1.5 space-y-1 list-disc list-inside">
-                <li>API Secret 只会显示一次，请妥善保管</li>
-                <li>建议使用只读权限的 API Key（如果只采集数据）</li>
-                <li>生产环境建议启用 IP 白名单</li>
-                <li>配置会加密存储在数据库中</li>
-              </ul>
-            </div>
-          </div>
-        </div>
-
-        {/* 帮助链接 */}
-        <div className="text-center pt-4 border-t border-white/10">
-          <a
-            href="https://www.binance.com/zh-CN/my/settings/api-management"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-xs text-[#7B61FF] hover:text-[#7B61FF]/80 font-mono"
-          >
-            如何申请币安 API Key？ →
-          </a>
-        </div>
-      </div>
-      </div>
+      {/* 4) AI Model */}
+      <AIConfigForm status={aiStatus} loading={aiLoading} />
     </div>
   );
 };
 
+// ─── Exchange config form ──────────────────────────────────────────────
+
+interface ExchangeFormProps {
+  exchange:           'okx' | 'binance';
+  title:              string;
+  status:             ExchangeStatus;
+  requirePassphrase?: boolean;
+}
+
+const ExchangeForm: React.FC<ExchangeFormProps> = ({ exchange, title, status, requirePassphrase }) => {
+  const qc = useQueryClient();
+  const [editing, setEditing]       = useState(false);
+  const [apiKey, setApiKey]         = useState('');
+  const [apiSecret, setApiSecret]   = useState('');
+  const [passphrase, setPassphrase] = useState('');
+  const [testnet, setTestnet]       = useState(status.testnet ?? false);
+  const [leverage, setLeverage]     = useState(String(status.leverage ?? 10));
+  const [showSecret, setShowSecret] = useState(false);
+
+  const save = useMutation({
+    mutationFn: () => exchangeConfigAPI.save(exchange, {
+      api_key:        apiKey,
+      api_secret:     apiSecret,
+      api_passphrase: passphrase,
+      testnet,
+      leverage:       parseInt(leverage, 10) || 10,
+    }),
+    onSuccess: () => {
+      toast.success(`${title} 已保存`);
+      setEditing(false);
+      setApiKey(''); setApiSecret(''); setPassphrase('');
+      qc.invalidateQueries({ queryKey: ['exchangeStatus'] });
+      qc.invalidateQueries({ queryKey: ['activeExchange'] });
+    },
+    onError: (e: any) => toast.error(`保存失败: ${e?.message ?? e}`),
+  });
+
+  const remove = useMutation({
+    mutationFn: () => exchangeConfigAPI.remove(exchange),
+    onSuccess: () => {
+      toast.success(`${title} 已删除（回退 env）`);
+      qc.invalidateQueries({ queryKey: ['exchangeStatus'] });
+    },
+    onError: (e: any) => toast.error(`删除失败: ${e?.message ?? e}`),
+  });
+
+  return (
+    <Card inset>
+      <SectionHeader
+        title={title}
+        subtitle={
+          status.configured
+            ? `已配置 · ${status.api_key_masked} · ${status.testnet ? '测试网' : '实盘'}`
+            : '未配置'
+        }
+        right={
+          status.configured && (
+            <Pill tone={status.source === 'db' ? 'bull' : 'neutral'}>
+              {status.source === 'db' ? '来源: DB' : 'env'}
+            </Pill>
+          )
+        }
+      />
+
+      {!editing ? (
+        <div className="mt-4 flex items-center gap-2">
+          <button onClick={() => setEditing(true)} className="btn-ghost">
+            <Save size={14} strokeWidth={1.7} />
+            {status.configured ? '编辑' : '配置'}
+          </button>
+          {status.configured && status.source === 'db' && (
+            <button
+              onClick={() => { if (confirm(`确定删除 ${title}？`)) remove.mutate(); }}
+              disabled={remove.isPending}
+              className="btn-ghost text-bear hover:text-bear"
+            >
+              <Trash2 size={14} strokeWidth={1.7} />
+              删除（回退 env）
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="mt-4 space-y-4">
+          <Field label="API Key">
+            <input
+              type="text" value={apiKey} onChange={(e) => setApiKey(e.target.value)}
+              placeholder={status.api_key_masked || ''}
+              autoComplete="off"
+            />
+          </Field>
+          <Field label="API Secret">
+            <div className="relative">
+              <input
+                type={showSecret ? 'text' : 'password'} value={apiSecret}
+                onChange={(e) => setApiSecret(e.target.value)} autoComplete="new-password"
+                className="w-full pr-10"
+              />
+              <button
+                type="button" onClick={() => setShowSecret((s) => !s)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-secondary"
+              >
+                {showSecret ? <EyeOff size={14} /> : <Eye size={14} />}
+              </button>
+            </div>
+          </Field>
+          {requirePassphrase && (
+            <Field label="API Passphrase（OKX 必填，创建 API 时设的字符串）">
+              <input
+                type="password" value={passphrase} onChange={(e) => setPassphrase(e.target.value)}
+                autoComplete="new-password"
+              />
+            </Field>
+          )}
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="杠杆 (1–125)">
+              <input
+                type="text" inputMode="numeric" value={leverage}
+                onChange={(e) => setLeverage(e.target.value)} className="w-full"
+              />
+            </Field>
+            <Field label="网络">
+              <div className="inline-flex w-full rounded border border-terminal-border overflow-hidden">
+                {[false, true].map((isTestnet) => (
+                  <button
+                    key={String(isTestnet)} onClick={() => setTestnet(isTestnet)}
+                    className={`flex-1 px-3 py-2 text-[12px] ${
+                      testnet === isTestnet
+                        ? (isTestnet ? 'bg-warn/15 text-warn' : 'bg-primary/12 text-primary')
+                        : 'text-text-secondary hover:bg-terminal-hover'
+                    } ${isTestnet ? 'border-l border-terminal-border' : ''}`}
+                  >
+                    {isTestnet ? '测试网' : '实盘'}
+                  </button>
+                ))}
+              </div>
+            </Field>
+          </div>
+
+          {testnet === false && (
+            <div className="flex items-center gap-2 text-[12px] text-warn">
+              <AlertTriangle size={12} strokeWidth={1.6} />
+              即将连接实盘 — 请确认账户已分隔好资金，杠杆不要过高
+            </div>
+          )}
+
+          <div className="flex items-center gap-2 pt-2">
+            <button onClick={() => save.mutate()} disabled={save.isPending || !apiKey || !apiSecret} className="btn-primary">
+              <Check size={14} strokeWidth={1.7} />
+              {save.isPending ? '保存中…' : '保存'}
+            </button>
+            <button onClick={() => setEditing(false)} className="btn-ghost">取消</button>
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+};
+
+// ─── AI Provider config form ───────────────────────────────────────────
+
+const AIConfigForm: React.FC<{ status: AIStatusResp | null; loading: boolean }> = ({ status, loading }) => {
+  const qc = useQueryClient();
+  const [editing, setEditing]   = useState(false);
+  const [provider, setProvider] = useState<string>(status?.provider || 'openai');
+  const [apiKey, setApiKey]     = useState('');
+  const [model, setModel]       = useState<string>(status?.model || '');
+  const [enabled, setEnabled]   = useState<boolean>(status?.enabled ?? true);
+  const [showKey, setShowKey]   = useState(false);
+
+  React.useEffect(() => {
+    if (status && !editing) {
+      setProvider(status.provider);
+      setModel(status.model);
+      setEnabled(status.enabled);
+    }
+  }, [status, editing]);
+
+  const save = useMutation({
+    mutationFn: () => aiConfigAPI.save({ provider, api_key: apiKey, model, enabled }),
+    onSuccess: () => {
+      toast.success('AI 模型配置已保存');
+      setEditing(false); setApiKey('');
+      qc.invalidateQueries({ queryKey: ['aiConfig'] });
+    },
+    onError: (e: any) => toast.error(`保存失败: ${e?.message ?? e}`),
+  });
+
+  const remove = useMutation({
+    mutationFn: () => aiConfigAPI.remove(),
+    onSuccess: () => {
+      toast.success('AI 配置已删除（回退 env）');
+      qc.invalidateQueries({ queryKey: ['aiConfig'] });
+    },
+    onError: (e: any) => toast.error(`删除失败: ${e?.message ?? e}`),
+  });
+
+  if (loading || !status) {
+    return (
+      <Card inset>
+        <SectionHeader title="AI 大模型" subtitle="加载中…" />
+      </Card>
+    );
+  }
+
+  return (
+    <Card inset>
+      <SectionHeader
+        title="AI 大模型"
+        subtitle={
+          status.enabled
+            ? `${status.provider} · ${status.model || '默认模型'} · ${status.api_key_masked || '无 key'}`
+            : `已禁用 (provider=${status.provider})`
+        }
+        right={
+          <Pill tone={status.source === 'db' ? 'bull' : status.source === 'env' ? 'neutral' : 'warn'}>
+            来源: {status.source}
+          </Pill>
+        }
+      />
+
+      {!editing ? (
+        <div className="mt-4 flex items-center gap-2">
+          <button onClick={() => setEditing(true)} className="btn-ghost">
+            <Save size={14} strokeWidth={1.7} />
+            {status.source === 'db' ? '编辑' : '配置'}
+          </button>
+          {status.source === 'db' && (
+            <button
+              onClick={() => { if (confirm('确定删除 AI 配置？将回退到 env。')) remove.mutate(); }}
+              disabled={remove.isPending}
+              className="btn-ghost text-bear hover:text-bear"
+            >
+              <Trash2 size={14} strokeWidth={1.7} />
+              删除（回退 env）
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="mt-4 space-y-4">
+          <Field label="提供商">
+            <div className="inline-flex rounded border border-terminal-border overflow-hidden flex-wrap">
+              {(status.available_providers || []).map((p) => (
+                <button
+                  key={p} onClick={() => setProvider(p)}
+                  className={`px-3 py-2 text-[12px] tracking-micro ${
+                    provider === p
+                      ? 'bg-primary/12 text-primary'
+                      : 'text-text-secondary hover:bg-terminal-hover'
+                  } border-l border-terminal-border first:border-l-0`}
+                >
+                  {p.toUpperCase()}
+                </button>
+              ))}
+            </div>
+          </Field>
+
+          {provider !== 'disabled' && (
+            <>
+              <Field label="模型名（留空用默认）">
+                <input
+                  type="text" value={model} onChange={(e) => setModel(e.target.value)}
+                  placeholder={
+                    provider === 'openai' ? 'gpt-4o' :
+                    provider === 'deepseek' ? 'deepseek-chat' :
+                    provider === 'anthropic' ? 'claude-sonnet-4-5' : ''
+                  }
+                />
+              </Field>
+
+              <Field label="API Key">
+                <div className="relative">
+                  <input
+                    type={showKey ? 'text' : 'password'} value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)} autoComplete="new-password"
+                    placeholder={status.api_key_masked || ''}
+                    className="w-full pr-10"
+                  />
+                  <button
+                    type="button" onClick={() => setShowKey((s) => !s)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-secondary"
+                  >
+                    {showKey ? <EyeOff size={14} /> : <Eye size={14} />}
+                  </button>
+                </div>
+              </Field>
+
+              <Field label="状态">
+                <div className="inline-flex rounded border border-terminal-border overflow-hidden">
+                  {[true, false].map((on) => (
+                    <button
+                      key={String(on)} onClick={() => setEnabled(on)}
+                      className={`px-4 py-2 text-[12px] uppercase tracking-micro ${
+                        enabled === on
+                          ? on ? 'bg-bull/15 text-bull' : 'bg-bear/10 text-bear'
+                          : 'text-text-secondary'
+                      } ${!on ? 'border-l border-terminal-border' : ''}`}
+                    >
+                      {on ? '启用' : '禁用'}
+                    </button>
+                  ))}
+                </div>
+              </Field>
+            </>
+          )}
+
+          <div className="flex items-center gap-2 pt-2">
+            <button
+              onClick={() => save.mutate()}
+              disabled={save.isPending || (provider !== 'disabled' && !apiKey)}
+              className="btn-primary"
+            >
+              <Check size={14} strokeWidth={1.7} />
+              {save.isPending ? '保存中…' : '保存'}
+            </button>
+            <button onClick={() => setEditing(false)} className="btn-ghost">取消</button>
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+};
+
+// ─── 小工具 ─────────────────────────────────────────────────────────────
+
+const Field: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (
+  <div>
+    <label className="label-sm block mb-1.5">{label}</label>
+    {children}
+  </div>
+);
+
 export default SettingsPage;
-
-

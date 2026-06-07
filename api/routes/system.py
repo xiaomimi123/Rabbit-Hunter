@@ -93,17 +93,154 @@ async def root():
 
 
 @router.get("/api/v43/system/exchange")
-async def get_active_exchange_endpoint() -> dict:
-    """返回当前 active exchange（OKX / Binance）。前端顶栏徽章用。"""
-    import os as _os
-    name = (_os.environ.get("EXCHANGE", "okx") or "okx").lower()
+async def get_active_exchange_endpoint(supabase=Depends(get_supabase_optional)) -> dict:
+    """返回当前 active exchange（OKX / Binance）。前端顶栏徽章用。
+    v0.5.3：DB > env，让 SettingsPage 改的值立刻反映。"""
+    try:
+        from scripts.exchange_factory import get_active_exchange  # type: ignore[import-not-found]
+        name = get_active_exchange()
+    except Exception:
+        import os as _os
+        name = (_os.environ.get("EXCHANGE", "okx") or "okx").lower()
+
+    # testnet 从该 exchange 的配置里读，DB > env
+    is_testnet = False
+    try:
+        from scripts.exchange_config_manager import get_exchange_config_manager  # type: ignore[import-not-found]
+        cfg = get_exchange_config_manager(supabase).get_config(name)
+        if cfg:
+            is_testnet = bool(cfg.get("testnet", False))
+    except Exception:
+        import os as _os
+        is_testnet = _os.environ.get(
+            "OKX_TESTNET" if name == "okx" else "BINANCE_TESTNET", "false"
+        ).lower() in ("1", "true")
+
     return {
         "exchange": name,
-        "label":    name.upper(),                 # 前端直接展示
-        "testnet":  _os.environ.get(
-            "OKX_TESTNET" if name == "okx" else "BINANCE_TESTNET", "false"
-        ).lower() in ("1", "true"),
+        "label":    name.upper(),
+        "testnet":  is_testnet,
     }
+
+
+# ============================================
+# 交易所配置（多 exchange — v0.5.3）
+# ============================================
+
+
+class ExchangeConfigRequest(BaseModel):
+    api_key:        str
+    api_secret:     str
+    api_passphrase: str = ""
+    testnet:        bool = False
+    leverage:       int  = 10
+
+
+@router.get("/api/v43/exchange-config/status")
+async def get_all_exchange_status(supabase=Depends(get_supabase_optional)) -> dict:
+    """SettingsPage 一次拉所有 exchange 配置状态 + active。"""
+    try:
+        from scripts.exchange_config_manager import get_exchange_config_manager
+        mgr = get_exchange_config_manager(supabase)
+        return {"status": "success", "data": mgr.get_status()}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"读取 exchange 状态失败: {e}")
+
+
+class ActiveExchangeRequest(BaseModel):
+    exchange: str
+
+
+# 注意：FastAPI 路由按声明顺序匹配 — `/active` 必须放在 `/{exchange}` 之前，
+# 否则 'active' 会被当成 exchange 路径参数。
+
+
+@router.post("/api/v43/exchange-config/active")
+async def set_active_exchange_endpoint(
+    body: ActiveExchangeRequest,
+    supabase=Depends(get_supabase_optional),
+) -> dict:
+    """SettingsPage 上 OKX/Binance segmented 切换 — 把选择落地到 DB。"""
+    from scripts.exchange_config_manager import get_exchange_config_manager
+    result = get_exchange_config_manager(supabase).set_active_exchange(body.exchange.lower())
+    if not result.get("success"):
+        raise HTTPException(status_code=500, detail=result.get("error", "切换失败"))
+    return {"status": "success", "data": result}
+
+
+@router.post("/api/v43/exchange-config/{exchange}")
+async def save_exchange_config(
+    exchange: str,
+    body: ExchangeConfigRequest,
+    supabase=Depends(get_supabase_optional),
+) -> dict:
+    """保存 OKX 或 Binance 的配置。passphrase 仅 OKX 需要，Binance 传空字符串。"""
+    from scripts.exchange_config_manager import get_exchange_config_manager, SUPPORTED_EXCHANGES
+    if exchange.lower() not in SUPPORTED_EXCHANGES:
+        raise HTTPException(status_code=400, detail=f"不支持的 exchange: {exchange}")
+    if not body.api_key.strip() or not body.api_secret.strip():
+        raise HTTPException(status_code=400, detail="api_key / api_secret 必填")
+    if exchange.lower() == "okx" and not body.api_passphrase.strip():
+        raise HTTPException(status_code=400, detail="OKX 需要 api_passphrase")
+    mgr = get_exchange_config_manager(supabase)
+    result = mgr.save_config(
+        exchange=exchange.lower(),
+        api_key=body.api_key, api_secret=body.api_secret,
+        api_passphrase=body.api_passphrase, testnet=body.testnet, leverage=body.leverage,
+    )
+    if not result.get("success"):
+        raise HTTPException(status_code=500, detail=result.get("error", "保存失败"))
+    return {"status": "success", "data": result}
+
+
+@router.delete("/api/v43/exchange-config/{exchange}")
+async def delete_exchange_config(exchange: str, supabase=Depends(get_supabase_optional)) -> dict:
+    from scripts.exchange_config_manager import get_exchange_config_manager
+    result = get_exchange_config_manager(supabase).delete_config(exchange.lower())
+    if not result.get("success"):
+        raise HTTPException(status_code=500, detail=result.get("error", "删除失败"))
+    return {"status": "success", "data": result}
+
+
+# ============================================
+# AI 大模型配置 — v0.5.3
+# ============================================
+
+
+class AIConfigRequest(BaseModel):
+    provider: str             # 'openai' | 'deepseek' | 'anthropic' | 'disabled'
+    api_key:  str = ""
+    model:    str = ""
+    enabled:  bool = True
+
+
+@router.get("/api/v43/ai-config")
+async def get_ai_config(supabase=Depends(get_supabase_optional)) -> dict:
+    from scripts.ai_config_manager import get_ai_config_manager
+    return {"status": "success", "data": get_ai_config_manager(supabase).get_status()}
+
+
+@router.post("/api/v43/ai-config")
+async def save_ai_config(body: AIConfigRequest, supabase=Depends(get_supabase_optional)) -> dict:
+    from scripts.ai_config_manager import get_ai_config_manager, SUPPORTED_PROVIDERS
+    if body.provider.lower() not in SUPPORTED_PROVIDERS:
+        raise HTTPException(status_code=400, detail=f"未知 provider: {body.provider}")
+    result = get_ai_config_manager(supabase).save_config(
+        provider=body.provider.lower(), api_key=body.api_key,
+        model=body.model, enabled=body.enabled,
+    )
+    if not result.get("success"):
+        raise HTTPException(status_code=500, detail=result.get("error", "保存失败"))
+    return {"status": "success", "data": result}
+
+
+@router.delete("/api/v43/ai-config")
+async def delete_ai_config(supabase=Depends(get_supabase_optional)) -> dict:
+    from scripts.ai_config_manager import get_ai_config_manager
+    result = get_ai_config_manager(supabase).delete_config()
+    if not result.get("success"):
+        raise HTTPException(status_code=500, detail=result.get("error", "删除失败"))
+    return {"status": "success", "data": result}
 
 
 # ============================================
