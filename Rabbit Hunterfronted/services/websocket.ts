@@ -3,20 +3,32 @@
  * 提供实时数据推送功能
  */
 
-import { useV43Store } from './store';
+import { useV43Store, useUIStore } from './store';
 import { CoinData, Position, EvolutionEvent, SystemState } from '../types';
 
 // WebSocket URL - 确保使用正确的路径
 const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws/v43';
 
-// 如果环境变量设置了错误的路径，自动修正
+// v45: bearer token via query string（浏览器 WS 升级不能带自定义 header）
+const WS_TOKEN: string | undefined = (
+  (import.meta as any).env?.VITE_API_TOKEN ||
+  (import.meta as any).env?.VITE_API_BEARER_TOKEN ||
+  ''
+).toString().trim() || undefined;
+
+// 如果环境变量设置了错误的路径，自动修正；并附加 token query
 const getWebSocketUrl = () => {
   const envUrl = import.meta.env.VITE_WS_URL;
+  let base = WS_URL;
   if (envUrl && !envUrl.includes('/v43')) {
     console.warn(`[WebSocket] 环境变量 VITE_WS_URL 缺少 /v43 路径，自动修正: ${envUrl} -> ${envUrl}/v43`);
-    return `${envUrl}/v43`;
+    base = `${envUrl}/v43`;
   }
-  return WS_URL;
+  if (WS_TOKEN) {
+    const sep = base.includes('?') ? '&' : '?';
+    return `${base}${sep}token=${encodeURIComponent(WS_TOKEN)}`;
+  }
+  return base;
 };
 
 interface WebSocketMessage {
@@ -40,6 +52,12 @@ class WebSocketClient {
     }
 
     this.isConnecting = true;
+    // v45: 把"连接中/重连/失败"状态写到 UI store，Layout 顶栏能据此显示 banner
+    useUIStore.getState().setWsStatus(
+      this.reconnectAttempts > 0 ? 'reconnecting' : 'connecting',
+      this.reconnectAttempts,
+    );
+
     const wsUrl = getWebSocketUrl();
     console.log(`[WebSocket] 正在连接到: ${wsUrl}`);
     this.ws = new WebSocket(wsUrl);
@@ -49,6 +67,7 @@ class WebSocketClient {
       this.isConnecting = false;
       this.reconnectAttempts = 0;
       this.reconnectDelay = 1000;
+      useUIStore.getState().setWsStatus('connected', 0);
 
       // 重新订阅之前订阅的事件
       this.subscriptions.forEach(eventType => {
@@ -65,25 +84,35 @@ class WebSocketClient {
       }
     };
 
-    this.ws.onclose = () => {
-      console.log('[WebSocket] 连接已关闭');
+    this.ws.onclose = (ev) => {
+      console.log('[WebSocket] 连接已关闭', ev.code, ev.reason);
       this.isConnecting = false;
       this.ws = null;
+
+      // 4401 = 我们自己定义的"鉴权失败"。这种情况不重连（重连也是 401）。
+      if (ev.code === 4401) {
+        console.error('[WebSocket] 鉴权失败（4401）— 检查 VITE_API_TOKEN 是否和后端 API_BEARER_TOKEN 一致');
+        useUIStore.getState().setWsStatus('failed', this.reconnectAttempts);
+        return;
+      }
 
       // 自动重连
       if (this.reconnectAttempts < this.maxReconnectAttempts) {
         this.reconnectAttempts++;
         const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1); // 指数退避
         console.log(`[WebSocket] ${delay}ms 后尝试重连 (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
+        useUIStore.getState().setWsStatus('reconnecting', this.reconnectAttempts);
         setTimeout(() => this.connect(), delay);
       } else {
         console.error('[WebSocket] 达到最大重连次数，停止重连');
+        useUIStore.getState().setWsStatus('failed', this.reconnectAttempts);
       }
     };
 
     this.ws.onerror = (error) => {
       console.error('[WebSocket] 连接错误:', error);
       this.isConnecting = false;
+      // onerror 后通常紧跟 onclose；这里不抢先 setStatus('failed')，让 onclose 决定
     };
   }
 

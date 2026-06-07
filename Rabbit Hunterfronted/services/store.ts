@@ -7,12 +7,18 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { ViewType } from '../types';
 
+export type WsStatus = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'failed';
+
 interface UIStore {
   activeView: ViewType;
   selectedSymbol: string | null;
   expandedSymbols: Set<string>;
   isAnatomyPanelOpen: boolean;
   systemState: 'SHADOW' | 'LIVE';
+  // v45: WebSocket 连接状态，给 Layout 顶栏 banner 用
+  wsStatus: WsStatus;
+  wsLastConnectedAt: number | null;       // epoch ms，banner 用来显示"上次同步 N 秒前"
+  wsReconnectAttempts: number;            // 当前尝试次数
 
   setActiveView: (view: ViewType) => void;
   selectSymbol: (symbol: string | null) => void;
@@ -20,6 +26,7 @@ interface UIStore {
   setAnatomyPanelOpen: (open: boolean) => void;
   setSystemState: (state: 'SHADOW' | 'LIVE') => void;
   toggleSystemMode: () => void;
+  setWsStatus: (status: WsStatus, attempts?: number) => void;
 }
 
 export const useUIStore = create<UIStore>()(
@@ -30,6 +37,9 @@ export const useUIStore = create<UIStore>()(
       expandedSymbols: new Set(),
       isAnatomyPanelOpen: false,
       systemState: 'SHADOW',
+      wsStatus: 'idle' as WsStatus,
+      wsLastConnectedAt: null,
+      wsReconnectAttempts: 0,
 
       setActiveView: (view) => set({ activeView: view }),
       selectSymbol: (symbol) => set({ selectedSymbol: symbol }),
@@ -45,6 +55,12 @@ export const useUIStore = create<UIStore>()(
       toggleSystemMode: () =>
         set((s) => ({
           systemState: s.systemState === 'SHADOW' ? 'LIVE' : 'SHADOW',
+        })),
+      setWsStatus: (status, attempts) =>
+        set((s) => ({
+          wsStatus: status,
+          wsReconnectAttempts: attempts ?? s.wsReconnectAttempts,
+          wsLastConnectedAt: status === 'connected' ? Date.now() : s.wsLastConnectedAt,
         })),
     }),
     {

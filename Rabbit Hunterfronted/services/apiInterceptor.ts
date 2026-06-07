@@ -1,9 +1,18 @@
 /**
  * API 请求拦截器
- * 提供统一的请求/响应处理、错误处理、重试机制
+ * 提供统一的请求/响应处理、错误处理、重试机制、bearer 鉴权注入
  */
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+
+// v45: 后端 API_BEARER_TOKEN 设置后，前端必须在每个请求里带
+// Authorization: Bearer <token>。VITE_API_TOKEN 由 vite 构建时注入（写进 bundle）。
+// 单机部署可接受；远端部署应改成 session cookie / OAuth。
+const API_TOKEN: string | undefined = (
+  (import.meta as any).env?.VITE_API_TOKEN ||
+  (import.meta as any).env?.VITE_API_BEARER_TOKEN ||
+  ''
+).toString().trim() || undefined;
 
 interface RequestConfig extends RequestInit {
   retries?: number;
@@ -123,6 +132,10 @@ export async function apiRequest<T = any>(
   if (!headers.has('Content-Type') && options.method !== 'GET') {
     headers.set('Content-Type', 'application/json');
   }
+  // v45: 注入 Authorization: Bearer，配合后端 require_auth
+  if (API_TOKEN && !headers.has('Authorization')) {
+    headers.set('Authorization', `Bearer ${API_TOKEN}`);
+  }
 
   const config: RequestConfig = {
     ...options,
@@ -141,6 +154,13 @@ export async function apiRequest<T = any>(
       // 响应拦截：处理错误状态码
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
+        // 401 单独提示 — token 失配是最常见的部署期问题，普通 HTTP error 看不出来
+        if (response.status === 401) {
+          console.error(
+            '[apiInterceptor] 401 Unauthorized — 后端要求 bearer token 但前端的 ' +
+            'VITE_API_TOKEN 未设置或不匹配。检查 .env 的 API_BEARER_TOKEN 是否和前端的 VITE_API_TOKEN 一致。'
+          );
+        }
         const error: ApiError = new Error(
           errorData.detail || errorData.message || `HTTP ${response.status}: ${response.statusText}`
         );

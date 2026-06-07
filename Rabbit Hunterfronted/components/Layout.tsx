@@ -18,7 +18,7 @@
 
 import React, { useState } from 'react';
 import {
-  ChevronLeft, ChevronRight, Circle,
+  ChevronLeft, ChevronRight, Circle, AlertTriangle, Loader2,
   CrosshairIcon, LayoutGrid, Briefcase, SquarePen,
   Cpu, Sliders, BarChart3, ScrollText, Cog,
 } from 'lucide-react';
@@ -229,6 +229,51 @@ const StatusDot: React.FC<{ ok: boolean; title: string }> = ({ ok, title }) => (
   />
 );
 
+// ─── WS 连接状态 banner（v45）────────────────────────────────────────────────
+
+const WsStatusBanner: React.FC = () => {
+  const status = useUIStore((s) => s.wsStatus);
+  const attempts = useUIStore((s) => s.wsReconnectAttempts);
+  const lastConnectedAt = useUIStore((s) => s.wsLastConnectedAt);
+
+  // connected / idle 都不展示（idle 表示尚未尝试连接，没必要恐吓）
+  if (status === 'connected' || status === 'idle') return null;
+
+  const lastConnectedHint = lastConnectedAt
+    ? ` · 上次连接 ${Math.max(1, Math.round((Date.now() - lastConnectedAt) / 1000))} 秒前`
+    : '';
+
+  if (status === 'connecting') {
+    return (
+      <div className="px-8 py-2 text-[12px] text-text-secondary border-b border-terminal-border bg-terminal-card flex items-center gap-2">
+        <Loader2 size={12} strokeWidth={1.6} className="animate-spin text-primary" />
+        <span>正在连接实时推送…</span>
+      </div>
+    );
+  }
+  if (status === 'reconnecting') {
+    return (
+      <div className="px-8 py-2 text-[12px] text-warn border-b border-warn/30 bg-warn/5 flex items-center gap-2">
+        <AlertTriangle size={12} strokeWidth={1.6} />
+        <span>
+          实时推送已断开，正在重连（第 {attempts} 次）{lastConnectedHint} —
+          页面上的数据可能不是最新。
+        </span>
+      </div>
+    );
+  }
+  // failed
+  return (
+    <div className="px-8 py-2 text-[12px] text-bear border-b border-bear/30 bg-bear/5 flex items-center gap-2">
+      <AlertTriangle size={12} strokeWidth={1.6} />
+      <span>
+        实时推送连接失败{lastConnectedHint} — 价格/持仓显示的是最后一次同步的快照，
+        交易决策请刷新页面或核对后端日志后再做。
+      </span>
+    </div>
+  );
+};
+
 // ─── main layout ─────────────────────────────────────────────────────────────
 
 interface LayoutProps {
@@ -265,6 +310,7 @@ const Layout: React.FC<LayoutProps> = ({ children, activeView, onViewChange }) =
       <div className="flex flex-1 overflow-hidden">
         <Sidebar collapsed={collapsed} activeView={activeView} onViewChange={onViewChange} />
         <main className="flex-1 overflow-y-auto">
+          <WsStatusBanner />
           <div className="max-w-[1440px] mx-auto px-8 py-8">
             {children}
           </div>
