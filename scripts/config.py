@@ -58,6 +58,9 @@ class TradingConfig:
     write_workers: int = 2
     deep_scan_interval_seconds: int = 60
     store_top_count: int = 20
+    # MarketScanner 最低 24h 成交额(USDT)。过低会让微价 meme 币霸榜,
+    # 过高会漏掉新上线的中小盘。30M 是平衡点。
+    min_volume_24h_usdt: float = 30_000_000.0
 
     def validate(self) -> List[str]:
         """返回配置问题列表（空列表表示配置无误）"""
@@ -101,6 +104,7 @@ def _load_from_env() -> TradingConfig:
         write_workers=int(os.environ.get("WRITE_WORKERS", "2")),
         deep_scan_interval_seconds=int(os.environ.get("DEEP_SCAN_INTERVAL_SECONDS", "60")),
         store_top_count=int(os.environ.get("STORE_TOP_COUNT", "20")),
+        min_volume_24h_usdt=float(os.environ.get("MIN_VOLUME_24H_USDT", "30000000")),
     )
 
 

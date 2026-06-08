@@ -118,6 +118,7 @@ async def main() -> None:
         movers_queue=movers_queue,
         scan_interval=cfg.scan_interval,
         top_movers_count=cfg.store_top_count,
+        min_volume_24h=cfg.min_volume_24h_usdt,
         supabase=db,
     )
 

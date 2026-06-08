@@ -26,11 +26,13 @@ if TYPE_CHECKING:
 
 # Default thresholds – overridden by TradingConfig when the class is used via
 # collector_main.py.
-_DEFAULT_MIN_VOLUME_24H: float = 10_000_000   # 10 M USDT
+_DEFAULT_MIN_VOLUME_24H: float = 30_000_000   # 30 M USDT(过滤小盘 / 微价 meme)
 _DEFAULT_PRICE_CHANGE_THRESHOLD: float = 5.0  # abs(24h %) to flag a mover
 _DEFAULT_VOLUME_SPIKE_MIN_MULT: float = 5.0   # quoteVolume > MIN_VOL * this
 _DEFAULT_TOP_MOVERS_COUNT: int = 10
 _DEFAULT_SCAN_INTERVAL: float = 1.0
+# 评分公式 USDT 归一化分母 —— 50M USDT 算 1 分,与 1% 涨跌幅等权
+_VOLUME_SCORE_NORMALIZER_USDT: float = 50_000_000.0
 
 # Symbols always excluded from mover detection
 _EXCLUDED_SYMBOLS: frozenset[str] = frozenset({"BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT"})
@@ -80,7 +82,9 @@ def detect_movers(
       - Optionally exclude symbols with 24 h change <= *skip_24h_drop_pct*.
       - Flag as mover if abs(24h %) >= *price_change_threshold* OR
         quoteVolume > min_volume_24h * *volume_spike_min_mult*.
-      - Score = abs(24h %) + (volume / 1_000_000) * 0.1.
+      - Score = abs(24h %) + quoteVolume / 50M USDT
+        (用 USDT 成交额而不是币的数量,避免微价 meme 币因 volume_raw
+         巨大而霸榜——50M USDT 算 1 分,与 1% 涨跌幅等权)
 
     Returns [(symbol, score, reason), ...] sorted by score descending,
     truncated to *top_movers_count*.
@@ -96,18 +100,17 @@ def detect_movers(
             continue
 
         price_change_24h = float(ticker.get("priceChangePercent", 0))
-        volume_raw = float(ticker.get("volume", 0))
 
         if skip_24h_drop_pct is not None and price_change_24h <= skip_24h_drop_pct:
             continue
 
-        score = abs(price_change_24h) + (volume_raw / 1_000_000) * 0.1
+        score = abs(price_change_24h) + (volume_24h / _VOLUME_SCORE_NORMALIZER_USDT)
 
         if abs(price_change_24h) >= price_change_threshold:
-            reason = f"24h涨跌{price_change_24h:+.2f}%"
+            reason = f"24h涨跌{price_change_24h:+.2f}% / 成交{volume_24h / 1_000_000:.0f}M"
             movers.append((symbol, score, reason))
         elif volume_24h > min_volume_24h * volume_spike_min_mult:
-            reason = f"放量{volume_24h / 1_000_000:.1f}M"
+            reason = f"放量{volume_24h / 1_000_000:.0f}M USDT"
             movers.append((symbol, score, reason))
 
     movers.sort(key=lambda x: x[1], reverse=True)
