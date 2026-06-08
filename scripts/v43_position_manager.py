@@ -9,7 +9,7 @@ V4.3 持仓管理模块
 """
 
 from typing import Dict, Any, Optional, List, Tuple
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import os
 
 from v43_chandelier_stop import (
@@ -272,7 +272,7 @@ class V43PositionManager:
             return None
         
         # 构建持仓记录
-        now_iso = datetime.now().isoformat()
+        now_iso = datetime.now(timezone.utc).isoformat()
         position = {
             "symbol": symbol,
             "side": side,
@@ -435,7 +435,7 @@ class V43PositionManager:
         
         # 更新当前价格
         position["current_price"] = current_price
-        position["updated_at"] = datetime.now().isoformat()
+        position["updated_at"] = datetime.now(timezone.utc).isoformat()
         
         # v45：update_chandelier_stop 现在自己处理 side 感知的极值跟踪
         # （根据 position["side"] 自动选 highest 或 lowest），这里不再需要做镜像处理。
@@ -568,7 +568,7 @@ class V43PositionManager:
             pnl = (entry_price - final_exit_price) * position_size
             pnl_percent = ((entry_price - final_exit_price) / entry_price) * 100
 
-        now_iso = datetime.now().isoformat()
+        now_iso = datetime.now(timezone.utc).isoformat()
         position["status"] = "CLOSED"
         position["current_price"] = final_exit_price
         position["closed_at"] = now_iso

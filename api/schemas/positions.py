@@ -23,6 +23,7 @@ class PositionV43Response(BaseModel):
     id: Optional[int] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
+    closed_at: Optional[str] = None
     entry_price: Optional[float] = None
     current_price: Optional[float] = None
     position_size: Optional[float] = None

@@ -13,7 +13,7 @@ import os
 import sys
 from dotenv import load_dotenv
 from supabase import create_client
-from datetime import datetime
+from datetime import datetime, timezone
 
 # 添加项目根目录到路径
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -77,7 +77,7 @@ def clear_open_positions():
         print()
         print("🔄 正在更新持仓状态...")
         
-        now_iso = datetime.now().isoformat()
+        now_iso = datetime.now(timezone.utc).isoformat()
         update_data = {
             "status": "CLOSED",
             "updated_at": now_iso,

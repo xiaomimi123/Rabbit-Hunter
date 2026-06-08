@@ -18,6 +18,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from api.dependencies import get_supabase
 from api.schemas.weights import V43WeightsResponse, V43WeightHistoryResponse
+from api.services.score_service import ensure_utc_iso
 
 router = APIRouter(prefix="/api/v43", tags=["weights"])
 
@@ -80,7 +81,7 @@ async def get_v43_current_weights(supabase=Depends(get_supabase)):
             "weights_version": record.get("weights_version", "v4.3.0"),
             "constraints": WEIGHT_CONSTRAINTS,
             "applied": record.get("applied", False),
-            "created_at": record.get("created_at"),
+            "created_at": ensure_utc_iso(record.get("created_at")),
         }
     except Exception as e:  # noqa: BLE001
         raise HTTPException(
@@ -125,8 +126,8 @@ async def get_v43_weight_history(
 
             result.append({
                 "id": record.get("id"),
-                "created_at": record.get("created_at"),
-                "updated_at": record.get("updated_at"),
+                "created_at": ensure_utc_iso(record.get("created_at")),
+                "updated_at": ensure_utc_iso(record.get("updated_at")),
                 "weights": weights,
                 "weights_version": record.get("weights_version"),
                 "performance_metrics": performance_metrics,

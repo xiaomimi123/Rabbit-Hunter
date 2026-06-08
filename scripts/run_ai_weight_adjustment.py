@@ -7,7 +7,7 @@ AI 权重调整定时任务
 
 import os
 import sys
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta, date, timezone
 from dotenv import load_dotenv
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -355,7 +355,7 @@ def run_weight_adjustment(force: bool = False) -> bool:
                                 "reasoning": adjustment.reasoning[:200],  # 截取前200字符
                                 "performance_metrics": performance_metrics,
                             },
-                            "created_at": datetime.now().isoformat(),
+                            "created_at": datetime.now(timezone.utc).isoformat(),
                         }
                         
                         # 尝试保存到通知表（如果表存在）

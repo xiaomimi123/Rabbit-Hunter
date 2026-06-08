@@ -9,6 +9,38 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 
+def normalize_time_fields(row: Dict[str, Any], *fields: str) -> Dict[str, Any]:
+    """对 row 的若干时间字段就地补 UTC 标记,返回同一个 row 引用。
+
+    用在出站路由层,对历史 naive 字符串兜底,新代码用 timezone.utc 写入则透传。
+    """
+    if not isinstance(row, dict):
+        return row
+    for f in fields:
+        if f in row:
+            row[f] = ensure_utc_iso(row[f])
+    return row
+
+
+def ensure_utc_iso(ts: Any) -> Any:
+    """
+    把 naive ISO 8601 字符串("2026-06-08T20:37:13.582266")补成
+    UTC-aware("2026-06-08T20:37:13.582266+00:00"),前端 new Date()
+    才会按 UTC 解析、再转浏览器本地时区显示。
+
+    Why: 历史代码部分点位用 datetime.now().isoformat() 写入(无时区),
+    部分用 datetime.now(timezone.utc).isoformat() 写入(有时区),前端
+    JS Date 规范会把无时区字符串当作"本地时间",显示时不再做转换,
+    导致 UTC+8 用户少看 8 小时。这里在出站时统一补齐,兼容旧数据。
+    """
+    if not isinstance(ts, str) or not ts:
+        return ts
+    # 已带时区(+/-HH:MM 或 Z) → 不改
+    if ts.endswith("Z") or "+" in ts[10:] or "-" in ts[10:]:
+        return ts
+    return ts + "+00:00"
+
+
 def parse_jsonb(value: Any, default: Any = None) -> Any:
     """将可能的字符串 JSONB 字段解析为 Python 对象。"""
     if default is None:
@@ -30,7 +62,7 @@ def format_trade_score(record: Dict[str, Any]) -> Dict[str, Any]:
 
     return {
         "id": record.get("id"),
-        "created_at": record.get("created_at"),
+        "created_at": ensure_utc_iso(record.get("created_at")),
         "symbol": record.get("symbol"),
         "structure_score": float(record.get("structure_score")) if record.get("structure_score") is not None else None,
         "volatility_score": float(record.get("volatility_score")) if record.get("volatility_score") is not None else None,
@@ -184,6 +216,6 @@ def format_kill_queue_item(
         "expectedMovePercent": expected_move_percent,
         "volume24h": None,
         "liquidity": "high",
-        "timestamp": record.get("created_at", datetime.now().isoformat()),
-        "lastUpdated": record.get("updated_at") or record.get("created_at", datetime.now().isoformat()),
+        "timestamp": ensure_utc_iso(record.get("created_at") or datetime.now().isoformat()),
+        "lastUpdated": ensure_utc_iso(record.get("updated_at") or record.get("created_at") or datetime.now().isoformat()),
     }

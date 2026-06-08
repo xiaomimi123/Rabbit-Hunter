@@ -23,6 +23,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
 from api.dependencies import get_supabase, get_supabase_optional
+from api.services.score_service import normalize_time_fields
 from api.services.market_service import build_ccxt_config
 
 router = APIRouter(tags=["system"])
@@ -112,6 +113,9 @@ async def get_paper_trades(
             q = q.eq("status", "CLOSED")
         r = q.execute()
         rows = r.data or []
+        # 兼容历史 naive 时间戳:出站前补 +00:00,前端 new Date() 才按 UTC 解析
+        for row in rows:
+            normalize_time_fields(row, "created_at", "updated_at", "entry_time", "exit_time")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"读 paper_trades 失败: {e}")
 

@@ -6,7 +6,7 @@ V4.3 Collector 集成辅助函数（性能优化版）
 """
 
 from typing import Dict, Any, Optional, Tuple
-from datetime import datetime
+from datetime import datetime, timezone
 import os
 import time
 
@@ -71,7 +71,7 @@ def build_v43_trade_score_row(
     Returns:
         行数据字典
     """
-    now_iso = datetime.now().isoformat()
+    now_iso = datetime.now(timezone.utc).isoformat()
     
     # V4.4 策略路由字段（如果存在）
     strategy_id = decision_result.get("strategy_id") or features.get("strategy_id")

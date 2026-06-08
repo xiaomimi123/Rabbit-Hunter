@@ -11,7 +11,7 @@ import os
 import json
 from typing import Optional, Dict, Any
 from pathlib import Path
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 try:
     from cryptography.fernet import Fernet
@@ -253,22 +253,22 @@ class BinanceConfigManager:
                 {
                     "key": "binance_api_key",
                     "value": api_key,
-                    "updated_at": datetime.now().isoformat(),
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
                 },
                 {
                     "key": "binance_api_secret",
                     "value": encrypted_secret,  # 加密后的 Secret
-                    "updated_at": datetime.now().isoformat(),
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
                 },
                 {
                     "key": "binance_testnet",
                     "value": "true" if testnet else "false",
-                    "updated_at": datetime.now().isoformat(),
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
                 },
                 {
                     "key": "binance_leverage",
                     "value": str(leverage),
-                    "updated_at": datetime.now().isoformat(),
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
                 },
             ]
             

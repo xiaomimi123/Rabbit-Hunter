@@ -6,6 +6,8 @@
 
 from typing import Optional, Dict, Any, List
 
+from api.services.score_service import ensure_utc_iso as _ensure_utc_iso
+
 
 def calculate_pnl(
     current_price: Optional[float],
@@ -118,10 +120,11 @@ def format_position(record: Dict[str, Any]) -> Dict[str, Any]:
         "pnlPercent": float(pnl_percent) if pnl_percent is not None else 0.0,
         "status": status_str,
         "side": record.get("side", "LONG"),
-        # 保留原始字段供兼容
+        # 保留原始字段供兼容(时间字段补 +00:00 兼容历史 naive 数据)
         "id": record.get("id"),
-        "created_at": record.get("created_at"),
-        "updated_at": record.get("updated_at"),
+        "created_at": _ensure_utc_iso(record.get("created_at")),
+        "updated_at": _ensure_utc_iso(record.get("updated_at")),
+        "closed_at": _ensure_utc_iso(record.get("closed_at")),
         "entry_price": float(record.get("entry_price", 0)),
         "current_price": float(current_price) if current_price else None,
         "position_size": float(record.get("position_size", 0)),
