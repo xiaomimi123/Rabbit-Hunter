@@ -15,6 +15,16 @@ import asyncio
 import os
 import sys
 
+
+def _ensure_utc_iso(ts: Any) -> Any:
+    """Naive ISO 字符串补 +00:00 后缀,让前端 new Date() 按 UTC 解析。
+    见 api/services/score_service.py:ensure_utc_iso() 的详细说明。"""
+    if not isinstance(ts, str) or not ts:
+        return ts
+    if ts.endswith("Z") or "+" in ts[10:] or "-" in ts[10:]:
+        return ts
+    return ts + "+00:00"
+
 # 添加项目根目录到路径
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, BASE_DIR)
@@ -302,6 +312,10 @@ class KillQueueManager:
             "strategyId": strategy_id,  # 前端期望的驼峰命名
             "side": side,
             "strategy_score": float(strategy_score) if strategy_score is not None else None,
+            # AI 决策细节(数据库列直接透传)
+            "ai_reasoning": record.get("ai_reasoning"),
+            "ai_sl_multiplier": float(record["ai_sl_multiplier"]) if record.get("ai_sl_multiplier") is not None else None,
+            "ai_tp_multiplier": float(record["ai_tp_multiplier"]) if record.get("ai_tp_multiplier") is not None else None,
             # 保留额外字段供未来使用
             "technicalSignals": record.get("technical_signals", []),
             "riskLevel": self._calculate_risk_level(final_score, phase),
@@ -309,8 +323,8 @@ class KillQueueManager:
             "expectedMovePercent": float(record.get("expected_move_percent", 0.0)),
             "volume24h": float(record.get("volume_24h", 0.0)),
             "liquidity": self._calculate_liquidity(record.get("volume_24h", 0.0)),
-            "timestamp": created_at or datetime.now().isoformat(),
-            "lastUpdated": record.get("updated_at", created_at) or datetime.now().isoformat(),
+            "timestamp": _ensure_utc_iso(created_at) or datetime.now().isoformat(),
+            "lastUpdated": _ensure_utc_iso(record.get("updated_at") or created_at) or datetime.now().isoformat(),
         }
     
     def _calculate_risk_level(self, score: float, phase: str) -> str:

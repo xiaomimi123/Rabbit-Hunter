@@ -100,11 +100,11 @@ function transformRaw(raw: any[]): KillBoardItem[] {
   });
 }
 
-// risk label → style
+// risk label → style + 中文文案
 const RISK_STYLE = {
-  BLOCK: { color: 'text-bear', bg: 'bg-bear-dim', border: 'border-bear/30', icon: AlertCircle },
-  WATCH: { color: 'text-warn', bg: 'bg-warn/10',  border: 'border-warn/30', icon: Eye },
-  TRADE: { color: 'text-bull', bg: 'bg-bull-dim', border: 'border-bull/30', icon: CheckCircle },
+  BLOCK: { color: 'text-bear', bg: 'bg-bear-dim', border: 'border-bear/30', icon: AlertCircle, label: '拦截' },
+  WATCH: { color: 'text-warn', bg: 'bg-warn/10',  border: 'border-warn/30', icon: Eye,        label: '观察' },
+  TRADE: { color: 'text-bull', bg: 'bg-bull-dim', border: 'border-bull/30', icon: CheckCircle, label: '交易' },
 } as const;
 
 const STRATEGY_STYLE: Record<string, { color: string; bg: string; border: string; icon: any; label: string }> = {
@@ -136,7 +136,7 @@ export default function KillBoard() {
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
           <h1 className="text-lg font-bold text-text-primary font-mono">
-            Kill Board
+            信号面板
             <span className="ml-2 text-sm text-text-muted font-normal">
               {items.length} 个币种
             </span>
@@ -145,15 +145,15 @@ export default function KillBoard() {
             )}
           </h1>
           <div className="flex gap-3 mt-1 text-[10px] text-text-muted">
-            <span><span className="text-bull">■</span> TRADE</span>
-            <span><span className="text-warn">■</span> WATCH</span>
-            <span><span className="text-bear">■</span> BLOCK</span>
+            <span><span className="text-bull">■</span> 交易</span>
+            <span><span className="text-warn">■</span> 观察</span>
+            <span><span className="text-bear">■</span> 拦截</span>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
           <label className="flex items-center gap-1.5 text-xs text-text-secondary">
-            <span>Min Score</span>
+            <span>最低评分</span>
             <input
               type="number" min="0" max="100" value={minScore}
               onChange={(e) => setMinScore(Number(e.target.value))}
@@ -202,7 +202,7 @@ export default function KillBoard() {
 
                   {/* Score */}
                   <div className="w-20 shrink-0 text-right">
-                    <div className="text-xs text-text-muted">Score</div>
+                    <div className="text-xs text-text-muted">评分</div>
                     <div className="text-base font-bold text-text-primary font-mono">
                       {item.score.toFixed(1)}
                     </div>
@@ -211,7 +211,7 @@ export default function KillBoard() {
                   {/* Risk badge */}
                   <div className={`shrink-0 flex items-center gap-1 px-2 py-0.5 rounded ${rs.bg} border ${rs.border}`}>
                     <RiskIcon size={10} className={rs.color} />
-                    <span className={`text-[10px] font-mono font-bold ${rs.color}`}>{item.riskLabel}</span>
+                    <span className={`text-[10px] font-mono font-bold ${rs.color}`}>{rs.label}</span>
                   </div>
 
                   {/* Strategy badge */}
