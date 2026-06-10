@@ -10,12 +10,35 @@ V4.3 分数计算模块
 聚合所有分数，计算最终交易分数。
 """
 
+import os
 from typing import Dict, Any, Tuple, Optional
 
 
 def clamp(value: float, min_val: float, max_val: float) -> float:
     """将值限制在范围内"""
     return max(min_val, min(max_val, value))
+
+
+def _min_expected_move_pct() -> float:
+    """波动率分数的硬门槛:基于 ATR 的预期收益必须 >= 这个比例,否则拦截。
+
+    优先级:
+      1. MIN_EXPECTED_MOVE_PCT 环境变量(显式覆盖)
+      2. 否则按当前 mode 自动选:
+         - SHADOW(影子/纸面验证)→ 0.01 (1%)
+         - LIVE(真实下单)        → 0.02 (2%)
+
+    Mode 由 scorer._resolve_system_mode() 写入 RABBIT_EFFECTIVE_MODE 环境变量,
+    score_calculator 仅读不查 DB。
+    """
+    explicit = os.environ.get("MIN_EXPECTED_MOVE_PCT", "").strip()
+    if explicit:
+        try:
+            return float(explicit)
+        except ValueError:
+            pass
+    mode = os.environ.get("RABBIT_EFFECTIVE_MODE", "SHADOW").upper()
+    return 0.01 if mode == "SHADOW" else 0.02
 
 
 def calculate_structure_score(features: Dict[str, Any]) -> float:
@@ -84,10 +107,11 @@ def calculate_volatility_score(features: Dict[str, Any]) -> Tuple[float, str]:
     expected_move = atr * expected_atr_multiple if atr > 0 else 0.0
     expected_move_pct = expected_move / price if price > 0 else 0.0
     
-    # ⚠️ 修复后的硬门槛：基于 ATR 的预期收益 < 2% 直接拦截
-    # 这样可以在启动前不被杀
-    if expected_move_pct < 0.02:
-        return (0.0, f"LOW_EXPECTED_RETURN_ATR ({expected_move_pct*100:.2f}% < 2%)")
+    # ⚠️ 硬门槛:基于 ATR 的预期收益 < 阈值直接拦截
+    # 阈值默认 SHADOW=1% / LIVE=2%,可由 MIN_EXPECTED_MOVE_PCT 环境变量覆盖
+    min_pct = _min_expected_move_pct()
+    if expected_move_pct < min_pct:
+        return (0.0, f"LOW_EXPECTED_RETURN_ATR ({expected_move_pct*100:.2f}% < {min_pct*100:.1f}%)")
     
     # ATR Expand 分数
     atr_expand = features.get("atr_expand", 0.0)

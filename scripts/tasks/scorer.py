@@ -720,6 +720,9 @@ class StrategyScorer:
             print(f"[WARN][scorer] _resolve_system_mode 失败 — 安全降级 SHADOW: {source}")
 
         self._mode_cache.update({"mode": mode, "last_check": now})
+        # v0.5.x: 把 mode 同步到环境变量,让无状态的 score_calculator 等模块
+        # 在不查 DB 的前提下也能根据当前 mode 调整门槛(如 MIN_EXPECTED_MOVE_PCT)
+        os.environ["RABBIT_EFFECTIVE_MODE"] = mode
         self._report_effective_mode(mode, source)
         return mode
 
