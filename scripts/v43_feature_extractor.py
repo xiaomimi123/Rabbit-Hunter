@@ -189,21 +189,16 @@ def extract_features(
                 use_bollinger=True
             )
             range_left = max(0.0, structure_gap)
-            
-            # ✅ 修复：如果 range_left=0.0（可能是新高币，没有阻力位），给一个合理的默认值
-            if range_left == 0.0 and atr_value is not None and atr_value > 0 and price > 0:
-                # 使用 ATR 计算合理的"天空高度"：5 倍 ATR
-                # 趋势币 ≠ 赌 100%，但绝不能是 0%
-                atr_based_range = (atr_value * 5.0) / price
-                # 至少给 30% 的空间，但不超过 50%（避免过度乐观）
-                range_left = max(0.30, min(0.50, atr_based_range))
         except Exception:
-            # 异常时也尝试使用 ATR 计算默认值
-            if atr_value is not None and atr_value > 0 and price > 0:
-                atr_based_range = (atr_value * 5.0) / price
-                range_left = max(0.30, min(0.50, atr_based_range))
-            else:
-                range_left = 0.0
+            range_left = 0.0
+
+    # ✅ ATR-based fallback —— 无论 K 线数据是否拿到、structure_gap 算
+    # 出来是不是 0,只要 range_left 仍是 0 且 ATR 有效,就用 5×ATR/price
+    # 兜底到 30%~50% 区间。之前 K 线两端都 None 时这道兜底没触发,
+    # range_left 死定为 0,导致 LOW_EXPECTED_RETURN 拦截整张 P3 信号面板。
+    if range_left == 0.0 and atr_value is not None and atr_value > 0 and price > 0:
+        atr_based_range = (atr_value * 5.0) / price
+        range_left = max(0.30, min(0.50, atr_based_range))
     features["range_left"] = range_left
     
     # ========== Sentiment 特征 ==========
