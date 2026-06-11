@@ -298,8 +298,7 @@ class TradingAssistant:
         """轻量 chat completion — 不用 Assistant thread,快得多。给续仓决策用。"""
         if not self.client:
             return "CLOSE"
-        resp = await asyncio.to_thread(
-            self.client.chat.completions.create,
+        resp = await self.client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": system},
