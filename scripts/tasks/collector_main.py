@@ -121,6 +121,54 @@ async def _init_ai():
         return None
 
 
+def preflight_check(*, enable_auto_trading: bool,
+                    binance_api_key: str, okx_api_key: str,
+                    openai_key: str, ai_enabled: bool) -> list:
+    """返回问题列表(空 = OK)。"""
+    issues = []
+    if enable_auto_trading and not binance_api_key and not okx_api_key:
+        issues.append("ENABLE_AUTO_TRADING=true 但 broker API key 都未设置")
+    if ai_enabled and not openai_key:
+        issues.append("OPENAI_AI_ENABLED=true 但 OPENAI_API_KEY 未设置")
+    return issues
+
+
+async def _healthcheck_loop(db_path: str, interval_s: int = 60):
+    """每分钟自检,有问题打 WARN/ERROR 日志。"""
+    import sqlite3
+    while True:
+        await asyncio.sleep(interval_s)
+        try:
+            conn = sqlite3.connect(db_path)
+            try:
+                # 5min 无信号 → WARN
+                n_recent = conn.execute(
+                    "SELECT COUNT(*) FROM trade_scores_v5 "
+                    "WHERE created_at >= datetime('now', '-5 minute')"
+                ).fetchone()[0]
+                if n_recent == 0:
+                    print("[WARN][health] 过去 5 分钟无 trade_scores_v5 写入,评分流可能停滞")
+
+                # 1h 无入场但 should_trade>=10 → AI 阈值过严
+                n_rejected = conn.execute(
+                    "SELECT COUNT(*) FROM trade_scores_v5 "
+                    "WHERE created_at >= datetime('now', '-1 hour') "
+                    "  AND should_trade=1 AND block_reason='AI_REJECTED'"
+                ).fetchone()[0]
+                n_executed = conn.execute(
+                    "SELECT COUNT(*) FROM trade_scores_v5 "
+                    "WHERE created_at >= datetime('now', '-1 hour') "
+                    "  AND executed=1"
+                ).fetchone()[0]
+                if n_rejected >= 10 and n_executed == 0:
+                    print(f"[WARN][health] 过去 1h AI 拒了 {n_rejected} 个但 0 入场,"
+                          "AI 阈值可能过严")
+            finally:
+                conn.close()
+        except Exception as e:
+            print(f"[health] healthcheck 异常: {e}")
+
+
 async def main() -> None:
     from scripts.config import get_config
     from scripts.local_db import get_local_db
@@ -132,6 +180,19 @@ async def main() -> None:
     from scripts.v5_position_monitor import V5PositionMonitor
 
     cfg = get_config()
+
+    issues = preflight_check(
+        enable_auto_trading=cfg.enable_auto_trading,
+        binance_api_key=os.environ.get("BINANCE_API_KEY", ""),
+        okx_api_key=os.environ.get("OKX_API_KEY", ""),
+        openai_key=os.environ.get("OPENAI_API_KEY", ""),
+        ai_enabled=os.environ.get("OPENAI_AI_ENABLED", "false").lower() in ("1", "true"),
+    )
+    if issues:
+        for issue in issues:
+            print(f"[FATAL] preflight: {issue}")
+        sys.exit(1)
+
     db_path = os.environ.get("DB_PATH", "data/rabbit_hunter.db")
 
     # 初始化本地 SQLite(创建表 + 迁移)
@@ -216,6 +277,7 @@ async def main() -> None:
         deep_collector.run(),
         scorer.run(),
         monitor.run(),
+        _healthcheck_loop(db_path),
     ]
     if memory_uploader is not None:
         coroutines.append(memory_uploader.run())
