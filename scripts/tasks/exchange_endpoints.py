@@ -421,6 +421,67 @@ def fetch_price_change_1h(binance_symbol: str) -> Optional[float]:
     return (last_close - prev_close) / prev_close * 100.0
 
 
+def fetch_klines(symbol: str, interval: str = "15m", limit: int = 50) -> list:
+    """统一拉 K 线 — 返回 OHLCV tuple 列表。
+
+    interval: '15m' / '1h' / '4h' / ...
+    limit:    要的根数,默认 50。
+    返回 [(ts_ms, open, high, low, close, volume), ...]，oldest→newest。
+    失败返回 []。
+    """
+    if _active_exchange() == "okx":
+        return _okx_klines_tuples(symbol, interval, limit)
+    return _binance_klines_tuples(symbol, interval, limit)
+
+
+def _okx_klines_tuples(binance_symbol: str, interval: str, limit: int) -> list:
+    inst_id = binance_symbol_to_okx_inst(binance_symbol)
+    okx_bar = to_okx_interval(interval)
+    try:
+        r = _SESSION.get(
+            f"{OKX_BASE}/api/v5/market/candles",
+            params={"instId": inst_id, "bar": okx_bar, "limit": min(int(limit), 300)},
+            timeout=_HTTP_TIMEOUT,
+        )
+        r.raise_for_status()
+        p = r.json()
+        if p.get("code") != "0":
+            return []
+        bars = []
+        # OKX 最新在前 → reversed 后变成 oldest→newest
+        for k in reversed(p.get("data", []) or []):
+            try:
+                bars.append((
+                    int(k[0]),    # ts_ms
+                    float(k[1]),  # open
+                    float(k[2]),  # high
+                    float(k[3]),  # low
+                    float(k[4]),  # close
+                    float(k[5]),  # volume
+                ))
+            except (TypeError, ValueError, IndexError):
+                continue
+        return bars
+    except Exception:
+        return []
+
+
+def _binance_klines_tuples(binance_symbol: str, interval: str, limit: int) -> list:
+    try:
+        r = _SESSION.get(
+            f"{BINANCE_BASE}/fapi/v1/klines",
+            params={"symbol": binance_symbol, "interval": interval, "limit": limit},
+            timeout=_HTTP_TIMEOUT,
+        )
+        r.raise_for_status()
+        return [
+            (int(k[0]), float(k[1]), float(k[2]), float(k[3]), float(k[4]), float(k[5]))
+            for k in r.json()
+        ]
+    except Exception:
+        return []
+
+
 # ─────────────────────────────────────────────────────────────────────
 # 7. 1h OI change
 # ─────────────────────────────────────────────────────────────────────
@@ -489,6 +550,7 @@ __all__ = [
     "fetch_klines_ohlcv",
     "fetch_klines_full",
     "fetch_price_change_1h",
+    "fetch_klines",
     "binance_symbol_to_okx_inst",
     "okx_inst_to_binance_symbol",
     "binance_symbol_to_base_ccy",

@@ -25,15 +25,27 @@ Queue protocols:
 from __future__ import annotations
 
 import asyncio
+import os
 import time
 from typing import TYPE_CHECKING, Any
 
-import requests
+try:
+    import requests  # noqa: F401  — kept for V4.3 compat; not used directly here
+except ImportError:
+    pass  # test env without requests; pure helpers still importable
 
 if TYPE_CHECKING:
     from supabase import Client
 
-from .utils import symbol_to_binance_symbol, binance_symbol_to_ccxt_symbol
+try:
+    from .utils import symbol_to_binance_symbol, binance_symbol_to_ccxt_symbol
+except Exception:
+    # test env: requests not installed
+    def symbol_to_binance_symbol(s):  # type: ignore[misc]
+        return s
+
+    def binance_symbol_to_ccxt_symbol(s):  # type: ignore[misc]
+        return s
 
 _DEFAULT_DEEP_SCAN_INTERVAL: float = 60.0
 _DEFAULT_MAX_CONCURRENCY: int = 10
@@ -45,26 +57,41 @@ _DEFAULT_MAX_CONCURRENCY: int = 10
 # 这里保留原函数名作为 thin wrappers，外部 import 路径不变。
 # ---------------------------------------------------------------------------
 
+_ee_fetch_price_and_funding = None
+_ee_fetch_oi = None
+_ee_fetch_ls_ratio = None
+_ee_fetch_price_change_1h = None
+_ee_fetch_oi_change_1h = None
+_ee_fetch_klines_ohlcv = None
+_ee_fetch_klines_full = None
+_ee_fetch_klines = None
+
 try:
-    from exchange_endpoints import (  # type: ignore[import-not-found]
-        fetch_price_and_funding   as _ee_fetch_price_and_funding,
-        fetch_open_interest       as _ee_fetch_oi,
-        fetch_ls_ratio            as _ee_fetch_ls_ratio,
-        fetch_price_change_1h     as _ee_fetch_price_change_1h,
-        fetch_oi_change_1h        as _ee_fetch_oi_change_1h,
-        fetch_klines_ohlcv        as _ee_fetch_klines_ohlcv,
-        fetch_klines_full         as _ee_fetch_klines_full,
-    )
-except ImportError:
-    from .exchange_endpoints import (  # type: ignore[import-not-found]
-        fetch_price_and_funding   as _ee_fetch_price_and_funding,
-        fetch_open_interest       as _ee_fetch_oi,
-        fetch_ls_ratio            as _ee_fetch_ls_ratio,
-        fetch_price_change_1h     as _ee_fetch_price_change_1h,
-        fetch_oi_change_1h        as _ee_fetch_oi_change_1h,
-        fetch_klines_ohlcv        as _ee_fetch_klines_ohlcv,
-        fetch_klines_full         as _ee_fetch_klines_full,
-    )
+    try:
+        from exchange_endpoints import (  # type: ignore[import-not-found]
+            fetch_price_and_funding   as _ee_fetch_price_and_funding,
+            fetch_open_interest       as _ee_fetch_oi,
+            fetch_ls_ratio            as _ee_fetch_ls_ratio,
+            fetch_price_change_1h     as _ee_fetch_price_change_1h,
+            fetch_oi_change_1h        as _ee_fetch_oi_change_1h,
+            fetch_klines_ohlcv        as _ee_fetch_klines_ohlcv,
+            fetch_klines_full         as _ee_fetch_klines_full,
+            fetch_klines              as _ee_fetch_klines,
+        )
+    except ImportError:
+        from .exchange_endpoints import (  # type: ignore[import-not-found]
+            fetch_price_and_funding   as _ee_fetch_price_and_funding,
+            fetch_open_interest       as _ee_fetch_oi,
+            fetch_ls_ratio            as _ee_fetch_ls_ratio,
+            fetch_price_change_1h     as _ee_fetch_price_change_1h,
+            fetch_oi_change_1h        as _ee_fetch_oi_change_1h,
+            fetch_klines_ohlcv        as _ee_fetch_klines_ohlcv,
+            fetch_klines_full         as _ee_fetch_klines_full,
+            fetch_klines              as _ee_fetch_klines,
+        )
+except Exception:
+    # test env: requests not installed — pure helpers below still importable
+    pass
 
 
 def _fetch_price_and_funding(binance_symbol: str) -> dict:
@@ -101,6 +128,30 @@ def fetch_klines_full(
     binance_symbol: str, interval: str, limit: int
 ) -> tuple[list[float], list[float], list[float]]:
     return _ee_fetch_klines_full(binance_symbol, interval, limit)
+
+
+# ---------------------------------------------------------------------------
+# V5 过滤 helpers(纯函数,导出给单元测试)
+# ---------------------------------------------------------------------------
+
+def compute_delta_15m_pct(klines_15m: list) -> float:
+    """最新 15min K 线的 (close - open) / open。
+
+    klines_15m: [(ts_ms, open, high, low, close, volume), ...]
+    """
+    if not klines_15m:
+        return 0.0
+    last = klines_15m[-1]
+    open_, close = last[1], last[4]
+    if open_ <= 0:
+        return 0.0
+    return (close - open_) / open_
+
+
+def passes_delta_filter(klines_15m: list, threshold: float = 0.03) -> bool:
+    """|ΔP| 必须严格 > threshold。"""
+    delta = compute_delta_15m_pct(klines_15m)
+    return abs(delta) > threshold
 
 
 # ---------------------------------------------------------------------------
@@ -206,6 +257,46 @@ class DeepCollector:
 
         # Most-recent mover list (updated whenever a new one arrives)
         self._current_movers: list[tuple[str, float, str]] = []
+
+    async def _enrich_symbol(self, symbol: str, ticker: dict) -> None:
+        """V5 enrich path: pull 15m+4h klines, filter by |ΔP|>threshold, push EnrichedItem."""
+        threshold = float(os.environ.get("V5_DELTA_15M_THRESHOLD", "0.03"))
+        try:
+            klines_15m = await asyncio.to_thread(_ee_fetch_klines, symbol, "15m", 50)
+            klines_4h = await asyncio.to_thread(_ee_fetch_klines, symbol, "4h", 30)
+        except Exception as e:
+            print(f"[DeepCollector] {symbol} K 线拉取失败: {type(e).__name__}: {e}")
+            return
+
+        if not passes_delta_filter(klines_15m, threshold):
+            return
+
+        delta = compute_delta_15m_pct(klines_15m)
+        current_price = float(ticker.get("lastPrice") or (klines_15m[-1][4] if klines_15m else 0.0))
+
+        try:
+            try:
+                from v5_types import EnrichedItem  # type: ignore[import-not-found]
+            except ImportError:
+                from scripts.v5_types import EnrichedItem  # type: ignore[import-not-found]
+        except Exception as e:
+            print(f"[DeepCollector] v5_types import 失败: {e}")
+            return
+
+        item = EnrichedItem(
+            symbol=symbol,
+            current_price=current_price,
+            delta_15m_pct=delta,
+            volume_24h_usdt=float(ticker.get("quoteVolume") or 0.0),
+            klines_15m=klines_15m,
+            klines_4h=klines_4h,
+        )
+
+        try:
+            self.enriched_queue.put_nowait(item)
+            print(f"[DeepCollector] {symbol} ΔP15m={delta*100:+.2f}% → 入 enriched")
+        except asyncio.QueueFull:
+            print(f"[DeepCollector] {symbol} enriched_queue 满,drop")
 
     async def run(self) -> None:
         """
