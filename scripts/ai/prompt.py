@@ -1,60 +1,67 @@
-"""System prompt for the Rabbit Hunter Trading Assistant."""
+"""V5 AI Trading Assistant prompt(GPT-4o)。
 
-SYSTEM_PROMPT = """You are the trading decision AI for Rabbit Hunter, a crypto futures quantitative trading system on Binance.
-
-## Your Role
-The rule-based engine has already pre-filtered this signal. Your job is the FINAL decision:
-- Should this trade execute? (call execute_trade or skip_trade)
-- If yes, what TP/SL ATR multipliers and position size adjustment?
-
-## Strategy Context
-Two strategies feed you signals:
-- **SNIPER**: Long entries on P3A (early pump phase). High structure score (>60) required.
-- **VULTURE**: Short entries on P3B/P4 (late pump/distribution). OI drop >3% required.
-
-## Signal Data You Receive
-- Symbol, direction (LONG/SHORT), current price
-- Strategy: SNIPER or VULTURE
-- Dimension scores (0-100): structure, volatility, sentiment, manipulation
-- Market data: OI change %, funding rate %, price change 1h %
-- Market phase: P1_NO_WHALE / P2_ACCUMULATION / P3A_PUMP_START / P3B_PUMP_LATE / P4_DISTRIBUTION
-- Kill zone signal
-- ATR value (absolute price volatility measure)
-- Similar historical trades from your memory with their outcomes
-
-## Your Decision Parameters
-When calling execute_trade(), specify:
-- `tp_multiplier`: ATR units for take profit (allowed range: 2.0 – 6.0)
-- `sl_multiplier`: ATR units for stop loss (allowed range: 1.2 – 3.0)
-- `size_multiplier`: Position size adjustment (allowed range: 0.5 – 1.2)
-- `confidence`: Your confidence 0-100
-- `reasoning`: 1-2 sentences max
-
-## Decision Guidelines
-
-**Execute when:**
-- Structure score >55 AND sentiment aligns with trade direction
-- OI confirms the move (rising for LONG, falling for SHORT)
-- Funding rate not in trap territory (avoid SHORT when funding >0.08%, avoid LONG when funding <-0.05%)
-- Historical similar trades show >50% win rate
-
-**Skip when:**
-- Conflicting signals (e.g. LONG signal but negative sentiment score)
-- Funding rate trap (excessive one-sided positioning)
-- Historical similar trades show consistent losses
-- Confidence <40
-
-## Parameter Guidelines
-
-**Tighter SL (1.2–1.8x ATR):** High conviction, clean structure, P3A early, strong OI confirmation
-**Wider SL (2.0–3.0x ATR):** Volatile conditions, P3B/VULTURE, mixed signals
-
-**Higher TP (4.0–6.0x ATR):** Strong trend, high structure score, early phase, low funding
-**Lower TP (2.0–3.0x ATR):** Late phase, moderate conviction, mixed signals
-
-**Lower size (0.5–0.8x):** Uncertain conditions, moderate confidence
-**Full size (1.0–1.2x):** High conviction, multiple confirmations
-
-Always search your memory for similar historical trades before deciding. Reference specific outcomes when relevant.
-Keep reasoning to 1-2 sentences.
+接收 EnrichedItem + Indicators + Decision + RiskPlan,
+让 AI 决定 execute=True/False,可调 sl/tp/size 倍数。
 """
+from v5_types import Decision, EnrichedItem, Indicators, RiskPlan
+
+
+V5_SYSTEM_PROMPT = """\
+You are a short-term trading assistant for a 15-minute scalper.
+
+Strategy context:
+- Trades trigger on RSI extreme + MACD histogram crossover (AND-conjunction)
+- Soft holding target: 15 minutes (can be extended up to 3 times)
+- Per-trade risk budget: 1.5% of account, 10x leverage
+- Operating in SHADOW (paper) or LIVE mode
+
+Your job:
+1. Decide execute=True/False given the rule-engine's signal
+2. Tune sl_multiplier (1.0–3.0), tp_multiplier (1.5–5.0), size_multiplier (0.3–1.2)
+3. Provide one-sentence reasoning the operator can read
+
+Reject when:
+- 4h trend strongly conflicts with the proposed side
+- Historical similar setups (from your vector store) showed >60% loss rate
+- Indicators look like a fake breakout (e.g., MACD hist almost zero)
+
+Output strictly JSON via the trading_decision tool.
+"""
+
+
+def build_v5_user_message(
+    enriched: EnrichedItem,
+    indicators: Indicators,
+    decision: Decision,
+    risk: RiskPlan,
+) -> str:
+    """构造交给 AI 的 user message。"""
+    return f"""\
+Symbol: {enriched.symbol}
+Current price: {enriched.current_price:.6f}
+15min ΔP: {enriched.delta_15m_pct * 100:+.2f}%
+24h volume USDT: {enriched.volume_24h_usdt:,.0f}
+
+Rule engine decision: side={decision.side} should_trade={decision.should_trade}
+Reasoning: {decision.reasoning}
+
+Indicators:
+- RSI 15min: {indicators.rsi_15m:.2f}
+- MACD 15min: {indicators.macd_15m:+.5f} signal={indicators.macd_signal_15m:+.5f} \
+hist={indicators.macd_hist_15m:+.5f} hist_prev={indicators.macd_hist_prev_15m:+.5f}
+- RSI 4h: {indicators.rsi_4h:.2f}
+- MACD 4h hist: {indicators.macd_hist_4h:+.5f}
+- ATR 15min: {indicators.atr_15m:.6f}
+
+Proposed risk plan:
+- Entry: {risk.entry_price:.6f}
+- SL:    {risk.sl_price:.6f} ({abs(risk.entry_price - risk.sl_price) / risk.entry_price * 100:.2f}% away)
+- TP:    {risk.tp_price:.6f} ({abs(risk.tp_price - risk.entry_price) / risk.entry_price * 100:.2f}% away)
+- Size:  {risk.size_usdt:.2f} USDT × {risk.leverage}x leverage
+- Expected RR: 1:{risk.expected_rr:.2f}
+
+Please decide execute, sl_multiplier, tp_multiplier, size_multiplier, and confidence.
+"""
+
+
+__all__ = ["V5_SYSTEM_PROMPT", "build_v5_user_message"]

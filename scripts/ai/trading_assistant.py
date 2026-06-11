@@ -1,12 +1,12 @@
 """OpenAI Assistants API trading decision engine.
 
-Flow per signal:
-  1. Build structured message with current market data
+Flow per signal (V5):
+  1. Build structured message with V5 EnrichedItem/Indicators/Decision/RiskPlan
   2. Create a new Thread (stateless per signal)
   3. Run the Assistant — it retrieves similar trades from Vector Store automatically
-  4. Parse the function call: execute_trade() or skip_trade()
+  4. Parse the function call output (trading_decision tool)
   5. Apply guardrails to clamp parameters
-  6. Return AIDecision to caller
+  6. Return AIResult to caller
 
 The Vector Store provides the "memory" — historical trades uploaded periodically
 by memory_uploader.py act as few-shot examples the Assistant can retrieve.
@@ -20,11 +20,6 @@ import os
 import time
 from dataclasses import dataclass, field
 from typing import Optional
-
-import openai
-
-from .guardrails import GuardrailRejection, apply_guardrails
-from .prompt import SYSTEM_PROMPT
 
 
 def _fail_open() -> bool:
@@ -44,50 +39,38 @@ TOOLS = [
     {
         "type": "function",
         "function": {
-            "name": "execute_trade",
-            "description": "Execute this trade signal with the specified risk parameters.",
+            "name": "trading_decision",
+            "description": "Report the trade decision with risk parameters.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "tp_multiplier": {
-                        "type": "number",
-                        "description": "Take profit ATR multiplier (2.0 – 6.0). TP = entry ± tp_multiplier × ATR",
+                    "execute": {
+                        "type": "boolean",
+                        "description": "Whether to execute the trade.",
                     },
                     "sl_multiplier": {
                         "type": "number",
-                        "description": "Stop loss ATR multiplier (1.2 – 3.0). SL = entry ∓ sl_multiplier × ATR",
+                        "description": "SL multiplier (1.0–3.0). 1.0 = use rule-engine SL as-is.",
+                    },
+                    "tp_multiplier": {
+                        "type": "number",
+                        "description": "TP multiplier (1.5–5.0). 1.0 = use rule-engine TP as-is.",
                     },
                     "size_multiplier": {
                         "type": "number",
-                        "description": "Position size multiplier (0.5 – 1.2). Scales the base risk-per-trade.",
+                        "description": "Position size multiplier (0.3–1.2).",
                     },
                     "confidence": {
-                        "type": "integer",
-                        "description": "Confidence level 0-100.",
+                        "type": "number",
+                        "description": "Confidence level 0.0–1.0.",
                     },
                     "reasoning": {
                         "type": "string",
-                        "description": "Brief reasoning for the decision (1-2 sentences).",
+                        "description": "One-sentence reasoning.",
                     },
                 },
-                "required": ["tp_multiplier", "sl_multiplier", "size_multiplier", "confidence", "reasoning"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "skip_trade",
-            "description": "Skip this trade signal — do not execute.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "reason": {
-                        "type": "string",
-                        "description": "Reason for skipping (1-2 sentences).",
-                    }
-                },
-                "required": ["reason"],
+                "required": ["execute", "sl_multiplier", "tp_multiplier",
+                             "size_multiplier", "confidence", "reasoning"],
             },
         },
     },
@@ -95,7 +78,7 @@ TOOLS = [
 
 
 # ---------------------------------------------------------------------------
-# Result dataclass
+# Result dataclass (legacy — kept for backward compat with scorer.py)
 # ---------------------------------------------------------------------------
 
 
@@ -132,9 +115,18 @@ class TradingAssistant:
         # v0.5.6: SettingsPage 存 ai_config 的 openai key 优先；env 兜底
         api_key = self._resolve_openai_key()
         if not api_key:
-            raise ValueError("OPENAI key not set (try SettingsPage AI provider=openai 或 OPENAI_API_KEY env)")
+            self.client = None
+            self.assistant_id = None
+            self.vector_store_id = None
+            self._ready = False
+            return
 
-        self.client = openai.AsyncOpenAI(api_key=api_key)
+        try:
+            import openai as _openai
+            self.client = _openai.AsyncOpenAI(api_key=api_key)
+        except ImportError:
+            self.client = None
+
         self.assistant_id: Optional[str] = os.getenv("OPENAI_ASSISTANT_ID")
         self.vector_store_id: Optional[str] = os.getenv("OPENAI_VECTOR_STORE_ID")
         self._ready = False
@@ -159,6 +151,8 @@ class TradingAssistant:
 
     async def initialize(self) -> None:
         """Load existing assistant or create a new one."""
+        if not self.client:
+            return
         if self.assistant_id:
             self._ready = True
             print(f"[AI] TradingAssistant loaded | assistant={self.assistant_id} | vs={self.vector_store_id}")
@@ -167,7 +161,11 @@ class TradingAssistant:
 
     async def _create_assistant(self) -> None:
         """One-time creation of Assistant + Vector Store. IDs are printed for .env."""
+        if not self.client:
+            return
         print("[AI] Creating new Assistant and Vector Store...")
+
+        from scripts.ai.prompt import V5_SYSTEM_PROMPT
 
         # Create vector store
         vs = await self.client.beta.vector_stores.create(name="RabbitHunter_TradeMemory")
@@ -178,7 +176,7 @@ class TradingAssistant:
 
         assistant = await self.client.beta.assistants.create(
             name="RabbitHunter_TradingAI",
-            instructions=SYSTEM_PROMPT,
+            instructions=V5_SYSTEM_PROMPT,
             model=os.getenv("OPENAI_TRADING_MODEL", "gpt-4o"),
             tools=tools,
             tool_resources={"file_search": {"vector_store_ids": [self.vector_store_id]}},
@@ -193,221 +191,104 @@ class TradingAssistant:
         print("=" * 60)
 
     # ------------------------------------------------------------------
-    # Main decision method
+    # V5 Main decision method
     # ------------------------------------------------------------------
 
     async def decide(
         self,
-        symbol: str,
-        side: str,
-        price: float,
-        features: dict,
-        score_result: dict,
-        decision_result: dict,
-    ) -> AIDecision:
-        """Make a trade/skip decision for one signal.
+        enriched,           # EnrichedItem
+        indicators,         # Indicators
+        decision,           # Decision
+        risk,               # RiskPlan
+    ) -> "AIResult":
+        """V5 二次审查 — 用 GPT-4o 看完上下文给最终参数。"""
+        from v5_types import AIResult
+        from scripts.ai.prompt import V5_SYSTEM_PROMPT, build_v5_user_message
+        from scripts.ai.guardrails import clamp_ai_result
 
-        Falls back to execute-with-defaults if AI is unavailable or times out.
-        """
-        if not self._ready or not self.assistant_id:
-            fail_open = _fail_open()
-            return AIDecision(
-                execute=fail_open,
-                confidence=40 if fail_open else 0,
-                reasoning=(
-                    "AI not initialized; AI_FAIL_OPEN=true → executing with rule defaults"
-                    if fail_open
-                    else "AI not initialized; AI_FAIL_OPEN=false → skipping trade"
-                ),
-            )
+        if not self.client or not self.assistant_id:
+            return AIResult(execute=False, sl_multiplier=1.0, tp_multiplier=1.0,
+                            size_multiplier=0.0, confidence=0.0,
+                            reasoning="AI 未初始化")
 
+        user_msg = build_v5_user_message(enriched, indicators, decision, risk)
         try:
-            message = self._build_message(symbol, side, price, features, score_result, decision_result)
-
-            thread = await self.client.beta.threads.create(
-                messages=[{"role": "user", "content": message}]
+            thread = await self._create_thread()
+            await self._add_message(thread.id, user_msg)
+            run = await self._run_with_timeout(thread.id, self.assistant_id, timeout_s=20)
+            raw_json = await self._extract_tool_output(thread.id, run)
+            result = AIResult(
+                execute=bool(raw_json.get("execute", False)),
+                sl_multiplier=float(raw_json.get("sl_multiplier", 1.0)),
+                tp_multiplier=float(raw_json.get("tp_multiplier", 1.0)),
+                size_multiplier=float(raw_json.get("size_multiplier", 1.0)),
+                confidence=float(raw_json.get("confidence", 0.5)),
+                reasoning=str(raw_json.get("reasoning", "")),
             )
-
-            run = await self.client.beta.threads.runs.create(
-                thread_id=thread.id,
-                assistant_id=self.assistant_id,
-            )
-
-            timeout = float(os.getenv("OPENAI_DECISION_TIMEOUT", "20"))
-            result = await self._wait_for_decision(thread.id, run.id, timeout=timeout)
-
-            # Fire-and-forget thread cleanup
-            asyncio.create_task(self._delete_thread(thread.id))
-
-            print(result.log_line(symbol))
-            return result
-
-        except Exception as exc:
-            fail_open = _fail_open()
-            print(f"[AI] ERROR deciding {symbol}: {exc} | fail_open={fail_open}")
-            return AIDecision(
-                execute=fail_open,
-                confidence=40 if fail_open else 0,
-                reasoning=(
-                    f"AI error ({type(exc).__name__}); AI_FAIL_OPEN=true → executing"
-                    if fail_open
-                    else f"AI error ({type(exc).__name__}); AI_FAIL_OPEN=false → skipping trade"
-                ),
-            )
+            return clamp_ai_result(result)
+        except asyncio.TimeoutError:
+            return AIResult(execute=False, sl_multiplier=1.0, tp_multiplier=1.0,
+                            size_multiplier=0.0, confidence=0.0,
+                            reasoning="AI 调用超时(>20s),fail-closed")
+        except Exception as e:
+            return AIResult(execute=False, sl_multiplier=1.0, tp_multiplier=1.0,
+                            size_multiplier=0.0, confidence=0.0,
+                            reasoning=f"AI 调用异常 {type(e).__name__}: {e}")
 
     # ------------------------------------------------------------------
-    # Polling loop
+    # V5 low-level helpers (used by decide above)
     # ------------------------------------------------------------------
 
-    async def _wait_for_decision(
-        self, thread_id: str, run_id: str, timeout: float = 20.0
-    ) -> AIDecision:
-        deadline = time.monotonic() + timeout
+    async def _create_thread(self):
+        """Create a new empty thread."""
+        return await self.client.beta.threads.create()
 
-        while time.monotonic() < deadline:
-            run = await self.client.beta.threads.runs.retrieve(
-                thread_id=thread_id, run_id=run_id
-            )
-
-            if run.status == "requires_action":
-                tool_calls = run.required_action.submit_tool_outputs.tool_calls
-                for tc in tool_calls:
-                    args = json.loads(tc.function.arguments)
-                    # Submit dummy output so run completes cleanly
-                    await self.client.beta.threads.runs.submit_tool_outputs(
-                        thread_id=thread_id,
-                        run_id=run_id,
-                        tool_outputs=[{"tool_call_id": tc.id, "output": "acknowledged"}],
-                    )
-
-                    if tc.function.name == "execute_trade":
-                        try:
-                            g = apply_guardrails(
-                                sl_mult=args.get("sl_multiplier", 2.0),
-                                tp_mult=args.get("tp_multiplier", 3.0),
-                                size_mult=args.get("size_multiplier", 1.0),
-                            )
-                        except GuardrailRejection as exc:
-                            print(f"[AI] guardrails rejected execute_trade args: {exc}")
-                            return AIDecision(
-                                execute=False,
-                                confidence=0,
-                                reasoning=f"Guardrails rejected AI output: {exc}",
-                            )
-                        return AIDecision(
-                            execute=True,
-                            sl_multiplier=g.sl_multiplier,
-                            tp_multiplier=g.tp_multiplier,
-                            size_multiplier=g.size_multiplier,
-                            confidence=int(args.get("confidence", 70)),
-                            reasoning=args.get("reasoning", ""),
-                            guardrail_adjustments=g.adjustments,
-                        )
-
-                    elif tc.function.name == "skip_trade":
-                        return AIDecision(
-                            execute=False,
-                            confidence=0,
-                            reasoning=args.get("reason", "AI skipped"),
-                        )
-
-                    else:
-                        # Unknown tool name — treat as malformed AI output, fail-closed.
-                        print(f"[AI] unknown tool call '{tc.function.name}', skipping trade")
-                        return AIDecision(
-                            execute=False,
-                            confidence=0,
-                            reasoning=f"AI emitted unknown tool '{tc.function.name}'",
-                        )
-
-            elif run.status in ("completed", "failed", "cancelled", "expired"):
-                reason = f"Run ended with status={run.status}"
-                fail_open = _fail_open() and run.status == "completed"
-                # failed/cancelled/expired: always fail-closed (the AI didn't actually decide).
-                # completed without tool call: honor AI_FAIL_OPEN.
-                if run.status != "completed":
-                    print(f"[AI] WARNING: {reason} → skipping trade")
-                else:
-                    print(f"[AI] {reason} without tool call | fail_open={fail_open}")
-                return AIDecision(
-                    execute=fail_open,
-                    confidence=40 if fail_open else 0,
-                    reasoning=(
-                        f"{reason}; AI_FAIL_OPEN=true → executing with rule defaults"
-                        if fail_open
-                        else f"{reason}; skipping trade (fail-closed)"
-                    ),
-                )
-
-            await asyncio.sleep(0.5)
-
-        # Timeout
-        fail_open = _fail_open()
-        print(f"[AI] TIMEOUT after {timeout}s | fail_open={fail_open}")
-        return AIDecision(
-            execute=fail_open,
-            confidence=35 if fail_open else 0,
-            reasoning=(
-                "AI timeout; AI_FAIL_OPEN=true → executing with rule defaults"
-                if fail_open
-                else "AI timeout; AI_FAIL_OPEN=false → skipping trade"
-            ),
+    async def _add_message(self, thread_id: str, content: str) -> None:
+        """Add a user message to a thread."""
+        await self.client.beta.threads.messages.create(
+            thread_id=thread_id,
+            role="user",
+            content=content,
         )
 
-    # ------------------------------------------------------------------
-    # Message builder
-    # ------------------------------------------------------------------
+    async def _run_with_timeout(self, thread_id: str, assistant_id: str, timeout_s: float = 20):
+        """Start a run and wait for it to reach requires_action or terminal state."""
+        run = await self.client.beta.threads.runs.create(
+            thread_id=thread_id,
+            assistant_id=assistant_id,
+        )
+        deadline = time.monotonic() + timeout_s
+        while time.monotonic() < deadline:
+            run = await self.client.beta.threads.runs.retrieve(
+                thread_id=thread_id, run_id=run.id
+            )
+            if run.status in ("requires_action", "completed", "failed", "cancelled", "expired"):
+                return run
+            await asyncio.sleep(0.5)
+        raise asyncio.TimeoutError(f"Run did not complete within {timeout_s}s")
 
-    def _build_message(
-        self,
-        symbol: str,
-        side: str,
-        price: float,
-        features: dict,
-        score_result: dict,
-        decision_result: dict,
-    ) -> str:
-        strategy_id = decision_result.get("strategy_id", "UNKNOWN")
-        atr = features.get("atr") or features.get("atr_1h") or 0.0
-        funding = features.get("funding_rate", 0.0)
-        oi_change = features.get("oi_change_1h", features.get("oi_change", 0.0))
-        price_change = features.get("price_change_1h", features.get("price_change", 0.0))
-        ls_ratio = features.get("long_short_ratio", features.get("ls_ratio", 0.0))
+    async def _extract_tool_output(self, thread_id: str, run) -> dict:
+        """Extract the first tool call arguments from a requires_action run.
 
-        structure = score_result.get("structure_score", 0.0) * 100
-        volatility = score_result.get("volatility_score", 0.0) * 100
-        sentiment = score_result.get("sentiment_score", 0.0) * 100
-        manipulation = score_result.get("manipulation_score", 0.0) * 100
-        final_score = score_result.get("final_score", 0.0) * 100
-
-        return f"""## Signal: {symbol} | {side} | {strategy_id}
-
-**Price**: {price:.6g}  |  **ATR**: {atr:.6g}
-
-### Dimension Scores (0-100)
-| Metric | Score |
-|--------|-------|
-| Structure | {structure:.1f} |
-| Volatility | {volatility:.1f} |
-| Sentiment | {sentiment:.1f} |
-| Manipulation | {manipulation:.1f} |
-| **Final** | **{final_score:.1f}** |
-
-### Market Context
-| Field | Value |
-|-------|-------|
-| OI Change 1h | {oi_change:+.2f}% |
-| Price Change 1h | {price_change:+.2f}% |
-| Funding Rate | {float(funding)*100:+.4f}% |
-| Long/Short Ratio | {float(ls_ratio):.2f} |
-| Market Phase | {features.get('phase', features.get('market_phase', 'UNKNOWN'))} |
-| Kill Zone | {features.get('kill_zone_signal', 'NONE')} |
-
-### Rule Engine
-- Strategy: {strategy_id}
-- Rule reason: {decision_result.get('reason', decision_result.get('block_reason', 'N/A'))}
-
-Search your memory for similar historical trades on {symbol} or similar market conditions, then call execute_trade() or skip_trade()."""
+        Submits a dummy output so the run completes cleanly, then returns
+        the parsed JSON args dict. Returns empty dict if no tool call.
+        """
+        if run.status != "requires_action":
+            return {}
+        tool_calls = run.required_action.submit_tool_outputs.tool_calls
+        if not tool_calls:
+            return {}
+        tc = tool_calls[0]
+        args = json.loads(tc.function.arguments)
+        # Submit dummy output so run completes cleanly
+        await self.client.beta.threads.runs.submit_tool_outputs(
+            thread_id=thread_id,
+            run_id=run.id,
+            tool_outputs=[{"tool_call_id": tc.id, "output": "acknowledged"}],
+        )
+        # Fire-and-forget thread cleanup
+        asyncio.create_task(self._delete_thread(thread_id))
+        return args
 
     # ------------------------------------------------------------------
     # Cleanup
