@@ -1,75 +1,42 @@
-"""
-交易分数相关 Pydantic 模型
-"""
-
+"""V5 信号 + 漏斗 schema。"""
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel
 
 
-class TradeScoreV43Response(BaseModel):
+class V5SignalItem(BaseModel):
     id: int
+    symbol: str
     created_at: str
-    symbol: str
-    structure_score: Optional[float]
-    volatility_score: Optional[float]
-    sentiment_score: Optional[float]
-    manipulation_score: Optional[float]
-    final_score: Optional[float]
-    weights: Dict[str, Any]
-    weights_version: Optional[str]
-    decision_policy: Dict[str, Any]
-    executed: bool
-    reason: Optional[str]
-
-
-class KillQueueItem(BaseModel):
-    symbol: str
-    price: Optional[float] = None
-    change24h: Optional[float] = None
-    changePercent: Optional[float] = None
-    aiScore: float
-    # v0.5.x 修复:前端需要的 V4.3 四维原始评分(0-1)和综合分,
-    # 之前 Pydantic 模型未声明这些字段导致 FastAPI 静默丢弃 → 前端显示 0.0
-    final_score: Optional[float] = None
-    structure_score: Optional[float] = None
-    volatility_score: Optional[float] = None
-    sentiment_score: Optional[float] = None
-    manipulation_score: Optional[float] = None
-    # V4.4 策略路由
-    strategy_id: Optional[str] = None
-    strategyId: Optional[str] = None
+    delta_15m_pct: Optional[float] = None
+    volume_24h_usdt: Optional[float] = None
+    rsi_15m: Optional[float] = None
+    macd_15m: Optional[float] = None
+    macd_signal_15m: Optional[float] = None
+    macd_hist_15m: Optional[float] = None
+    macd_hist_prev_15m: Optional[float] = None
+    rsi_4h: Optional[float] = None
+    macd_hist_4h: Optional[float] = None
+    atr_15m: Optional[float] = None
+    current_price: Optional[float] = None
+    should_trade: int = 0
     side: Optional[str] = None
-    strategy_score: Optional[float] = None
-    # 决策结果
-    should_trade: Optional[bool] = None
+    reasoning: Optional[str] = None
     block_reason: Optional[str] = None
-    position_size_multiplier: Optional[float] = None
-    decision_policy: Optional[Dict[str, Any]] = None
-    features: Optional[Dict[str, Any]] = None
-    # AI 决策细节
-    ai_reasoning: Optional[str] = None
+    ai_confidence: Optional[float] = None
     ai_sl_multiplier: Optional[float] = None
     ai_tp_multiplier: Optional[float] = None
-    # 已有字段
-    phase: Optional[str] = None
-    phaseAge: Optional[str] = None
-    ageInMinutes: Optional[int] = None
-    reason: Optional[str] = None
-    confidence: Optional[float] = None
-    weights: Dict[str, Any] = {}
-    technicalSignals: List[str] = []
-    riskLevel: Optional[str] = None
-    expectedMove: Optional[float] = None
-    expectedMovePercent: Optional[float] = None
-    volume24h: Optional[float] = None
-    liquidity: Optional[str] = None
-    timestamp: str
-    lastUpdated: str
+    ai_size_multiplier: Optional[float] = None
+    ai_reasoning: Optional[str] = None
+    entry_price: Optional[float] = None
+    sl_price: Optional[float] = None
+    tp_price: Optional[float] = None
+    size_usdt: Optional[float] = None
+    expected_rr: Optional[float] = None
+    executed: int = 0
+    position_id: Optional[int] = None
 
 
-class KillQueueResponse(BaseModel):
-    status: str
-    code: int
-    data: List[KillQueueItem]
-    pagination: Dict[str, Any]
-    metadata: Dict[str, Any]
+class V5SignalsResponse(BaseModel):
+    status: str = "success"
+    data: List[V5SignalItem]
+    funnel: Dict[str, int]

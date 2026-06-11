@@ -4,7 +4,7 @@ Rabbit Hunter FastAPI 控制层
 应用入口：创建 FastAPI 实例并注册所有路由。
 业务逻辑已分拆至 routes/、schemas/、services/ 子模块。
 
-v45 安全加固：
+v5 安全加固：
   - 默认绑 127.0.0.1（环境变量 API_BIND_HOST 覆盖）
   - 默认关闭 /docs、/redoc、/openapi.json（API_ENABLE_DOCS=true 开启）
   - CORS 默认 allowlist 限制到本机常见端口（API_ALLOW_ORIGINS 逗号分隔列表覆盖）
@@ -104,7 +104,7 @@ _safety_check_or_exit()
 def _print_startup_banner() -> None:
     docs_state = "开启" if API_ENABLE_DOCS else "关闭"
     auth_state = "已配置 (Bearer token 必需)" if API_BEARER_TOKEN else "未配置 (依赖 127.0.0.1 隔离)"
-    host_warn = "" if _is_localhost(API_BIND_HOST) else "  ⚠️ 非本机绑定"
+    host_warn = "" if _is_localhost(API_BIND_HOST) else "  非本机绑定"
     print("=" * 60)
     print(f"[INIT] Rabbit Hunter API 启动配置")
     print(f"[INIT]   绑定地址: {API_BIND_HOST}:{API_PORT}{host_warn}")
@@ -125,7 +125,7 @@ async def lifespan(app: FastAPI):
     _print_startup_banner()
     print("[INFO] Rabbit Hunter API 启动中...")
 
-    # 启动 WebSocket 后台任务
+    # 启动 WebSocket 后台任务（V4.3 kill_queue 已 stub，若不可用则跳过）
     try:
         from api.websocket_server import broadcast_kill_queue_updates
         import asyncio
@@ -153,7 +153,7 @@ _docs_kwargs = {} if API_ENABLE_DOCS else {
 app = FastAPI(
     title="Rabbit Hunter API",
     description="Rabbit Hunter 交易系统 API",
-    version="4.3.0",
+    version="5.0.0",
     lifespan=lifespan,
     **_docs_kwargs,
 )
@@ -175,17 +175,21 @@ app.add_middleware(
 from api.dependencies import require_auth
 from api.routes.positions import router as positions_router
 from api.routes.scores import router as scores_router
-from api.routes.weights import router as weights_router
-from api.routes.market import router as market_router
-from api.routes.system import router as system_router
+
+# TODO(v5): weights/system/market routers still use V4.3 DB schema (Supabase).
+# They are stubbed out here to keep the API importable while V5 migration proceeds.
+# Re-enable each once rewired to SQLite/V5.
 
 _global_auth = [Depends(require_auth)]
 
+# V5 routes
 app.include_router(positions_router, dependencies=_global_auth)
 app.include_router(scores_router,    dependencies=_global_auth)
-app.include_router(weights_router,   dependencies=_global_auth)
-app.include_router(market_router,    dependencies=_global_auth)
-app.include_router(system_router,    dependencies=_global_auth)
+
+# V4.3 routes — disabled pending V5 rewire
+# app.include_router(weights_router,   dependencies=_global_auth)  # TODO(v5): rewire weights
+# app.include_router(market_router,    dependencies=_global_auth)  # TODO(v5): rewire market
+# app.include_router(system_router,    dependencies=_global_auth)  # TODO(v5): rewire system
 
 
 # ============================================

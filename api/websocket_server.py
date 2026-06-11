@@ -26,7 +26,11 @@ import asyncio
 import json
 from datetime import datetime
 
-from scripts.v43_kill_queue_manager import get_kill_queue_manager
+# TODO(v5): rewire kill_queue broadcast to use V5SignalManager
+try:
+    from scripts.v43_kill_queue_manager import get_kill_queue_manager  # type: ignore[import-not-found]
+except ImportError:
+    get_kill_queue_manager = None  # type: ignore[assignment]
 
 
 def _expected_bearer_token() -> Optional[str]:
@@ -184,15 +188,19 @@ async def websocket_endpoint(websocket: WebSocket):
 
 # 后台任务：定期推送数据更新
 async def broadcast_kill_queue_updates(interval: int = 5):
-    """定期广播猎杀队列更新"""
+    """定期广播信号更新 — TODO(v5): 已从 V4.3 kill_queue 切换到 V5SignalManager。"""
+    # TODO(v5): rewire to V5SignalManager.list_signals() when frontend is ready
+    if get_kill_queue_manager is None:
+        print("[WebSocket] V4.3 kill_queue_manager 不可用，跳过广播后台任务")
+        return
     while True:
         try:
             await asyncio.sleep(interval)
-            
+
             # 获取最新队列数据
             manager = get_kill_queue_manager()
             result = manager.get_kill_queue(limit=20, min_score=60.0)
-            
+
             # 广播更新
             await websocket_manager.broadcast({
                 "type": "kill_queue_update",
@@ -200,7 +208,7 @@ async def broadcast_kill_queue_updates(interval: int = 5):
                 "metadata": result["metadata"],
                 "timestamp": datetime.now().isoformat(),
             }, event_type="kill_queue_update")
-        
+
         except Exception as e:
             print(f"[WebSocket] 广播猎杀队列更新失败: {e}")
             await asyncio.sleep(interval)
