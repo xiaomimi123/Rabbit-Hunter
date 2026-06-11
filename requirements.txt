@@ -53,3 +53,7 @@ openai==1.54.5
 
 # DeepSeek 裁决：使用 requests 调用 OpenAI 兼容接口
 requests==2.32.3
+
+# v5 测试基础设施
+pytest==8.3.4
+pytest-asyncio==0.24.0
