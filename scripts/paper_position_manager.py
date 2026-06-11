@@ -27,14 +27,10 @@ import sqlite3
 from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, Optional, List, Tuple
 
-# 与 V43PositionManager 同样的 chandelier 工具（计算 SL/TP）
-try:
-    from v43_chandelier_stop import initialize_position
-except ImportError:
-    try:
-        from scripts.v43_chandelier_stop import initialize_position  # type: ignore[import-not-found]
-    except ImportError:
-        initialize_position = None  # type: ignore[assignment]
+# V5: chandelier_stop 已废弃。V5 通过 v5_risk_calculator.plan() 直接计算 SL/TP，
+# 调用方在 open_position 里传入 risk(RiskPlan) + ai(AIResult)。
+# 此处保留 None stub 以避免下游代码（若有）做存在性判断时崩。
+initialize_position = None  # type: ignore[assignment]
 
 
 SOFT_TARGET_MINUTES = 15

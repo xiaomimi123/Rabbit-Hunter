@@ -1,30 +1,20 @@
+"""V5 Collector 主入口。
+
+四任务管道:Scanner → DeepCollector → V5Scorer → Writer
++ V5PositionMonitor 30s 轮询活仓
++ MemoryAutoUploader 周期上传 AI 学习
+
+替换 V4.3 monolithic collector,使用 v5_* 模块组合。
 """
-collector_main.py - New async entry point for the Rabbit Hunter collector.
-
-Replaces the monolithic scripts/collector.py with four independent tasks
-coordinated via asyncio.Queue:
-
-    MarketScanner  ──movers_queue──►  DeepCollector
-                                            │
-                                    enriched_queue
-                                            │
-                                            ▼
-                                    StrategyScorer ──write_queue──► DatabaseWriter
-
-Usage:
-    python -m scripts.tasks.collector_main
-    # or
-    python scripts/tasks/collector_main.py
-"""
-
 from __future__ import annotations
 
 import asyncio
 import os
+import signal
 import sys
 from pathlib import Path
 
-# Ensure project root is on sys.path (needed when run as a script)
+# Ensure project root + scripts/ are on sys.path
 _ROOT = Path(__file__).parent.parent.parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
@@ -32,155 +22,229 @@ _SCRIPTS = Path(__file__).parent.parent
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
-from dotenv import load_dotenv
-
-load_dotenv(dotenv_path=_ROOT / ".env")
-
-from scripts.config import get_config
-from scripts.local_db import get_local_db, prune_old_data
-from scripts.tasks.scanner import MarketScanner
-from scripts.tasks.deep_collector import DeepCollector
-from scripts.tasks.scorer import StrategyScorer
-from scripts.tasks.writer import DatabaseWriter
+try:
+    from dotenv import load_dotenv
+    load_dotenv(dotenv_path=_ROOT / ".env")
+except Exception:
+    pass
 
 
-async def _init_openai_assistant():
-    """Initialize TradingAssistant if OPENAI_API_KEY is set. Returns None if disabled."""
-    if not os.getenv("OPENAI_API_KEY"):
+def _resolve_mode_db() -> str:
+    """从 system_settings 读 system_state,SHADOW 默认。"""
+    import sqlite3
+    db = os.environ.get("DB_PATH", "data/rabbit_hunter.db")
+    try:
+        conn = sqlite3.connect(db)
+        try:
+            row = conn.execute(
+                "SELECT value FROM system_settings WHERE key='system_state'"
+            ).fetchone()
+            if row and (row[0] or "").upper() in ("SHADOW", "LIVE"):
+                return row[0].upper()
+        finally:
+            conn.close()
+    except Exception:
+        pass
+    return "SHADOW"
+
+
+def _get_live_trader():
+    """获取 active exchange 的 trader 实例(用于 LIVE balance + V5PositionManager)。
+
+    返回 None 表示拉取失败/没配置,调用方应回退到 SHADOW 路径。
+    """
+    try:
+        from scripts.exchange_factory import get_trader
+        return get_trader()
+    except Exception as e:
+        print(f"[collector_main] get_trader 失败: {e}")
         return None
-    if os.getenv("OPENAI_AI_ENABLED", "false").lower() not in ("1", "true"):
-        return None
+
+
+def _fetch_balance() -> float:
+    """先尝试从交易所拉余额,失败回退 env PAPER_INITIAL_BALANCE_USDT。"""
+    try:
+        trader = _get_live_trader()
+        if trader is not None:
+            bal = trader.fetch_balance()
+            # ccxt 风格 / 自定义 trader 风格兼容
+            usdt = None
+            if isinstance(bal, dict):
+                if "USDT" in bal and isinstance(bal["USDT"], dict):
+                    usdt = bal["USDT"].get("free") or bal["USDT"].get("available")
+                elif "free" in bal:
+                    usdt = bal["free"]
+                elif "available" in bal:
+                    usdt = bal["available"]
+            if usdt is not None and float(usdt) > 0:
+                return float(usdt)
+    except Exception as e:
+        print(f"[collector_main] 余额拉取失败,用 PAPER_INITIAL_BALANCE_USDT: {e}")
+    return float(os.environ.get("PAPER_INITIAL_BALANCE_USDT", "1000"))
+
+
+async def _build_indicator_fetcher():
+    """给 V5PositionMonitor 用的 indicator fetcher。
+
+    返回 async fn(symbol) -> {price, rsi_15m, macd_hist_15m, macd_hist_prev_15m}。
+    """
+    from scripts.tasks.exchange_endpoints import fetch_klines  # type: ignore[import-not-found]
+    from v5_indicator_engine import calculate_rsi, calculate_macd
+
+    async def fetch(symbol: str) -> dict:
+        klines = await asyncio.to_thread(fetch_klines, symbol, "15m", 50)
+        price = float(klines[-1][4])
+        rsi = calculate_rsi(klines)
+        _, _, hist, hist_prev = calculate_macd(klines)
+        return {
+            "price": price,
+            "rsi_15m": rsi,
+            "macd_hist_15m": hist,
+            "macd_hist_prev_15m": hist_prev,
+        }
+    return fetch
+
+
+async def _init_ai():
+    """初始化 TradingAssistant — 失败返回 None,SHADOW 仍能跑(scorer 处理 None)。"""
     try:
         from scripts.ai.trading_assistant import TradingAssistant
-        assistant = TradingAssistant()
-        await assistant.initialize()
-        return assistant
+        ai = TradingAssistant()
+        if hasattr(ai, "initialize"):
+            try:
+                await ai.initialize()
+            except Exception as e:
+                print(f"[collector_main] TradingAssistant.initialize() 失败: {e}")
+        return ai
     except Exception as e:
-        print(f"[WARNING] OpenAI Assistant 初始化失败，将跳过 AI 层: {e}")
+        print(f"[collector_main] TradingAssistant 初始化失败: {e}")
         return None
 
 
 async def main() -> None:
+    from scripts.config import get_config
+    from scripts.local_db import get_local_db
+    from scripts.tasks.scanner import MarketScanner
+    from scripts.tasks.deep_collector import DeepCollector
+    from scripts.tasks.scorer import V5Scorer
+    from scripts.tasks.writer import DatabaseWriter
+    from scripts.paper_position_manager import PaperPositionManager
+    from scripts.v5_position_monitor import V5PositionMonitor
+
     cfg = get_config()
+    db_path = os.environ.get("DB_PATH", "data/rabbit_hunter.db")
 
-    # Validate required config
-    issues = cfg.validate()
-    if issues:
-        for issue in issues:
-            print(f"[WARNING] 配置问题: {issue}")
+    # 初始化本地 SQLite(创建表 + 迁移)
+    _ = get_local_db()
+    print("[collector_main] 本地 SQLite 数据库已就绪")
 
-    # Initialize OpenAI Assistant (optional)
-    openai_assistant = await _init_openai_assistant()
-    ai_status = "ON" if openai_assistant else "OFF"
+    ai = await _init_ai()
 
-    print("[INFO] Rabbit Hunter Collector 启动中...")
-    # v0.5.6: AI provider 状态走 DB > env，反映 SettingsPage 真实保存的配置
-    try:
+    paper_pm = PaperPositionManager(db_path=db_path)
+    live_pm = None
+    if cfg.enable_auto_trading:
         try:
-            from ai_config_manager import resolve_active_ai  # type: ignore[import-not-found]
-        except ImportError:
-            from scripts.ai_config_manager import resolve_active_ai  # type: ignore[import-not-found]
-        _deepseek_cfg = resolve_active_ai(expected_provider="deepseek")
-        _openai_cfg   = resolve_active_ai(expected_provider="openai")
-        _deepseek_on  = bool(_deepseek_cfg.get("enabled") and _deepseek_cfg.get("api_key"))
-        _openai_on    = bool(_openai_cfg.get("enabled") and _openai_cfg.get("api_key"))
-    except Exception:
-        _deepseek_on = cfg.deepseek_enabled
-        _openai_on   = bool(openai_assistant)
-    print(f"[INFO] V4.3={'ON' if cfg.v43_enabled else 'OFF'} | "
-          f"V4.4={'ON' if cfg.v44_enabled else 'OFF'} | "
-          f"AutoTrade={'ON' if cfg.enable_auto_trading else 'OFF'} | "
-          f"DeepSeek={'ON' if _deepseek_on else 'OFF'} | "
-          f"OpenAI={'ON' if _openai_on else 'OFF'}")
+            from scripts.v5_position_manager import V5PositionManager
+            trader = _get_live_trader()
+            if trader is not None:
+                live_pm = V5PositionManager(broker=trader, db_path=db_path)
+            else:
+                print("[collector_main] V5PositionManager 跳过:get_trader 返回 None")
+        except Exception as e:
+            print(f"[collector_main] V5PositionManager 初始化失败: {e}")
 
-    # 初始化本地 SQLite 数据库
-    db = get_local_db()
-    print("[INFO] 本地 SQLite 数据库已就绪")
-
-    # 启动时清理一次过期数据
-    try:
-        prune_old_data()
-    except Exception as e:
-        print(f"[WARNING] 数据清理失败: {e}")
-
-    # ── Shared queues ──────────────────────────────────────────────────────────
     movers_queue: asyncio.Queue = asyncio.Queue(maxsize=2)
     enriched_queue: asyncio.Queue = asyncio.Queue(maxsize=50)
 
-    # ── Task instances ──────────────────────────────────────────────────────────
     writer = DatabaseWriter(
         queue_maxsize=cfg.write_queue_maxsize,
         num_workers=cfg.write_workers,
     )
-    write_queue = writer.queue
 
     scanner = MarketScanner(
         movers_queue=movers_queue,
         scan_interval=cfg.scan_interval,
         top_movers_count=cfg.store_top_count,
         min_volume_24h=cfg.min_volume_24h_usdt,
-        supabase=db,
+        supabase=None,
     )
-
     deep_collector = DeepCollector(
         movers_queue=movers_queue,
         enriched_queue=enriched_queue,
         deep_scan_interval=cfg.deep_scan_interval_seconds,
     )
-
-    scorer = StrategyScorer(
+    scorer = V5Scorer(
         enriched_queue=enriched_queue,
-        write_queue=write_queue,
-        supabase=db,
-        v43_enabled=cfg.v43_enabled,
-        v44_enabled=cfg.v44_enabled,
-        store_top_count=cfg.store_top_count,
-        deepseek_cache_secs=60,
-        openai_assistant=openai_assistant,
+        ai=ai,
+        paper_pm=paper_pm,
+        live_pm=live_pm,
+        mode_resolver=_resolve_mode_db,
+        balance_fetcher=_fetch_balance,
+        db_path=db_path,
     )
 
-    # v0.5.4: paper trading 监视器 — SHADOW 模式下虚拟仓位的实时 SL/TP 触发
-    try:
-        from tasks.paper_monitor import PaperMonitor  # type: ignore[import-not-found]
-    except ImportError:
-        from scripts.tasks.paper_monitor import PaperMonitor  # type: ignore[import-not-found]
-    paper_monitor = PaperMonitor(
-        supabase=db,
-        interval_seconds=int(os.environ.get("PAPER_MONITOR_INTERVAL_SECONDS", "30")),
+    indicator_fetcher = await _build_indicator_fetcher()
+    monitor = V5PositionMonitor(
+        paper_pm=paper_pm,
+        live_pm=live_pm,
+        ai_assistant=ai,
+        indicator_fetcher=indicator_fetcher,
+        mode_resolver=_resolve_mode_db,
+        poll_interval_s=int(os.environ.get("V5_MONITOR_INTERVAL_S", "30")),
     )
 
-    # v0.5.6: Vector Store 自动上传 — 周期把 trade_log 推到 OpenAI，带 24h 冷却窗口
-    # 防 lookahead leak（刚平的单不会立刻进 vector store 影响下一笔决策）
+    # v0.5.6: Vector Store 自动上传 — 周期把 trade_log 推到 OpenAI(可选)
     memory_uploader = None
     try:
-        try:
-            from ai.memory_uploader import MemoryAutoUploader  # type: ignore[import-not-found]
-        except ImportError:
-            from scripts.ai.memory_uploader import MemoryAutoUploader  # type: ignore[import-not-found]
+        from scripts.ai.memory_uploader import MemoryAutoUploader
         memory_uploader = MemoryAutoUploader()
     except Exception as e:
-        print(f"[WARNING] MemoryAutoUploader 初始化失败，本次启动不跑自动上传: {e}")
+        print(f"[collector_main] MemoryAutoUploader 初始化失败,本次启动不跑自动上传: {e}")
 
-    # ── Run all tasks ──────────────────────────────────────────────────────────
+    mode = _resolve_mode_db()
+    print(f"[collector_main] V5 启动 — mode={mode} db={db_path} "
+          f"auto_trading={'ON' if cfg.enable_auto_trading else 'OFF'} "
+          f"ai={'ON' if ai else 'OFF'}")
+
+    # writer 用旧风格:start() 启动 worker,scorer 把 trade_score 直接写 DB,
+    # 这里保留 writer.run() 占位以兼容其他任务/未来扩展。
     writer.start()
-    print("[INFO] DatabaseWriter 已启动")
+    print("[collector_main] DatabaseWriter 已启动")
 
-    coroutines = [scanner.run(), deep_collector.run(), scorer.run(), paper_monitor.run()]
+    coroutines = [
+        scanner.run(),
+        deep_collector.run(),
+        scorer.run(),
+        monitor.run(),
+    ]
     if memory_uploader is not None:
         coroutines.append(memory_uploader.run())
 
-    print("[INFO] 所有任务已启动，按 Ctrl+C 停止")
     try:
-        await asyncio.gather(*coroutines)
+        await asyncio.gather(*coroutines, return_exceptions=False)
     except asyncio.CancelledError:
-        print("[INFO] Collector 收到取消信号")
+        print("[collector_main] 收到取消信号")
     finally:
-        await writer.stop()
-        print("[INFO] Rabbit Hunter Collector 已停止")
+        try:
+            await writer.stop()
+        except Exception:
+            pass
+        print("[collector_main] V5 Collector 已停止")
+
+
+def _setup_shutdown() -> None:
+    """注册 SIGTERM/SIGINT — Docker stop 时优雅退出。"""
+    loop = asyncio.get_event_loop()
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        try:
+            loop.add_signal_handler(sig, lambda: loop.stop())
+        except (NotImplementedError, RuntimeError):
+            # Windows / 已注册 — 忽略
+            pass
 
 
 if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        print("\n[INFO] 用户中断，退出")
+        print("\n[collector_main] 用户中断,退出")

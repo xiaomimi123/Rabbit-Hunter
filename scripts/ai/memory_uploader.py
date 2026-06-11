@@ -45,7 +45,8 @@ def log_trade_result(
 ) -> None:
     """Append one completed trade to the local JSONL log.
 
-    Call this from v43_position_manager.close_position() after the trade closes.
+    Call this from V5 PositionMonitor / PaperPositionManager close_position()
+    after the trade closes.
     """
     TRADE_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
 
