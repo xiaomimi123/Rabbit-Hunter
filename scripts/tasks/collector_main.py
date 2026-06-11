@@ -171,7 +171,7 @@ async def _healthcheck_loop(db_path: str, interval_s: int = 60):
 
 async def main() -> None:
     from scripts.config import get_config
-    from scripts.local_db import get_local_db
+    from scripts.local_db import get_local_db, init_local_db
     from scripts.tasks.scanner import MarketScanner
     from scripts.tasks.deep_collector import DeepCollector
     from scripts.tasks.scorer import V5Scorer
@@ -197,7 +197,9 @@ async def main() -> None:
 
     # 初始化本地 SQLite(创建表 + 迁移)
     _ = get_local_db()
-    print("[collector_main] 本地 SQLite 数据库已就绪")
+    # V5 schema 升级:DROP V43/V44 + CREATE V5 表 + ALTER paper_trades 加 V5 列
+    init_local_db(db_path)
+    print("[collector_main] 本地 SQLite 数据库已就绪(V5 schema 已迁移)")
 
     ai = await _init_ai()
 

@@ -263,7 +263,7 @@ class DeepCollector:
         threshold = float(os.environ.get("V5_DELTA_15M_THRESHOLD", "0.03"))
         try:
             klines_15m = await asyncio.to_thread(_ee_fetch_klines, symbol, "15m", 50)
-            klines_4h = await asyncio.to_thread(_ee_fetch_klines, symbol, "4h", 30)
+            klines_4h = await asyncio.to_thread(_ee_fetch_klines, symbol, "4h", 50)
         except Exception as e:
             print(f"[DeepCollector] {symbol} K 线拉取失败: {type(e).__name__}: {e}")
             return
@@ -325,27 +325,17 @@ class DeepCollector:
                     symbols = [m[0] for m in self._current_movers]
                     print(f"[DeepCollector] 开始深度采集：{symbols}")
 
-                    tasks = [_collect_one(sym, self._sem) for sym in symbols]
-                    results = await asyncio.gather(*tasks, return_exceptions=True)
+                    # V5 path:_enrich_symbol 拉 15m+4h K 线,过滤 |ΔP|>3%,
+                    # 构造 EnrichedItem 推入 enriched_queue。这条路径推的是
+                    # EnrichedItem 对象(不是 V4.3 dict),V5Scorer 直接消费。
+                    # 内部 try/except 包裹,enriched_count 在 _enrich_symbol 里
+                    # 自己 print "→ 入 enriched"。
+                    queue_size_before = self.enriched_queue.qsize()
+                    tasks = [self._enrich_symbol(sym, {}) for sym in symbols]
+                    await asyncio.gather(*tasks, return_exceptions=True)
+                    enriched_count = self.enriched_queue.qsize() - queue_size_before
 
-                    enriched_count = 0
-                    for result in results:
-                        if isinstance(result, Exception):
-                            print(f"[DeepCollector] 深度采集异常: {result}")
-                            continue
-                        if result is None:
-                            continue
-                        _sym, metrics = result
-                        try:
-                            self.enriched_queue.put_nowait(metrics)
-                            enriched_count += 1
-                        except asyncio.QueueFull:
-                            print(
-                                f"[CRITICAL] enriched_queue 已满，丢弃 {_sym} 的深度数据"
-                                f"（队列大小: {self.enriched_queue.qsize()}）"
-                            )
-
-                    print(f"[DeepCollector] 深度采集完成：{enriched_count}/{len(symbols)} 个")
+                    print(f"[DeepCollector] 深度采集完成：{enriched_count}/{len(symbols)} 个进入 enriched_queue")
 
             except asyncio.CancelledError:
                 print("[DeepCollector] 收到取消信号，退出")

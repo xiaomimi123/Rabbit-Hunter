@@ -108,11 +108,24 @@ async def process_enriched_v5(*, enriched: EnrichedItem, ai, paper_pm, live_pm,
         risk_pct=RISK_PER_TRADE, leverage=LEVERAGE,
     )
 
-    ai_result = await ai.decide(enriched, indicators, decision, risk)
-    if not ai_result.execute:
-        _write_trade_score(db_path, enriched, indicators, decision,
-                          ai=ai_result, risk=risk, block_reason="AI_REJECTED")
-        return
+    # ai=None 兼容(OPENAI_AI_ENABLED=false 或 AI 初始化失败):
+    # SHADOW 模式下走纯规则引擎,直接构造一个 pass-through AIResult;
+    # LIVE 模式 fail-closed 拒绝,理由清晰可追溯。
+    if ai is None:
+        if mode == "SHADOW":
+            ai_result = AIResult(execute=True, sl_multiplier=1.0, tp_multiplier=1.0,
+                                  size_multiplier=1.0, confidence=0.5,
+                                  reasoning="AI disabled — SHADOW pass-through")
+        else:
+            _write_trade_score(db_path, enriched, indicators, decision,
+                              block_reason="AI_UNAVAILABLE_LIVE_FAIL_CLOSED")
+            return
+    else:
+        ai_result = await ai.decide(enriched, indicators, decision, risk)
+        if not ai_result.execute:
+            _write_trade_score(db_path, enriched, indicators, decision,
+                              ai=ai_result, risk=risk, block_reason="AI_REJECTED")
+            return
 
     try:
         if mode == "SHADOW":
