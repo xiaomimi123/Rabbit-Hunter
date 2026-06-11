@@ -27,163 +27,176 @@ _DB_PATH = _DB_DIR / "rabbit_hunter.db"
 # ─── 数据保留天数 ──────────────────────────────────────────────────────────────
 
 RETENTION_DAYS = {
-    "trade_scores_v43": 30,
-    "market_snapshot": 7,
+    "trade_scores_v5": 30,
     "paper_trades": 90,
     "ai_training_data": 30,
-    # positions_v43: OPEN 永久保留，CLOSED 保留 90 天（见 prune_old_data）
+    # positions_v5: OPEN 永久保留，CLOSED 保留 90 天（见 prune_old_data）
 }
 
 # ─── 建表 SQL ─────────────────────────────────────────────────────────────────
 
-_SCHEMA = """
-PRAGMA journal_mode=WAL;
-PRAGMA synchronous=NORMAL;
-
--- v45: trade_scores_v43 是 append-only 时间序列 — symbol 不再 UNIQUE
--- （之前 UNIQUE + INSERT OR IGNORE = 每个 symbol 只保留首条评分，后续全丢）
-CREATE TABLE IF NOT EXISTS trade_scores_v43 (
-    id                       INTEGER PRIMARY KEY AUTOINCREMENT,
-    symbol                   TEXT    NOT NULL,
-    final_score              REAL,
-    structure_score          REAL,
-    volatility_score         REAL,
-    sentiment_score          REAL,
-    manipulation_score       REAL,
-    phase                    TEXT,
-    side                     TEXT,
-    strategy_id              TEXT,
-    should_trade             INTEGER DEFAULT 1,
-    block_reason             TEXT,
-    confidence               REAL,
-    position_size_multiplier REAL,
-    features                 TEXT,
-    decision_policy          TEXT,
-    reason                   TEXT,
-    ai_reasoning             TEXT,
-    ai_sl_multiplier         REAL,
-    ai_tp_multiplier         REAL,
-    price                    REAL,
-    created_at               TEXT,
-    updated_at               TEXT
-);
--- 加索引以补偿失去 UNIQUE 后查询变慢
-CREATE INDEX IF NOT EXISTS idx_trade_scores_v43_symbol     ON trade_scores_v43(symbol);
-CREATE INDEX IF NOT EXISTS idx_trade_scores_v43_created_at ON trade_scores_v43(created_at);
-
--- v45: ai_training_data — scorer 的 shadow-mode 时间序列（之前根本没建表，每次写都静默失败）
-CREATE TABLE IF NOT EXISTS ai_training_data (
-    id                       INTEGER PRIMARY KEY AUTOINCREMENT,
-    symbol                   TEXT    NOT NULL,
-    price                    REAL,
-    funding_rate             REAL,
-    long_short_ratio         REAL,
-    oi_value                 REAL,
-    oi_change_1h             REAL,
-    price_change_1h          REAL,
-    is_oi_divergence         INTEGER,
-    market_regime            TEXT,
-    risk_reasons             TEXT,   -- JSON list
-    is_trade_allowed         INTEGER,
-    technical_signal         TEXT,
-    cvd_15m                  REAL,
-    cvd_1h                   REAL,
-    cvd_value                REAL,
-    market_phase             TEXT,
-    kill_zone_signal         TEXT,
-    exit_clarity_score       REAL,
-    confidence_level         INTEGER,
-    price_breakout           INTEGER,
-    time_stop_loss_triggered INTEGER,
-    profit_1h                REAL,
-    -- V4.1
-    atr_value                REAL,
-    atr_multiplier           REAL,
-    structure_gap            REAL,
-    structure_gap_method     TEXT,
-    phase_age_candles        INTEGER,
-    phase_age_percent        REAL,
-    v41_block_reason         TEXT,
-    chandelier_stop_price    REAL,
-    position_size_coin       REAL,
-    phase_4h                 TEXT,
-    phase_1h                 TEXT,
-    -- V4.2
-    is_golden_wick           INTEGER,
-    -- AI judges (DeepSeek / 本地 LR)
-    ai_score                 REAL,
-    ai_allowed               INTEGER,
-    ai_reason                TEXT,
-    ai_version               TEXT,
-    -- 训练标签
-    training_tag             TEXT,
-    created_at               TEXT,
-    updated_at               TEXT
-);
-CREATE INDEX IF NOT EXISTS idx_ai_training_data_symbol     ON ai_training_data(symbol);
-CREATE INDEX IF NOT EXISTS idx_ai_training_data_created_at ON ai_training_data(created_at);
-
-CREATE TABLE IF NOT EXISTS positions_v43 (
-    id               INTEGER PRIMARY KEY AUTOINCREMENT,
-    symbol           TEXT    NOT NULL,
-    side             TEXT,
-    entry_price      REAL,
-    current_price    REAL,
-    position_size    REAL,
-    leverage         INTEGER DEFAULT 10,
-    stop_price       REAL,
-    take_profit      REAL,
-    atr_k            REAL,
-    status           TEXT    DEFAULT 'OPEN',
-    phase            TEXT,
-    phase_age        INTEGER,
-    order_id         TEXT,
-    pnl              REAL,
-    pnl_percent      REAL,
-    exit_reason      TEXT,
-    closed_at        TEXT,
-    strategy_id      TEXT,
-    ai_confidence    REAL,
-    ai_sl_multiplier REAL,
-    ai_tp_multiplier REAL,
-    highest_price    REAL,    -- LONG 持仓的 trailing-stop 参考
-    lowest_price     REAL,    -- SHORT 持仓的 trailing-stop 参考（v45 新增）
-    created_at       TEXT,
-    updated_at       TEXT
-);
-
-CREATE TABLE IF NOT EXISTS ai_weights_v43 (
+# V5 新表 schema
+_V5_SCHEMA_SQL = """
+CREATE TABLE IF NOT EXISTS trade_scores_v5 (
     id                  INTEGER PRIMARY KEY AUTOINCREMENT,
-    weights             TEXT,
-    rationale           TEXT,
-    applied             INTEGER DEFAULT 0,
-    performance_context TEXT,
+    symbol              TEXT NOT NULL,
+    created_at          TEXT NOT NULL,
+    delta_15m_pct       REAL,
+    volume_24h_usdt     REAL,
+    rsi_15m             REAL,
+    macd_15m            REAL,
+    macd_signal_15m     REAL,
+    macd_hist_15m       REAL,
+    macd_hist_prev_15m  REAL,
+    rsi_4h              REAL,
+    macd_hist_4h        REAL,
+    atr_15m             REAL,
+    current_price       REAL,
+    should_trade        INTEGER DEFAULT 0,
+    side                TEXT,
+    reasoning           TEXT,
+    block_reason        TEXT,
+    ai_confidence       REAL,
+    ai_sl_multiplier    REAL,
+    ai_tp_multiplier    REAL,
+    ai_size_multiplier  REAL,
+    ai_reasoning        TEXT,
+    ai_decision_id      INTEGER,
+    entry_price         REAL,
+    sl_price            REAL,
+    tp_price            REAL,
+    size_usdt           REAL,
+    expected_rr         REAL,
+    executed            INTEGER DEFAULT 0,
+    position_id         INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_trade_scores_v5_symbol_created
+    ON trade_scores_v5(symbol, created_at);
+CREATE INDEX IF NOT EXISTS idx_trade_scores_v5_executed
+    ON trade_scores_v5(executed, created_at);
+CREATE INDEX IF NOT EXISTS idx_trade_scores_v5_should_trade
+    ON trade_scores_v5(should_trade, created_at);
+
+CREATE TABLE IF NOT EXISTS positions_v5 (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    symbol              TEXT NOT NULL,
+    side                TEXT NOT NULL,
+    status              TEXT NOT NULL,
+    entry_price         REAL,
+    entry_time          TEXT,
+    sl_price            REAL,
+    tp_price            REAL,
+    size_usdt           REAL,
+    leverage            INTEGER,
+    position_size_coins REAL,
+    target_close_at     TEXT,
+    extension_count     INTEGER DEFAULT 0,
+    entry_rsi_15m       REAL,
+    entry_macd_hist_15m REAL,
+    entry_rsi_4h        REAL,
+    entry_atr_15m       REAL,
+    exit_price          REAL,
+    exit_time           TEXT,
+    exit_reason         TEXT,
+    pnl_usdt            REAL,
+    pnl_pct             REAL,
+    holding_minutes     REAL,
+    source_score_id     INTEGER,
+    ai_decision_id      INTEGER,
     created_at          TEXT,
     updated_at          TEXT
 );
+CREATE INDEX IF NOT EXISTS idx_positions_v5_status_symbol
+    ON positions_v5(status, symbol);
+CREATE INDEX IF NOT EXISTS idx_positions_v5_status_entry
+    ON positions_v5(status, entry_time);
+CREATE INDEX IF NOT EXISTS idx_positions_v5_exit_time
+    ON positions_v5(exit_time);
 
--- v0.5.1：补齐 scorer._build_snapshot_row 真正写入的全部字段（之前缺 9 个
--- 导致 collector 每次 upsert market_snapshot 都 OperationalError → 全表 0 行）
-CREATE TABLE IF NOT EXISTS market_snapshot (
-    id                      INTEGER PRIMARY KEY AUTOINCREMENT,
-    symbol                  TEXT    NOT NULL UNIQUE,
-    price                   REAL,
-    funding_rate            REAL,
-    oi_value                REAL,
-    ls_ratio                REAL,
-    phase                   TEXT,
-    risk_score              REAL,
-    risk_level              TEXT,
-    regime                  TEXT,
-    ai_score                REAL,
-    ai_allowed              INTEGER,
-    ai_reason               TEXT,
-    ai_version              TEXT,
-    p3a_match_score         REAL,
-    ai_effective_threshold  REAL,
-    created_at              TEXT,
-    updated_at              TEXT
+CREATE TABLE IF NOT EXISTS ai_training_data (
+    id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at               TEXT,
+    symbol                   TEXT,
+    side                     TEXT,
+    entry_price              REAL,
+    entry_rsi_15m            REAL,
+    entry_macd_hist_15m      REAL,
+    entry_rsi_4h             REAL,
+    delta_15m_pct            REAL,
+    ai_reasoning             TEXT,
+    exit_price               REAL,
+    exit_reason              TEXT,
+    holding_minutes          REAL,
+    pnl_pct                  REAL,
+    outcome                  TEXT,
+    uploaded_to_vector_store INTEGER DEFAULT 0,
+    uploaded_at              TEXT
 );
+"""
+
+# V4.3/V4.4 废弃表列表 — init_local_db 会 DROP
+_V43_TABLES_TO_DROP = [
+    "trade_scores_v43",
+    "positions_v43",
+    "ai_weights_v43",
+    "market_snapshot",
+]
+
+# paper_trades V5 新增字段
+_PAPER_TRADES_V5_COLUMNS = [
+    ("target_close_at",     "TEXT"),
+    ("extension_count",     "INTEGER DEFAULT 0"),
+    ("entry_rsi_15m",       "REAL"),
+    ("entry_macd_hist_15m", "REAL"),
+    ("entry_rsi_4h",        "REAL"),
+    ("entry_atr_15m",       "REAL"),
+    ("ai_decision_id",      "INTEGER"),
+    ("source_score_id",     "INTEGER"),
+]
+
+# paper_trades 完整建表 SQL（供 init_local_db 在新 DB 上建表用）
+_PAPER_TRADES_CREATE_SQL = """
+CREATE TABLE IF NOT EXISTS paper_trades (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    symbol              TEXT    NOT NULL,
+    side                TEXT,                    -- LONG / SHORT
+    entry_price         REAL,
+    entry_time          TEXT,
+    current_price       REAL,                    -- 实时跟踪用
+    exit_price          REAL,
+    exit_time           TEXT,
+    exit_reason         TEXT,                    -- TP_HIT / SL_HIT / HORIZON_TIMEOUT / MANUAL
+    status              TEXT    DEFAULT 'OPEN',  -- OPEN / CLOSED
+    -- 风险参数（开仓时锁定）
+    stop_loss           REAL,
+    take_profit         REAL,
+    atr_k               REAL,
+    position_size_usdt  REAL,                    -- 虚拟仓位价值
+    leverage            INTEGER DEFAULT 10,
+    horizon_hours       INTEGER DEFAULT 24,
+    -- 来源信号
+    strategy_id         TEXT,
+    signal_score        REAL,
+    source_score_id     INTEGER,                 -- 关联 trade_scores_v5.id
+    -- AI 决策快照
+    ai_confidence       REAL,
+    ai_sl_multiplier    REAL,
+    ai_tp_multiplier    REAL,
+    ai_reason           TEXT,
+    reason              TEXT,                    -- 总体说明
+    -- 结算
+    pnl                 REAL,                    -- 虚拟 PnL（USDT）
+    pnl_percent         REAL,                    -- 虚拟收益率
+    holding_hours       REAL,
+    created_at          TEXT,
+    updated_at          TEXT
+);
+"""
+
+# 沿用旧连接初始化的 _SCHEMA（保留 PRAGMA + paper_trades + system_settings 供 get_connection 用）
+_SCHEMA = """
+PRAGMA journal_mode=WAL;
+PRAGMA synchronous=NORMAL;
 
 -- v0.5.4：paper_trades 大幅扩展 — 之前 9 列只够离线回测；现在要支持在线 SHADOW
 -- 模式实时开虚拟仓 + 跟踪 SL/TP 触发 + 结算
@@ -208,7 +221,7 @@ CREATE TABLE IF NOT EXISTS paper_trades (
     -- 来源信号
     strategy_id         TEXT,
     signal_score        REAL,
-    source_score_id     INTEGER,                 -- 关联 trade_scores_v43.id
+    source_score_id     INTEGER,                 -- 关联 trade_scores_v5.id
     -- AI 决策快照
     ai_confidence       REAL,
     ai_sl_multiplier    REAL,
@@ -408,6 +421,52 @@ def _rebuild_trade_scores_v43_drop_unique(conn: sqlite3.Connection) -> None:
     except Exception as e:
         conn.rollback()
         print(f"[LocalDB] trade_scores_v43 重建失败已回滚: {e}")
+
+
+def init_local_db(db_path: str = "data/rabbit_hunter.db") -> None:
+    """初始化 V5 schema。
+    1. 检测旧 V43 表 → DROP
+    2. 建 V5 表
+    3. paper_trades 加 V5 字段
+    4. ai_training_data 老 schema 不兼容 → 重建
+    """
+    import os
+    os.makedirs(os.path.dirname(db_path) or ".", exist_ok=True)
+    conn = sqlite3.connect(db_path)
+    try:
+        # 1. DROP 旧 V43/V44 表
+        for table in _V43_TABLES_TO_DROP:
+            conn.execute(f"DROP TABLE IF EXISTS {table}")
+        # ai_training_data 老 schema 不兼容，DROP 重建
+        conn.execute("DROP TABLE IF EXISTS ai_training_data")
+
+        # 2. 建 V5 表
+        conn.executescript(_V5_SCHEMA_SQL)
+
+        # 3. paper_trades 表：旧表存在则 ALTER，不存在则 CREATE
+        existing = {row[1] for row in conn.execute("PRAGMA table_info(paper_trades)")}
+        if not existing:
+            conn.executescript(_PAPER_TRADES_CREATE_SQL)
+            existing = {row[1] for row in conn.execute("PRAGMA table_info(paper_trades)")}
+        for col, col_type in _PAPER_TRADES_V5_COLUMNS:
+            if col not in existing:
+                conn.execute(f"ALTER TABLE paper_trades ADD COLUMN {col} {col_type}")
+
+        # 4. system_settings 清掉 V43/V44 key（表存在时才清）
+        ss_exists = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='system_settings'"
+        ).fetchone()
+        if ss_exists:
+            conn.execute("""
+                DELETE FROM system_settings
+                WHERE key LIKE 'ai_weights_v43%'
+                   OR key LIKE 'v44_%'
+                   OR key LIKE 'v43_%'
+            """)
+
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def get_connection() -> sqlite3.Connection:
