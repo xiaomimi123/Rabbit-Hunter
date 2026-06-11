@@ -1,9 +1,15 @@
 """
-Paper Position Manager (v0.5.4) — 在线影子交易（paper trading）
+Paper Position Manager (v5.0) — 在线影子交易（paper trading）
 
-与 V43PositionManager **同 surface**（open_position / update_position /
-close_position / get_position / load_open_positions），但**所有操作只写
-paper_trades 表，不调用 trader / broker**。
+V5 新签名：
+  open_position(*, enriched, indicators, decision, risk, ai) -> int  (返回 paper_trades.id)
+  extend_position(position_id, extra_minutes=15) -> None
+  close_position(position_id, *, exit_price, exit_reason) -> None
+  get_open_positions() -> list[dict]
+
+同时保留 V4.3 兼容方法供尚未迁移的调用方使用：
+  load_open_positions / get_position / get_position_api_safe /
+  check_exit_triggers / update_current_price / sync_positions
 
 SHADOW 模式下 scorer 检测到信号 → 调本 manager → 写虚拟仓位 →
 paper_monitor 异步任务 tick 当前价 → 触 SL/TP → 自动结算 PnL。
@@ -17,14 +23,21 @@ paper_monitor 异步任务 tick 当前价 → 触 SL/TP → 自动结算 PnL。
 from __future__ import annotations
 
 import os
-from datetime import datetime, timezone
+import sqlite3
+from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, Optional, List, Tuple
 
 # 与 V43PositionManager 同样的 chandelier 工具（计算 SL/TP）
 try:
     from v43_chandelier_stop import initialize_position
 except ImportError:
-    from scripts.v43_chandelier_stop import initialize_position  # type: ignore[import-not-found]
+    try:
+        from scripts.v43_chandelier_stop import initialize_position  # type: ignore[import-not-found]
+    except ImportError:
+        initialize_position = None  # type: ignore[assignment]
+
+
+SOFT_TARGET_MINUTES = 15
 
 
 def _utcnow() -> datetime:
@@ -36,19 +49,34 @@ def _utcnow_iso() -> str:
 
 
 class PaperPositionManager:
-    """与 V43PositionManager 同 surface 的虚拟仓位管理器。"""
+    """V5 虚拟仓位管理器。
 
-    def __init__(self, supabase_client=None):
+    构造函数接受 db_path（SQLite 直写，测试用）或 supabase_client（云端写入）。
+    两者可以共存：优先用 db_path，其次用 supabase。
+    """
+
+    def __init__(
+        self,
+        supabase_client=None,
+        db_path: Optional[str] = None,
+    ):
         self.supabase = supabase_client
-        # 与 V43PositionManager 不一样的是：不需要 trader，不需要 exchange
+        self.db_path = db_path or "data/rabbit_hunter.db"
+        # V4.3 compat cache
         self.positions_cache: Dict[str, Dict[str, Any]] = {}
         self.last_sync_time = _utcnow()
+
+    # ─────────────────────────────────────────────────────────────────
+    # 内部 SQLite helpers
+    # ─────────────────────────────────────────────────────────────────
+
+    def _conn(self) -> sqlite3.Connection:
+        return sqlite3.connect(self.db_path)
 
     # ─── v0.5.5: leverage 从 active exchange 配置拉（DB > env > 10）─────────────
 
     def _resolve_leverage(self) -> int:
-        """读 active exchange 的 leverage（DB > env > default 10），
-        避免 BINANCE_LEVERAGE env 抢占 OKX 用户的 leverage。"""
+        """读 active exchange 的 leverage（DB > env > default 10）。"""
         try:
             try:
                 from exchange_config_manager import get_exchange_config_manager  # type: ignore[import-not-found]
@@ -63,7 +91,6 @@ class PaperPositionManager:
         except Exception:
             pass
 
-        # env fallback — 按 active exchange 选对的 env，不要无脑取 BINANCE_*
         env_active = (os.environ.get("EXCHANGE", "okx") or "okx").lower()
         env_key = "OKX_LEVERAGE" if env_active == "okx" else "BINANCE_LEVERAGE"
         env_val = (os.environ.get(env_key) or "").strip()
@@ -75,11 +102,158 @@ class PaperPositionManager:
         return 10
 
     # ─────────────────────────────────────────────────────────────────
-    # 读
+    # V5 核心接口
+    # ─────────────────────────────────────────────────────────────────
+
+    def open_position(self, *, enriched, indicators, decision, risk, ai) -> int:
+        """SHADOW 开仓 — 返回 paper_trades.id。
+
+        参数均为 v5_types 数据类：
+          enriched:   EnrichedItem
+          indicators: Indicators
+          decision:   Decision
+          risk:       RiskPlan
+          ai:         AIResult
+        """
+        sl_dist = abs(risk.entry_price - risk.sl_price) * ai.sl_multiplier
+        tp_dist = abs(risk.tp_price - risk.entry_price) * ai.tp_multiplier
+        if decision.side == "LONG":
+            sl_price = risk.entry_price - sl_dist
+            tp_price = risk.entry_price + tp_dist
+        else:
+            sl_price = risk.entry_price + sl_dist
+            tp_price = risk.entry_price - tp_dist
+        size_usdt = max(1.0, risk.size_usdt * ai.size_multiplier)
+
+        entry_time = _utcnow()
+        target_close_at = entry_time + timedelta(minutes=SOFT_TARGET_MINUTES)
+
+        conn = self._conn()
+        try:
+            cur = conn.execute("""
+                INSERT INTO paper_trades (
+                    symbol, side, entry_price, status, strategy_id,
+                    created_at, entry_time, target_close_at, extension_count,
+                    current_price, stop_loss, take_profit, position_size_usdt,
+                    leverage, ai_confidence, ai_sl_multiplier, ai_tp_multiplier,
+                    ai_reason, entry_rsi_15m, entry_macd_hist_15m, entry_rsi_4h,
+                    entry_atr_15m, signal_score
+                ) VALUES (?, ?, ?, 'OPEN', 'v5_rsi_macd',
+                          ?, ?, ?, 0,
+                          ?, ?, ?, ?,
+                          ?, ?, ?, ?,
+                          ?, ?, ?, ?,
+                          ?, ?)
+            """, (
+                enriched.symbol, decision.side, risk.entry_price,
+                entry_time.isoformat(), entry_time.isoformat(), target_close_at.isoformat(),
+                risk.entry_price, sl_price, tp_price, size_usdt,
+                risk.leverage, ai.confidence, ai.sl_multiplier, ai.tp_multiplier,
+                ai.reasoning, indicators.rsi_15m, indicators.macd_hist_15m,
+                indicators.rsi_4h, indicators.atr_15m,
+                risk.expected_rr,
+            ))
+            pid = cur.lastrowid
+            conn.commit()
+            return pid
+        finally:
+            conn.close()
+
+    def extend_position(self, position_id: int, extra_minutes: int = 15) -> None:
+        """AI 决定延期持仓：target_close_at += extra_minutes，extension_count++。"""
+        conn = self._conn()
+        try:
+            row = conn.execute(
+                "SELECT target_close_at, extension_count FROM paper_trades WHERE id=?",
+                (position_id,)).fetchone()
+            if not row:
+                return
+            current_target = datetime.fromisoformat(row[0])
+            new_target = current_target + timedelta(minutes=extra_minutes)
+            new_count = (row[1] or 0) + 1
+            conn.execute(
+                "UPDATE paper_trades SET target_close_at=?, extension_count=?, "
+                "updated_at=? WHERE id=?",
+                (new_target.isoformat(), new_count, _utcnow().isoformat(), position_id))
+            conn.commit()
+        finally:
+            conn.close()
+
+    def close_position(
+        self,
+        position_id: Optional[int] = None,
+        *,
+        exit_price: float,
+        exit_reason: str,
+        # V4.3 compat kwargs — ignored when position_id is provided
+        symbol: Optional[str] = None,
+        write_queue=None,
+    ) -> Optional[Dict[str, Any]]:
+        """결仓。
+
+        V5 签名：close_position(position_id, *, exit_price, exit_reason)
+        V4.3 compat：close_position(symbol=..., exit_price=..., exit_reason=...)
+        """
+        # ── V4.3 compat path (symbol-based, supabase) ──────────────────────
+        if position_id is None:
+            if symbol is None:
+                return None
+            return self._close_position_v43(
+                symbol=symbol, exit_price=exit_price,
+                exit_reason=exit_reason, write_queue=write_queue,
+            )
+
+        # ── V5 path (id-based, SQLite) ──────────────────────────────────────
+        conn = self._conn()
+        try:
+            row = conn.execute(
+                "SELECT side, entry_price, position_size_usdt, leverage, entry_time "
+                "FROM paper_trades WHERE id=?", (position_id,)).fetchone()
+            if not row:
+                return None
+            side, entry_price, size_usdt, leverage, entry_time_str = row
+
+            entry_time = datetime.fromisoformat(entry_time_str)
+            exit_time = _utcnow()
+            holding_minutes = (exit_time - entry_time).total_seconds() / 60.0
+            notional = (size_usdt or 0) * (leverage or 1)
+            if side == "LONG":
+                pnl_pct = (exit_price - entry_price) / entry_price
+            else:
+                pnl_pct = (entry_price - exit_price) / entry_price
+            pnl_usdt = notional * pnl_pct
+
+            conn.execute(
+                "UPDATE paper_trades SET status='CLOSED', exit_price=?, exit_time=?, "
+                "exit_reason=?, pnl=?, pnl_percent=?, holding_hours=?, updated_at=? "
+                "WHERE id=?",
+                (exit_price, exit_time.isoformat(), exit_reason,
+                 pnl_usdt, pnl_pct * 100, holding_minutes / 60.0,
+                 exit_time.isoformat(), position_id))
+            conn.commit()
+            return {"id": position_id, "pnl": pnl_usdt}
+        finally:
+            conn.close()
+
+    def get_open_positions(self) -> list:
+        """返回所有 OPEN 状态的虚拟仓位（SQLite，V5 path）。"""
+        conn = self._conn()
+        try:
+            cur = conn.execute(
+                "SELECT id, symbol, side, entry_price, target_close_at, "
+                "extension_count, entry_time, stop_loss, take_profit "
+                "FROM paper_trades WHERE status='OPEN'")
+            cols = [c[0] for c in cur.description]
+            return [dict(zip(cols, row)) for row in cur.fetchall()]
+        finally:
+            conn.close()
+
+    # ─────────────────────────────────────────────────────────────────
+    # V4.3 兼容方法（供未迁移调用方使用）
     # ─────────────────────────────────────────────────────────────────
 
     def load_open_positions(self) -> Dict[str, Dict[str, Any]]:
-        """加载所有 OPEN 状态的虚拟持仓。"""
+        """加载所有 OPEN 状态的虚拟持仓（supabase path）。"""
         if not self.supabase:
             return {}
         try:
@@ -122,143 +296,6 @@ class PaperPositionManager:
             return None
         except Exception:
             return None
-
-    # ─────────────────────────────────────────────────────────────────
-    # 开仓
-    # ─────────────────────────────────────────────────────────────────
-
-    def open_position(
-        self,
-        symbol: str,
-        side: str,                       # LONG / SHORT
-        entry_price: float,
-        features: Dict[str, Any],
-        decision_result: Dict[str, Any],
-        account_balance: float,
-        atr_value: float,
-        write_queue=None,
-        signal_score: Optional[float] = None,
-        source_score_id: Optional[int] = None,
-    ) -> Optional[Dict[str, Any]]:
-        """开虚拟仓位 — 与 V43PositionManager.open_position 接口一致。
-        不调 broker，只写 paper_trades。"""
-
-        # 幂等保护：同 symbol 不能有重叠 OPEN 虚拟仓位
-        existing = self.get_position_api_safe(symbol)
-        if existing:
-            print(f"[PaperPM] {symbol} 已有虚拟仓位（OPEN），跳过 (id={existing.get('id')})")
-            return None
-
-        # SHORT kill switch 仍然遵守（与 V43PositionManager 同步逻辑）
-        if side.upper() == "SHORT":
-            enable_short = os.environ.get("ENABLE_SHORT_TRADING", "false").lower() in ("1", "true")
-            if not enable_short:
-                print(f"[PaperPM SKIP] {symbol} SHORT 被 kill switch 拦截")
-                return None
-
-        # ATR 校验
-        if not atr_value or atr_value <= 0:
-            fallback = features.get("atr") or features.get("atr_1h")
-            if fallback and float(fallback) > 0:
-                atr_value = float(fallback)
-            else:
-                print(f"[PaperPM] {symbol} ATR 无效，跳过")
-                return None
-
-        # 计算 SL/TP（重用 V43 的 chandelier 数学）
-        strategy_id = decision_result.get("strategy_id")
-        stop_loss_atr_multiplier = decision_result.get("stop_loss_atr_multiplier")
-        take_profit_atr_multiplier = decision_result.get("take_profit_atr_multiplier")
-
-        if stop_loss_atr_multiplier:
-            if side == "LONG":
-                stop_price = entry_price - (atr_value * stop_loss_atr_multiplier)
-            else:
-                stop_price = entry_price + (atr_value * stop_loss_atr_multiplier)
-            atr_k = stop_loss_atr_multiplier
-        else:
-            init = initialize_position(features=features, price=entry_price, atr=atr_value, side=side)
-            stop_price = init.get("stop_price")
-            atr_k = init.get("atr_k") or init.get("k")
-
-        if stop_price is None:
-            print(f"[PaperPM] {symbol} stop_price 计算失败")
-            return None
-
-        # TP 计算
-        take_profit = None
-        if take_profit_atr_multiplier and atr_value > 0:
-            if side == "LONG":
-                take_profit = entry_price + (atr_value * float(take_profit_atr_multiplier))
-            else:
-                take_profit = entry_price - (atr_value * float(take_profit_atr_multiplier))
-        else:
-            # 默认 3x ATR
-            if side == "LONG":
-                take_profit = entry_price + (atr_value * 3.0)
-            else:
-                take_profit = entry_price - (atr_value * 3.0)
-
-        # 仓位价值（USDT，受 v44 grayscale 影响）
-        position_multiplier = decision_result.get("position_size_multiplier", 1.0)
-        v44_grayscale = float(os.environ.get("V44_POSITION_SIZE_MULTIPLIER", "1.0"))
-        effective_multiplier = position_multiplier * v44_grayscale
-        risk_per_trade = float(os.environ.get("V43_RISK_PER_TRADE", "0.015"))
-        effective_risk = risk_per_trade * effective_multiplier
-        position_size_usdt = account_balance * effective_risk
-
-        # v0.5.5: leverage 走 active exchange 的实际配置，不再让 BINANCE env 抢占 OKX
-        leverage = self._resolve_leverage()
-        horizon_hours = int(os.environ.get("PAPER_HORIZON_HOURS", "24"))
-
-        now = _utcnow_iso()
-        row = {
-            "symbol":             symbol,
-            "side":               side,
-            "entry_price":        entry_price,
-            "entry_time":         now,
-            "current_price":      entry_price,
-            "stop_loss":          stop_price,
-            "take_profit":        take_profit,
-            "atr_k":              atr_k,
-            "position_size_usdt": position_size_usdt,
-            "leverage":           leverage,
-            "horizon_hours":      horizon_hours,
-            "status":             "OPEN",
-            "strategy_id":        strategy_id,
-            "signal_score":       signal_score,
-            "source_score_id":    source_score_id,
-            "ai_confidence":      decision_result.get("ai_confidence"),
-            "ai_sl_multiplier":   stop_loss_atr_multiplier,
-            "ai_tp_multiplier":   take_profit_atr_multiplier,
-            "ai_reason":          decision_result.get("ai_reasoning"),
-            "reason":             decision_result.get("reason"),
-            "created_at":         now,
-            "updated_at":         now,
-        }
-
-        # 写 DB
-        if write_queue:
-            write_queue.put_nowait({"op": "insert", "table": "paper_trades", "row": row})
-        elif self.supabase:
-            try:
-                self.supabase.table("paper_trades").insert(row).execute()
-            except Exception as e:
-                print(f"[PaperPM] 写 paper_trades 失败: {e}")
-                return None
-
-        self.positions_cache[symbol] = row
-        print(
-            f"[PaperPM OPEN] {symbol:12s} | "
-            f"strategy={strategy_id} | side={side} | "
-            f"entry={entry_price:.6g} | stop={stop_price:.6g} | tp={take_profit:.6g} | "
-            f"size={position_size_usdt:.2f} USDT  (虚拟，影子模式)"
-        )
-        return row
-
-    # ─────────────────────────────────────────────────────────────────
-    # update + close — 给 paper_monitor 调用
-    # ─────────────────────────────────────────────────────────────────
 
     def check_exit_triggers(
         self, position: Dict[str, Any], current_price: float,
@@ -304,7 +341,6 @@ class PaperPositionManager:
         trigger = self.check_exit_triggers(position, current_price)
 
         if trigger is None:
-            # 只更新 current_price，不触发
             if self.supabase and pid is not None:
                 try:
                     self.supabase.table("paper_trades").update(
@@ -315,17 +351,19 @@ class PaperPositionManager:
             position["current_price"] = current_price
             return None
 
-        # 触发了 — 结算
         exit_reason, exit_price = trigger
-        return self.close_position(symbol=symbol, exit_price=exit_price, exit_reason=exit_reason)
+        return self._close_position_v43(
+            symbol=symbol, exit_price=exit_price, exit_reason=exit_reason,
+        )
 
-    def close_position(
+    def _close_position_v43(
         self,
         symbol: str,
         exit_price: float,
         exit_reason: str,
         write_queue=None,
     ) -> Optional[Dict[str, Any]]:
+        """V4.3 symbol-based close (supabase path)。"""
         position = self.get_position(symbol)
         if not position:
             return None
@@ -338,14 +376,12 @@ class PaperPositionManager:
             print(f"[PaperPM] {symbol} 关闭失败：entry_price 或 size 为 0")
             return None
 
-        # 虚拟 PnL — 含杠杆
         if side == "LONG":
             pnl_percent = (exit_price - entry_price) / entry_price * 100.0
         else:
             pnl_percent = (entry_price - exit_price) / entry_price * 100.0
         pnl = position_size_usdt * leverage * (pnl_percent / 100.0)
 
-        # 持仓时长
         entry_ts = position.get("entry_time")
         holding_hours = 0.0
         try:
