@@ -291,6 +291,25 @@ class TradingAssistant:
         return args
 
     # ------------------------------------------------------------------
+    # Lightweight single-turn completion (no Assistant thread)
+    # ------------------------------------------------------------------
+
+    async def quick_yes_no(self, system: str, user: str) -> str:
+        """轻量 chat completion — 不用 Assistant thread,快得多。给续仓决策用。"""
+        if not self.client:
+            return "CLOSE"
+        resp = await asyncio.to_thread(
+            self.client.chat.completions.create,
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            max_tokens=10,
+        )
+        return resp.choices[0].message.content or ""
+
+    # ------------------------------------------------------------------
     # Cleanup
     # ------------------------------------------------------------------
 
