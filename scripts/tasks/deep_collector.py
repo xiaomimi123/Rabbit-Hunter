@@ -258,18 +258,23 @@ class DeepCollector:
         # Most-recent mover list (updated whenever a new one arrives)
         self._current_movers: list[tuple[str, float, str]] = []
 
-    async def _enrich_symbol(self, symbol: str, ticker: dict) -> None:
-        """V5 enrich path: pull 15m+4h klines, filter by |ΔP|>threshold, push EnrichedItem."""
+    async def _enrich_symbol(self, symbol: str, ticker: dict) -> bool:
+        """V5 enrich path: pull 15m+4h klines, filter by |ΔP|>threshold, push EnrichedItem.
+
+        Returns True 表示已成功推入 enriched_queue;False 表示因任何原因 drop
+        (K 线拉取失败 / |ΔP| 不达标 / EnrichedItem 构造失败 / 队列满)。
+        run() 用返回值做精确统计,避免 enriched_queue.qsize() 受消费者速度影响。
+        """
         threshold = float(os.environ.get("V5_DELTA_15M_THRESHOLD", "0.03"))
         try:
             klines_15m = await asyncio.to_thread(_ee_fetch_klines, symbol, "15m", 50)
             klines_4h = await asyncio.to_thread(_ee_fetch_klines, symbol, "4h", 50)
         except Exception as e:
             print(f"[DeepCollector] {symbol} K 线拉取失败: {type(e).__name__}: {e}")
-            return
+            return False
 
         if not passes_delta_filter(klines_15m, threshold):
-            return
+            return False
 
         delta = compute_delta_15m_pct(klines_15m)
         current_price = float(ticker.get("lastPrice") or (klines_15m[-1][4] if klines_15m else 0.0))
@@ -281,7 +286,7 @@ class DeepCollector:
                 from scripts.v5_types import EnrichedItem  # type: ignore[import-not-found]
         except Exception as e:
             print(f"[DeepCollector] v5_types import 失败: {e}")
-            return
+            return False
 
         item = EnrichedItem(
             symbol=symbol,
@@ -295,8 +300,10 @@ class DeepCollector:
         try:
             self.enriched_queue.put_nowait(item)
             print(f"[DeepCollector] {symbol} ΔP15m={delta*100:+.2f}% → 入 enriched")
+            return True
         except asyncio.QueueFull:
             print(f"[DeepCollector] {symbol} enriched_queue 满,drop")
+            return False
 
     async def run(self) -> None:
         """
@@ -328,12 +335,10 @@ class DeepCollector:
                     # V5 path:_enrich_symbol 拉 15m+4h K 线,过滤 |ΔP|>3%,
                     # 构造 EnrichedItem 推入 enriched_queue。这条路径推的是
                     # EnrichedItem 对象(不是 V4.3 dict),V5Scorer 直接消费。
-                    # 内部 try/except 包裹,enriched_count 在 _enrich_symbol 里
-                    # 自己 print "→ 入 enriched"。
-                    queue_size_before = self.enriched_queue.qsize()
+                    # _enrich_symbol 返回 True/False 表示是否推入队列。
                     tasks = [self._enrich_symbol(sym, {}) for sym in symbols]
-                    await asyncio.gather(*tasks, return_exceptions=True)
-                    enriched_count = self.enriched_queue.qsize() - queue_size_before
+                    results = await asyncio.gather(*tasks, return_exceptions=True)
+                    enriched_count = sum(1 for r in results if r is True)
 
                     print(f"[DeepCollector] 深度采集完成：{enriched_count}/{len(symbols)} 个进入 enriched_queue")
 

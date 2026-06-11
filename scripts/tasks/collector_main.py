@@ -123,13 +123,25 @@ async def _init_ai():
 
 def preflight_check(*, enable_auto_trading: bool,
                     binance_api_key: str, okx_api_key: str,
-                    openai_key: str, ai_enabled: bool) -> list:
-    """返回问题列表(空 = OK)。"""
+                    openai_key: str, ai_enabled: bool,
+                    deepseek_key: str = "", deepseek_enabled: bool = False) -> list:
+    """返回问题列表(空 = OK)。
+
+    AI 需求只要 OpenAI 或 DeepSeek 任一 provider 配齐就放行;两个都没配
+    且 ai_enabled=True(OPENAI_AI_ENABLED 真值)→ 报错。如果用户两个都关
+    (ai_enabled=False 且 deepseek_enabled=False)就允许启动跑纯规则引擎。
+    """
     issues = []
     if enable_auto_trading and not binance_api_key and not okx_api_key:
         issues.append("ENABLE_AUTO_TRADING=true 但 broker API key 都未设置")
-    if ai_enabled and not openai_key:
-        issues.append("OPENAI_AI_ENABLED=true 但 OPENAI_API_KEY 未设置")
+
+    deepseek_ready = deepseek_enabled and bool(deepseek_key)
+    openai_ready = ai_enabled and bool(openai_key)
+    if ai_enabled and not openai_ready and not deepseek_ready:
+        issues.append(
+            "OPENAI_AI_ENABLED=true 但既没 OPENAI_API_KEY,也没 "
+            "DEEPSEEK_ENABLED=true + DEEPSEEK_API_KEY,AI 层无法工作"
+        )
     return issues
 
 
@@ -187,6 +199,8 @@ async def main() -> None:
         okx_api_key=os.environ.get("OKX_API_KEY", ""),
         openai_key=os.environ.get("OPENAI_API_KEY", ""),
         ai_enabled=os.environ.get("OPENAI_AI_ENABLED", "false").lower() in ("1", "true"),
+        deepseek_key=os.environ.get("DEEPSEEK_API_KEY", ""),
+        deepseek_enabled=os.environ.get("DEEPSEEK_ENABLED", "false").lower() in ("1", "true"),
     )
     if issues:
         for issue in issues:

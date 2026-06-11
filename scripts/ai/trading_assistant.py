@@ -112,24 +112,57 @@ class TradingAssistant:
     """Wraps OpenAI Assistants API for per-signal trade decisions."""
 
     def __init__(self) -> None:
-        # v0.5.6: SettingsPage 存 ai_config 的 openai key 优先；env 兜底
+        # Provider 解析优先级:
+        #   1. DeepSeek(DEEPSEEK_ENABLED=true + DEEPSEEK_API_KEY 有值)
+        #      → AsyncOpenAI(base_url="https://api.deepseek.com/v1"),走 chat
+        #        completions(DeepSeek 不支持 Assistants API/Vector Store)
+        #   2. OpenAI(OPENAI_API_KEY 有值,通过 SettingsPage 或 env)
+        #      → 走 Assistants API + Vector Store(完整学习闭环)
+        #   3. 否则 client=None,scorer fail-closed
+        self.provider: Optional[str] = None
+        self.client = None
+        self.assistant_id: Optional[str] = None
+        self.vector_store_id: Optional[str] = None
+        self.chat_model: str = "gpt-4o"
+        self._ready = False
+
+        if self._try_init_deepseek():
+            return
+        self._try_init_openai()
+
+    def _try_init_deepseek(self) -> bool:
+        """检测 DeepSeek 配置 → 初始化兼容 client。返回 True 表示走 DeepSeek。"""
+        enabled = os.getenv("DEEPSEEK_ENABLED", "false").lower() in ("1", "true")
+        key = os.getenv("DEEPSEEK_API_KEY", "").strip()
+        if not (enabled and key):
+            return False
+        try:
+            import openai as _openai
+            self.client = _openai.AsyncOpenAI(
+                api_key=key,
+                base_url=os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1"),
+            )
+            self.provider = "deepseek"
+            self.chat_model = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+            self._ready = True  # DeepSeek 不用 Assistants,初始化即就绪
+            print(f"[AI] TradingAssistant 用 DeepSeek({self.chat_model})provider")
+            return True
+        except ImportError:
+            return False
+
+    def _try_init_openai(self) -> None:
         api_key = self._resolve_openai_key()
         if not api_key:
-            self.client = None
-            self.assistant_id = None
-            self.vector_store_id = None
-            self._ready = False
             return
-
         try:
             import openai as _openai
             self.client = _openai.AsyncOpenAI(api_key=api_key)
+            self.provider = "openai"
+            self.assistant_id = os.getenv("OPENAI_ASSISTANT_ID")
+            self.vector_store_id = os.getenv("OPENAI_VECTOR_STORE_ID")
+            self.chat_model = os.getenv("OPENAI_TRADING_MODEL", "gpt-4o")
         except ImportError:
             self.client = None
-
-        self.assistant_id: Optional[str] = os.getenv("OPENAI_ASSISTANT_ID")
-        self.vector_store_id: Optional[str] = os.getenv("OPENAI_VECTOR_STORE_ID")
-        self._ready = False
 
     @staticmethod
     def _resolve_openai_key() -> Optional[str]:
@@ -150,8 +183,14 @@ class TradingAssistant:
     # ------------------------------------------------------------------
 
     async def initialize(self) -> None:
-        """Load existing assistant or create a new one."""
+        """Load existing assistant or create a new one.
+
+        DeepSeek 等非 OpenAI provider 不用 Assistants API/Vector Store,
+        _ready 已在 __init__ 里设;此处直接 no-op。
+        """
         if not self.client:
+            return
+        if self.provider != "openai":
             return
         if self.assistant_id:
             self._ready = True
@@ -201,22 +240,32 @@ class TradingAssistant:
         decision,           # Decision
         risk,               # RiskPlan
     ) -> "AIResult":
-        """V5 二次审查 — 用 GPT-4o 看完上下文给最终参数。"""
+        """V5 二次审查 — 根据 provider 走 Assistants(OpenAI+assistant_id)
+        或 chat completions(DeepSeek / OpenAI 无 assistant_id)。
+        """
         from v5_types import AIResult
         from scripts.ai.prompt import V5_SYSTEM_PROMPT, build_v5_user_message
         from scripts.ai.guardrails import clamp_ai_result
 
-        if not self.client or not self.assistant_id:
+        if not self.client:
             return AIResult(execute=False, sl_multiplier=1.0, tp_multiplier=1.0,
                             size_multiplier=0.0, confidence=0.0,
                             reasoning="AI 未初始化")
 
         user_msg = build_v5_user_message(enriched, indicators, decision, risk)
+        timeout_s = float(os.getenv("AI_DECISION_TIMEOUT", "20"))
+
         try:
-            thread = await self._create_thread()
-            await self._add_message(thread.id, user_msg)
-            run = await self._run_with_timeout(thread.id, self.assistant_id, timeout_s=20)
-            raw_json = await self._extract_tool_output(thread.id, run)
+            if self.provider == "openai" and self.assistant_id:
+                raw_json = await asyncio.wait_for(
+                    self._decide_via_assistant(user_msg, timeout_s=timeout_s),
+                    timeout=timeout_s + 2.0,
+                )
+            else:
+                raw_json = await asyncio.wait_for(
+                    self._decide_via_chat(V5_SYSTEM_PROMPT, user_msg),
+                    timeout=timeout_s,
+                )
             result = AIResult(
                 execute=bool(raw_json.get("execute", False)),
                 sl_multiplier=float(raw_json.get("sl_multiplier", 1.0)),
@@ -229,11 +278,48 @@ class TradingAssistant:
         except asyncio.TimeoutError:
             return AIResult(execute=False, sl_multiplier=1.0, tp_multiplier=1.0,
                             size_multiplier=0.0, confidence=0.0,
-                            reasoning="AI 调用超时(>20s),fail-closed")
+                            reasoning=f"AI 调用超时(>{timeout_s:.0f}s),fail-closed")
         except Exception as e:
             return AIResult(execute=False, sl_multiplier=1.0, tp_multiplier=1.0,
                             size_multiplier=0.0, confidence=0.0,
                             reasoning=f"AI 调用异常 {type(e).__name__}: {e}")
+
+    # ------------------------------------------------------------------
+    # Provider-specific decision paths
+    # ------------------------------------------------------------------
+
+    async def _decide_via_assistant(self, user_msg: str, timeout_s: float = 20) -> dict:
+        """OpenAI Assistants 路径 — 有 Vector Store 学习闭环。"""
+        thread = await self._create_thread()
+        await self._add_message(thread.id, user_msg)
+        run = await self._run_with_timeout(thread.id, self.assistant_id, timeout_s=timeout_s)
+        return await self._extract_tool_output(thread.id, run)
+
+    async def _decide_via_chat(self, system_prompt: str, user_msg: str) -> dict:
+        """Chat completions 路径 — DeepSeek / OpenAI 通用,无 Vector Store。
+
+        在 system prompt 末尾追加严格 JSON 输出约束。开启 response_format=
+        json_object,模型不会输出 markdown 围栏或解释性文字。
+        """
+        json_constraint = (
+            "\n\nReturn ONLY a JSON object with exactly these keys: "
+            'execute (boolean), sl_multiplier (number 1.0-3.0), '
+            'tp_multiplier (number 1.5-5.0), size_multiplier (number 0.3-1.2), '
+            'confidence (number 0.0-1.0), reasoning (string ≤ 200 chars). '
+            "No markdown, no surrounding text."
+        )
+        resp = await self.client.chat.completions.create(
+            model=self.chat_model,
+            messages=[
+                {"role": "system", "content": system_prompt + json_constraint},
+                {"role": "user", "content": user_msg},
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.2,
+            max_tokens=300,
+        )
+        content = resp.choices[0].message.content or "{}"
+        return json.loads(content)
 
     # ------------------------------------------------------------------
     # V5 low-level helpers (used by decide above)
@@ -295,11 +381,17 @@ class TradingAssistant:
     # ------------------------------------------------------------------
 
     async def quick_yes_no(self, system: str, user: str) -> str:
-        """轻量 chat completion — 不用 Assistant thread,快得多。给续仓决策用。"""
+        """轻量 chat completion — 不用 Assistant thread,快得多。给续仓决策用。
+
+        模型用 self.chat_model:OpenAI 用户实际是 gpt-4o(可用 OPENAI_QUICK_MODEL
+        覆盖到 gpt-4o-mini 省钱),DeepSeek 用户用 deepseek-chat。
+        """
         if not self.client:
             return "CLOSE"
+        # OpenAI 用户想用更便宜的 quick 模型可以覆盖
+        model = os.getenv("OPENAI_QUICK_MODEL", self.chat_model) if self.provider == "openai" else self.chat_model
         resp = await self.client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=model,
             messages=[
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},
