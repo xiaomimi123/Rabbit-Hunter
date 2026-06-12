@@ -29,6 +29,7 @@ class V5PositionResponse(BaseModel):
     holding_minutes: Optional[float] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
+    strategy_id: Optional[str] = None
 
 
 class V5PositionsResponse(BaseModel):

@@ -49,5 +49,6 @@ async def get_paper_positions(status: str = Query("OPEN")):
             "holding_minutes": (r.get("holding_hours") or 0) * 60,
             "created_at": r.get("created_at"),
             "updated_at": r.get("updated_at"),
+            "strategy_id": r.get("strategy_id"),
         })
     return V5PositionsResponse(data=mapped)

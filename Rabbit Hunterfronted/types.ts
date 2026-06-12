@@ -74,6 +74,7 @@ export interface V5Position {
   holding_minutes: number | null;
   created_at: string | null;
   updated_at: string | null;
+  strategy_id: string | null;
 }
 
 export interface V5PositionsResponse {
