@@ -177,6 +177,7 @@ from api.routes.positions import router as positions_router
 from api.routes.scores import router as scores_router
 from api.routes import v5_strategy_config
 from api.routes import v5_settings
+from api.routes import v5_ai
 
 # TODO(v5): weights/system/market routers still use V4.3 DB schema (Supabase).
 # They are stubbed out here to keep the API importable while V5 migration proceeds.
@@ -189,6 +190,7 @@ app.include_router(positions_router, dependencies=_global_auth)
 app.include_router(scores_router,    dependencies=_global_auth)
 app.include_router(v5_strategy_config.router, dependencies=_global_auth)
 app.include_router(v5_settings.router,        dependencies=_global_auth)
+app.include_router(v5_ai.router,              dependencies=_global_auth)
 
 # V4.3 routes — disabled pending V5 rewire
 # app.include_router(weights_router,   dependencies=_global_auth)  # TODO(v5): rewire weights
