@@ -127,8 +127,26 @@ def verify_plan_b_backend(db_path: str = "data/rabbit_hunter.db") -> bool:
         conn.close()
 
 
+def verify_plan_b_frontend(repo_root: str = "/app") -> bool:
+    """Frontend build artifact check. Looks for dist/index.html after vite build."""
+    print("\n=== Plan B-2 前端 ===")
+    candidates = [
+        os.path.join(repo_root, "Rabbit Hunterfronted", "dist", "index.html"),
+        os.path.join(os.path.dirname(repo_root), "Rabbit Hunterfronted", "dist", "index.html"),
+        "/Users/lizhishaoniange/Documents/Rabbit-Hunter/Rabbit Hunterfronted/dist/index.html",
+    ]
+    for path in candidates:
+        if os.path.exists(path):
+            size = os.path.getsize(path)
+            print(f"frontend dist/index.html OK ({size} bytes) at {path}")
+            return True
+    print(f"frontend dist/index.html 不存在 — 跑过 vite build 了吗?候选: {candidates}")
+    return False
+
+
 if __name__ == "__main__":
     db = os.environ.get("DB_PATH", "data/rabbit_hunter.db")
     ok_a = verify(db)
     ok_b = verify_plan_b_backend(db)
-    sys.exit(0 if (ok_a and ok_b) else 1)
+    ok_c = verify_plan_b_frontend()
+    sys.exit(0 if (ok_a and ok_b and ok_c) else 1)
