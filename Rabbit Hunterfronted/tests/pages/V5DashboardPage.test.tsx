@@ -4,8 +4,8 @@ import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { V5DashboardPage } from '@/components/pages/V5DashboardPage';
 
-const FAKE_SIGNALS = { signals: [], count: 0 };
-const FAKE_POS = { positions: [], count: 0 };
+const FAKE_SIGNALS = { status: 'success', data: [] };
+const FAKE_POS = { status: 'success', data: [] };
 
 describe('V5DashboardPage', () => {
   beforeEach(() => {

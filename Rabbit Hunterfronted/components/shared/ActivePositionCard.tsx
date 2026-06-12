@@ -20,11 +20,11 @@ function holdingMinutes(entryTime: string, now = Date.now()): number {
 }
 
 export function ActivePositionCard({ position, onClose, onChart }: Props) {
-  const pnlPct = position.pnl_percent ?? 0;
+  const pnlPct = position.pnl_pct ?? 0;
   const pnlUsdt = position.pnl_usdt ?? 0;
   const isProfit = pnlPct > 0;
   const sideBadge = position.side === 'LONG' ? 'long' : 'short';
-  const mins = holdingMinutes(position.entry_time);
+  const mins = position.entry_time ? holdingMinutes(position.entry_time) : 0;
 
   return (
     <div className="rounded-md border border-white/10 bg-bg-surface p-4 space-y-3">
@@ -33,11 +33,6 @@ export function ActivePositionCard({ position, onClose, onChart }: Props) {
           <div className="text-base font-medium text-white">{position.symbol}</div>
           <Badge variant={sideBadge}>{position.side}</Badge>
           <span className="text-xs text-white/40 font-mono">×{position.leverage}</span>
-          {position.strategy_id && (
-            <Badge variant="neutral">
-              {position.strategy_id === 'v5_manual' ? '手动' : '自动'}
-            </Badge>
-          )}
         </div>
         <div className="flex gap-2">
           <button
@@ -57,11 +52,10 @@ export function ActivePositionCard({ position, onClose, onChart }: Props) {
         </div>
       </div>
 
-      <div className="grid grid-cols-4 gap-3 font-mono text-sm">
+      <div className="grid grid-cols-3 gap-3 font-mono text-sm">
         <div><div className="text-xs text-white/40">入场</div><div className="text-white">{fmtPrice(position.entry_price)}</div></div>
-        <div><div className="text-xs text-white/40">当前</div><div className="text-white">{fmtPrice(position.current_price)}</div></div>
-        <div><div className="text-xs text-white/40">SL</div><div className="text-accent-short">{fmtPrice(position.stop_loss)}</div></div>
-        <div><div className="text-xs text-white/40">TP</div><div className="text-accent-long">{fmtPrice(position.take_profit)}</div></div>
+        <div><div className="text-xs text-white/40">SL</div><div className="text-accent-short">{fmtPrice(position.sl_price)}</div></div>
+        <div><div className="text-xs text-white/40">TP</div><div className="text-accent-long">{fmtPrice(position.tp_price)}</div></div>
       </div>
 
       <div className="flex items-center justify-between text-sm">
@@ -72,12 +66,6 @@ export function ActivePositionCard({ position, onClose, onChart }: Props) {
           持仓 {mins}min · 续仓 {position.extension_count ?? 0}/3
         </div>
       </div>
-
-      {position.ai_reason && (
-        <div className="text-xs text-white/50">
-          AI: {position.ai_reason.slice(0, 100)}{position.ai_reason.length > 100 ? '…' : ''}
-        </div>
-      )}
     </div>
   );
 }

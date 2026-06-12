@@ -16,7 +16,7 @@ describe('useV5Signals', () => {
 
   it('fetches /api/v5/signals?limit=50 by default', async () => {
     (fetch as any).mockResolvedValueOnce(
-      new Response(JSON.stringify({ signals: [], count: 0 }), { status: 200 })
+      new Response(JSON.stringify({ status: 'success', data: [] }), { status: 200 })
     );
     const { wrapper } = makeWrapper();
     const { result } = renderHook(() => useV5Signals(50), { wrapper });
@@ -26,7 +26,7 @@ describe('useV5Signals', () => {
 
   it('passes side filter through', async () => {
     (fetch as any).mockResolvedValueOnce(
-      new Response(JSON.stringify({ signals: [], count: 0 }), { status: 200 })
+      new Response(JSON.stringify({ status: 'success', data: [] }), { status: 200 })
     );
     const { wrapper } = makeWrapper();
     renderHook(() => useV5Signals(50, { side: 'SHORT' }), { wrapper });

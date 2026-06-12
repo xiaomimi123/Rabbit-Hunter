@@ -39,7 +39,7 @@ export function V5ActivePositionsPage() {
               key={p.id}
               position={p}
               onClose={() => setConfirm(p)}
-              onChart={() => navigate(`/v5/chart/${p.symbol.replace('/', '_')}`)}
+              onChart={() => navigate(`/v5/chart/${p.symbol}`)}
             />
           ))}
           {total < MAX_SLOTS && (
@@ -58,10 +58,10 @@ export function V5ActivePositionsPage() {
         {confirm && (
           <div className="space-y-3 text-sm">
             <div>
-              {confirm.symbol} · {confirm.side} · 入场 {confirm.entry_price.toFixed(4)} · 当前 {confirm.current_price?.toFixed(4) ?? '—'}
+              {confirm.symbol} · {confirm.side} · 入场 {confirm.entry_price?.toFixed(4) ?? '—'}
             </div>
             <div className="text-white/60">
-              当前 PnL: {confirm.pnl_percent?.toFixed(2)}% / {confirm.pnl_usdt?.toFixed(2)} USDT
+              当前 PnL: {confirm.pnl_pct?.toFixed(2)}% / {confirm.pnl_usdt?.toFixed(2)} USDT
             </div>
             <div className="flex justify-end gap-2">
               <button type="button" onClick={() => setConfirm(null)} className="rounded-sm border border-white/15 px-3 py-1 text-xs">取消</button>
@@ -72,7 +72,7 @@ export function V5ActivePositionsPage() {
                   await close.mutateAsync({
                     id: confirm.id,
                     body: {
-                      exit_price: confirm.current_price ?? confirm.entry_price,
+                      exit_price: confirm.entry_price ?? 0,
                       exit_reason: 'MANUAL_USER',
                     },
                   });

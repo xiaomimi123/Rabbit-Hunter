@@ -24,7 +24,7 @@ export interface V5Signal {
   macd_hist_4h: number | null;
   atr_15m: number;
   current_price: number;
-  should_trade: boolean;
+  should_trade: number;   // 0 | 1
   side: Side | null;
   reasoning: string;
   block_reason: string | null;
@@ -38,13 +38,13 @@ export interface V5Signal {
   tp_price: number | null;
   size_usdt: number | null;
   expected_rr: number | null;
-  executed: boolean;
+  executed: number;       // 0 | 1
   position_id: number | null;
 }
 
 export interface V5SignalsResponse {
-  signals: V5Signal[];
-  count: number;
+  status: string;
+  data: V5Signal[];
 }
 
 // ── Positions ──
@@ -53,29 +53,32 @@ export interface V5Position {
   symbol: string;
   side: Side;
   status: 'OPEN' | 'CLOSED';
-  entry_price: number;
-  current_price: number | null;
-  stop_loss: number;
-  take_profit: number;
-  position_size_usdt: number;
-  leverage: number;
-  entry_time: string;
-  exit_time: string | null;
-  exit_price: number | null;
-  exit_reason: string | null;
-  pnl_percent: number | null;
-  pnl_usdt: number | null;
+  entry_price: number | null;
+  entry_time: string | null;
+  sl_price: number | null;
+  tp_price: number | null;
+  size_usdt: number | null;
+  position_size_coins: number | null;
+  leverage: number | null;
+  target_close_at: string | null;
+  extension_count: number;
   entry_rsi_15m: number | null;
   entry_macd_hist_15m: number | null;
-  extension_count: number | null;
-  target_close_at: string | null;
-  ai_reason: string | null;
-  strategy_id: string | null;
+  entry_rsi_4h: number | null;
+  entry_atr_15m: number | null;
+  exit_price: number | null;
+  exit_time: string | null;
+  exit_reason: string | null;
+  pnl_usdt: number | null;
+  pnl_pct: number | null;
+  holding_minutes: number | null;
+  created_at: string | null;
+  updated_at: string | null;
 }
 
 export interface V5PositionsResponse {
-  positions: V5Position[];
-  count: number;
+  status: string;
+  data: V5Position[];
 }
 
 // ── Strategy Config ──

@@ -18,8 +18,8 @@ const BLOCK_OPTIONS = [
 export function V5SignalHistoryPage() {
   const [block, setBlock] = useState('ALL');
   const q = useV5Signals(200, { blockReason: block === 'ALL' || block === 'EXECUTED' ? null : block });
-  const all = q.data?.signals ?? [];
-  const rows = block === 'EXECUTED' ? all.filter(s => s.executed) : all;
+  const all = q.data?.data ?? [];
+  const rows = block === 'EXECUTED' ? all.filter(s => s.executed === 1) : all;
 
   return (
     <div className="space-y-4">

@@ -11,7 +11,7 @@ import type { Interval } from '../../types';
 export function V5ChartPage() {
   const { symbol: encoded } = useParams();
   const [search] = useSearchParams();
-  const decoded = (encoded || '').replace('_', '/');
+  const decoded = (encoded || '');
   const interval = useUIStore(s => s.klineInterval);
   const setInterval = useUIStore(s => s.setKlineInterval);
 

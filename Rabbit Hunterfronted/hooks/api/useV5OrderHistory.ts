@@ -10,7 +10,7 @@ export function useV5OrderHistory(limit = 200) {
         apiGet<V5PositionsResponse>(`/api/v5/positions?status=CLOSED&limit=${limit}`),
         apiGet<V5PositionsResponse>(`/api/v5/paper-positions?status=CLOSED&limit=${limit}`),
       ]);
-      const merged = [...live.positions, ...paper.positions];
+      const merged = [...live.data, ...paper.data];
       merged.sort((a, b) => (b.exit_time || '').localeCompare(a.exit_time || ''));
       return merged.slice(0, limit);
     },

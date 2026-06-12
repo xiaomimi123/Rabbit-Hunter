@@ -28,21 +28,21 @@ export function useV5Dashboard() {
       const cutoff = Date.now() - 24 * 60 * 60 * 1000;
       const in24 = (iso: string | null) => iso ? new Date(iso).getTime() >= cutoff : false;
 
-      const s24 = signals.signals.filter(s => in24(s.created_at));
-      const passedAnd = s24.filter(s => s.should_trade);
-      const executed = s24.filter(s => s.executed);
+      const s24 = signals.data.filter(s => in24(s.created_at));
+      const passedAnd = s24.filter(s => s.should_trade === 1);
+      const executed = s24.filter(s => s.executed === 1);
 
       const blockCounts: Record<string, number> = {};
       for (const s of s24) {
-        const k = s.block_reason || (s.executed ? 'EXECUTED' : (s.should_trade ? 'NONE' : 'OTHER'));
+        const k = s.block_reason || (s.executed === 1 ? 'EXECUTED' : (s.should_trade === 1 ? 'NONE' : 'OTHER'));
         blockCounts[k] = (blockCounts[k] ?? 0) + 1;
       }
 
-      const closed24 = history.positions.filter(p => in24(p.exit_time));
-      const wins = closed24.filter(p => (p.pnl_percent ?? 0) > 0).length;
+      const closed24 = history.data.filter(p => in24(p.exit_time));
+      const wins = closed24.filter(p => (p.pnl_pct ?? 0) > 0).length;
       const winRate = closed24.length > 0 ? wins / closed24.length : 0;
       const pnlSum = closed24.reduce((acc, p) => acc + (p.pnl_usdt ?? 0), 0);
-      const pnlPctSum = closed24.reduce((acc, p) => acc + (p.pnl_percent ?? 0), 0);
+      const pnlPctSum = closed24.reduce((acc, p) => acc + (p.pnl_pct ?? 0), 0);
       const avgHold = closed24.length > 0
         ? closed24.reduce((acc, p) => {
             if (!p.entry_time || !p.exit_time) return acc;
@@ -60,7 +60,7 @@ export function useV5Dashboard() {
         pnl_total_usdt: pnlSum,
         pnl_total_pct: pnlPctSum,
         avg_holding_minutes: avgHold,
-        active_count: active.count,
+        active_count: active.data.length,
         closed_24h: closed24,
       };
     },

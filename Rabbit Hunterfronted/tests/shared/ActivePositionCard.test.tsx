@@ -4,22 +4,23 @@ import { ActivePositionCard } from '@/components/shared/ActivePositionCard';
 import type { V5Position } from '@/types';
 
 const POS: V5Position = {
-  id: 7, symbol: 'H/USDT', side: 'SHORT', status: 'OPEN',
-  entry_price: 0.1665, current_price: 0.1641,
-  stop_loss: 0.1715, take_profit: 0.1592,
-  position_size_usdt: 15, leverage: 10,
+  id: 7, symbol: 'HUSDT', side: 'SHORT', status: 'OPEN',
+  entry_price: 0.1665,
+  sl_price: 0.1715, tp_price: 0.1592,
+  size_usdt: 15, position_size_coins: null, leverage: 10,
   entry_time: '2026-06-12T09:48:00+00:00',
   exit_time: null, exit_price: null, exit_reason: null,
-  pnl_percent: 1.44, pnl_usdt: 0.22,
+  pnl_pct: 1.44, pnl_usdt: 0.22,
   entry_rsi_15m: 72, entry_macd_hist_15m: -0.0006,
-  extension_count: 0, target_close_at: null, ai_reason: 'short setup',
-  strategy_id: 'v5_rsi_macd',
+  entry_rsi_4h: null, entry_atr_15m: null,
+  extension_count: 0, target_close_at: null,
+  holding_minutes: null, created_at: null, updated_at: null,
 };
 
 describe('ActivePositionCard', () => {
   it('renders symbol, side, entry, sl, tp', () => {
     render(<ActivePositionCard position={POS} onClose={() => {}} onChart={() => {}} />);
-    expect(screen.getByText('H/USDT')).toBeInTheDocument();
+    expect(screen.getByText('HUSDT')).toBeInTheDocument();
     expect(screen.getByText(/SHORT/)).toBeInTheDocument();
     expect(screen.getByText(/0\.1665/)).toBeInTheDocument();
     expect(screen.getByText(/0\.1715/)).toBeInTheDocument();

@@ -23,9 +23,9 @@ export function V5SignalsPage() {
   const expanded = useUIStore(s => s.expandedSignalIds);
   const toggle = useUIStore(s => s.toggleSignalExpanded);
 
-  const signals = q.data?.signals ?? [];
-  const passedAnd = signals.filter(s => s.should_trade).length;
-  const executed = signals.filter(s => s.executed).length;
+  const signals = q.data?.data ?? [];
+  const passedAnd = signals.filter(s => s.should_trade === 1).length;
+  const executed = signals.filter(s => s.executed === 1).length;
 
   return (
     <div className="space-y-4">
@@ -102,7 +102,7 @@ export function V5SignalsPage() {
                     <div className="flex gap-2">
                       <button
                         type="button"
-                        onClick={() => navigate(`/v5/chart/${s.symbol.replace('/', '_')}`)}
+                        onClick={() => navigate(`/v5/chart/${s.symbol}`)}
                         className="flex items-center gap-1 rounded-sm border border-white/15 px-2 py-1 text-xs text-white/70 hover:bg-white/5"
                       >
                         <LineChart size={12} /> 查看图表

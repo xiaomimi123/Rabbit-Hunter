@@ -38,26 +38,26 @@ export function V5OrderHistoryPage() {
                 const mins = p.entry_time && p.exit_time
                   ? Math.round((new Date(p.exit_time).getTime() - new Date(p.entry_time).getTime()) / 60_000)
                   : 0;
-                const pnlPct = p.pnl_percent ?? 0;
+                const pnlPct = p.pnl_pct ?? 0;
                 const pnlUsd = p.pnl_usdt ?? 0;
                 return (
-                  <tr key={`${p.strategy_id}-${p.id}`} className="border-t border-white/5 hover:bg-white/[0.02]">
+                  <tr key={p.id} className="border-t border-white/5 hover:bg-white/[0.02]">
                     <td className="px-2 py-1.5 font-mono text-white/70">
                       {p.exit_time ? new Date(p.exit_time).toLocaleString('zh-CN', { hour12: false }) : '—'}
                     </td>
                     <td className="px-2 py-1.5 text-white/90">{p.symbol}</td>
                     <td className="px-2 py-1.5"><Badge variant={p.side === 'LONG' ? 'long' : 'short'}>{p.side}</Badge></td>
-                    <td className="px-2 py-1.5 text-right font-mono">{p.entry_price.toFixed(4)}</td>
+                    <td className="px-2 py-1.5 text-right font-mono">{p.entry_price?.toFixed(4) ?? '—'}</td>
                     <td className="px-2 py-1.5 text-right font-mono">{p.exit_price?.toFixed(4) ?? '—'}</td>
                     <td className="px-2 py-1.5 text-white/70">{p.exit_reason ?? '—'}</td>
                     <td className={`px-2 py-1.5 text-right font-mono ${pnlUsd >= 0 ? 'text-accent-long' : 'text-accent-short'}`}>{pnlUsd >= 0 ? '+' : ''}{pnlUsd.toFixed(2)}</td>
                     <td className={`px-2 py-1.5 text-right font-mono ${pnlPct >= 0 ? 'text-accent-long' : 'text-accent-short'}`}>{pnlPct >= 0 ? '+' : ''}{pnlPct.toFixed(2)}%</td>
                     <td className="px-2 py-1.5 text-right font-mono">{mins}</td>
-                    <td className="px-2 py-1.5"><Badge variant="neutral">{p.strategy_id === 'v5_manual' ? '手动' : '自动'}</Badge></td>
+                    <td className="px-2 py-1.5"><Badge variant="neutral">自动</Badge></td>
                     <td className="px-2 py-1.5">
                       <button
                         type="button"
-                        onClick={() => navigate(`/v5/chart/${p.symbol.replace('/', '_')}?eventId=${p.id}`)}
+                        onClick={() => navigate(`/v5/chart/${p.symbol}?eventId=${p.id}`)}
                         className="flex items-center gap-1 rounded-sm border border-white/15 px-2 py-0.5 text-xs text-white/70 hover:bg-white/5"
                       >
                         <LineChart size={10} /> 图表

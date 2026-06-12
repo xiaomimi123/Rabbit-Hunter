@@ -3,7 +3,7 @@ import { apiGet } from '../../services/api';
 import type { SymbolEventsResponse } from '../../types';
 
 function encodeSymbol(sym: string): string {
-  return sym.replace('/', '_');
+  return sym;
 }
 
 export function useV5SymbolEvents(symbol: string | null, limit = 50) {

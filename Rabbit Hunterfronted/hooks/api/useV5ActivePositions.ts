@@ -18,10 +18,10 @@ export function useV5ActivePositions() {
         apiGet<V5PositionsResponse>('/api/v5/paper-positions?status=OPEN'),
       ]);
       return {
-        live: live.positions,
-        paper: paper.positions,
-        combined: [...live.positions, ...paper.positions],
-        total: live.count + paper.count,
+        live: live.data,
+        paper: paper.data,
+        combined: [...live.data, ...paper.data],
+        total: live.data.length + paper.data.length,
       };
     },
     refetchInterval: 5_000,

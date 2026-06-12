@@ -3,13 +3,13 @@ import type { V5Signal, Side } from '../../types';
 export function signalScore(s: V5Signal): number {
   const conf = s.ai_confidence ?? 0;
   const sizeMult = s.ai_size_multiplier ?? 1;
-  const andBonus = s.should_trade ? 20 : 0;
+  const andBonus = s.should_trade === 1 ? 20 : 0;
   return Math.round(conf * 100 * sizeMult * 0.5 + andBonus);
 }
 
 export function dotStateFor(s: V5Signal): '●●●' | '●●○' | '●○○' {
-  if (s.executed) return '●●●';
-  if (s.should_trade && (s.ai_confidence ?? 0) >= 0.6) return '●●○';
+  if (s.executed === 1) return '●●●';
+  if (s.should_trade === 1 && (s.ai_confidence ?? 0) >= 0.6) return '●●○';
   return '●○○';
 }
 
