@@ -2,167 +2,40 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ─── reset ────────────────────────────────────────────────────────── */
-
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
-
-html {
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  text-rendering: optimizeLegibility;
-  font-feature-settings: 'ss01', 'cv01';
+:root {
+  color-scheme: dark;
+  font-family: "PingFang SC", "Noto Sans CJK SC", system-ui, sans-serif;
+  background-color: #0F1419;
+  color: #FFFFFF;
 }
 
 body {
-  @apply bg-terminal-bg text-text-primary font-sans overflow-x-hidden;
-  font-size: 14px;
-  line-height: 1.45;
+  margin: 0;
+  min-height: 100vh;
+  background-color: #0F1419;
+  color: #FFFFFF;
 }
 
-/* 数字默认 tabular — 财务数据对齐用 */
-.font-mono,
-code,
-pre,
-.tabular {
+#root {
+  min-height: 100vh;
+}
+
+.font-mono {
+  font-family: "JetBrains Mono", "IBM Plex Mono", monospace;
   font-variant-numeric: tabular-nums;
 }
 
-/* 标题层级 */
-h1, h2, h3, h4 {
-  letter-spacing: -0.01em;
-  font-weight: 500;
-}
-
-/* ─── scrollbar — 极细且低饱和 ────────────────────────────────────── */
-
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
 }
-
 ::-webkit-scrollbar-track {
   background: transparent;
 }
-
 ::-webkit-scrollbar-thumb {
-  @apply bg-terminal-border rounded;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
 }
-
 ::-webkit-scrollbar-thumb:hover {
-  background: #3f3f46;
-}
-
-/* ─── legacy utility shims — 老组件还在引用，保留兼容 ───────────── */
-
-/* .glass 改成单层 surface，去掉 blur */
-.glass {
-  background: #111111;
-  @apply border border-terminal-border;
-}
-
-/* gradient text 退化成单色 accent — 移除 webkit clip 视觉噪声 */
-.gradient-text {
-  @apply text-primary;
-  background: none;
-  -webkit-background-clip: unset;
-  -webkit-text-fill-color: unset;
-}
-
-/* ─── 按钮系统 ────────────────────────────────────────────────────── */
-
-.btn {
-  @apply inline-flex items-center justify-center gap-1.5
-         px-3.5 py-2 rounded-md text-sm font-medium tracking-tight
-         border border-transparent transition-colors duration-150
-         disabled:opacity-40 disabled:cursor-not-allowed;
-}
-
-.btn-primary {
-  @apply btn bg-primary text-black border-primary
-         hover:bg-primary/90;
-}
-
-.btn-bull {
-  @apply btn bg-bull-dim text-bull border-bull/30
-         hover:bg-bull/15 hover:border-bull/50;
-}
-
-.btn-bear {
-  @apply btn bg-bear-dim text-bear border-bear/30
-         hover:bg-bear/15 hover:border-bear/50;
-}
-
-.btn-ghost {
-  @apply btn bg-transparent text-text-secondary
-         border-terminal-border
-         hover:bg-terminal-hover hover:text-text-primary;
-}
-
-/* ─── 表格 ────────────────────────────────────────────────────────── */
-
-table {
-  @apply w-full text-sm;
-}
-
-thead {
-  @apply border-b border-terminal-border;
-}
-
-thead th {
-  @apply text-[11px] font-medium text-text-muted uppercase tracking-micro;
-}
-
-tbody tr {
-  @apply border-b border-terminal-border/60 transition-colors;
-}
-
-tbody tr:hover {
-  background: rgba(255, 255, 255, 0.02);
-}
-
-td, th {
-  @apply px-4 py-2.5 text-left;
-}
-
-/* ─── 表单 ────────────────────────────────────────────────────────── */
-
-input, select, textarea {
-  @apply bg-terminal-card border border-terminal-border rounded-md px-3 py-2
-         text-sm text-text-primary placeholder-text-muted
-         focus:outline-none focus:border-primary/60;
-  transition: border-color 120ms ease;
-}
-
-input[type="number"] {
-  font-variant-numeric: tabular-nums;
-}
-
-/* ─── helpers ─────────────────────────────────────────────────────── */
-
-.surface {
-  @apply bg-terminal-card border border-terminal-border rounded-lg;
-}
-
-.surface-flat {
-  @apply bg-terminal-card border border-terminal-border;
-}
-
-.hairline {
-  @apply border-terminal-border;
-}
-
-.label-sm {
-  @apply text-[11px] uppercase tracking-micro text-text-muted font-medium;
-}
-
-.num {
-  @apply font-mono tabular-nums;
-}
-
-@media (max-width: 768px) {
-  body { font-size: 13px; }
+  background: rgba(255, 255, 255, 0.24);
 }
