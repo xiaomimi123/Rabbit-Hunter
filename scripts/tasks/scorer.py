@@ -19,6 +19,23 @@ from v5_types import AIResult, Decision, EnrichedItem, Indicators, RiskPlan
 from scripts.v5_params import get_param
 
 
+def _enqueue_ws(db_path: str, payload: dict) -> None:
+    """跨进程 WS 消息总线:写 ws_event_queue,api 进程 poll 后广播。"""
+    import json, sqlite3
+    try:
+        conn = sqlite3.connect(db_path)
+        try:
+            conn.execute(
+                "INSERT INTO ws_event_queue (payload_json) VALUES (?)",
+                (json.dumps(payload, ensure_ascii=False),),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception as e:
+        print(f"[V5Scorer] WS enqueue 失败: {e}")
+
+
 def _max_concurrent() -> int:
     return int(get_param("v5_max_concurrent", 3, int))
 
@@ -160,6 +177,18 @@ async def process_enriched_v5(*, enriched: EnrichedItem, ai, paper_pm, live_pm,
                       ai=ai_result, risk=risk, executed=True,
                       position_id=position_id)
     print(f"[V5Scorer] {enriched.symbol} OPEN {decision.side} executed,position_id={position_id}")
+    _enqueue_ws(db_path, {
+        "type": "position_opened",
+        "symbol": enriched.symbol,
+        "side": decision.side,
+        "entry": risk.entry_price,
+        "sl": risk.sl_price,
+        "tp": risk.tp_price,
+        "size_usdt": risk.size_usdt,
+        "position_id": position_id,
+        "strategy_id": "v5_rsi_macd" if mode == "SHADOW" else "v5_live",
+        "mode": mode,
+    })
 
 
 class V5Scorer:

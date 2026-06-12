@@ -12,6 +12,7 @@ v5 安全加固：
   - 绑非 127.0.0.1 时若无 token，启动直接拒绝
 """
 
+import asyncio
 import os
 import sys
 from contextlib import asynccontextmanager
@@ -119,6 +120,39 @@ def _print_startup_banner() -> None:
 # ============================================
 
 
+async def _poll_and_broadcast():
+    """每 1s 从 ws_event_queue 取最多 50 条事件广播给所有 /ws/v5 客户端。"""
+    import json
+    import sqlite3
+    db_path = os.environ.get("DB_PATH", "data/rabbit_hunter.db")
+    from api.services.v5_broadcast import get_broadcaster
+    broadcaster = get_broadcaster()
+    while True:
+        try:
+            conn = sqlite3.connect(db_path)
+            try:
+                rows = conn.execute(
+                    "SELECT id, payload_json FROM ws_event_queue ORDER BY id LIMIT 50"
+                ).fetchall()
+                if rows:
+                    for rid, payload_json in rows:
+                        try:
+                            payload = json.loads(payload_json)
+                        except Exception:
+                            payload = {"type": "unknown", "raw": payload_json}
+                        await broadcaster.broadcast(payload)
+                    conn.execute(
+                        "DELETE FROM ws_event_queue WHERE id <= ?",
+                        (rows[-1][0],),
+                    )
+                    conn.commit()
+            finally:
+                conn.close()
+        except Exception as e:
+            print(f"[ws] poll error: {e}")
+        await asyncio.sleep(1.0)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
@@ -128,14 +162,22 @@ async def lifespan(app: FastAPI):
     # 启动 WebSocket 后台任务（V4.3 kill_queue 已 stub，若不可用则跳过）
     try:
         from api.websocket_server import broadcast_kill_queue_updates
-        import asyncio
         asyncio.create_task(broadcast_kill_queue_updates(interval=5))
         print("[INFO] WebSocket 后台任务已启动")
     except Exception as e:
         print(f"[WARNING] WebSocket 后台任务启动失败: {e}")
 
+    # 启动 V5 WS 事件总线 poll 循环
+    _poll_task = asyncio.create_task(_poll_and_broadcast())
+    print("[INFO] V5 WS poll 循环已启动")
+
     yield
 
+    _poll_task.cancel()
+    try:
+        await _poll_task
+    except asyncio.CancelledError:
+        pass
     print("[INFO] Rabbit Hunter API 关闭中...")
 
 
@@ -181,6 +223,7 @@ from api.routes import v5_ai
 from api.routes import v5_charts
 from api.routes import v5_manual_order
 from api.routes import v5_position_close
+from api.websocket_v5 import router as ws_v5_router
 
 # TODO(v5): weights/system/market routers still use V4.3 DB schema (Supabase).
 # They are stubbed out here to keep the API importable while V5 migration proceeds.
@@ -197,6 +240,7 @@ app.include_router(v5_ai.router,              dependencies=_global_auth)
 app.include_router(v5_charts.router,          dependencies=_global_auth)
 app.include_router(v5_manual_order.router,    dependencies=_global_auth)
 app.include_router(v5_position_close.router,  dependencies=_global_auth)
+app.include_router(ws_v5_router)  # WebSocket — no HTTP auth middleware
 
 # V4.3 routes — disabled pending V5 rewire
 # app.include_router(weights_router,   dependencies=_global_auth)  # TODO(v5): rewire weights

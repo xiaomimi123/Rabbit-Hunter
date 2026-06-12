@@ -139,6 +139,12 @@ CREATE TABLE IF NOT EXISTS system_settings (
     created_at TEXT,
     updated_at TEXT
 );
+
+CREATE TABLE IF NOT EXISTS ws_event_queue (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    payload_json TEXT NOT NULL,
+    created_at   TEXT DEFAULT (datetime('now'))
+);
 """
 
 # V4.3/V4.4 废弃表列表 — init_local_db 会 DROP
