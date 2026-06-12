@@ -210,6 +210,8 @@ class PaperPositionManager:
             side, entry_price, size_usdt, leverage, entry_time_str = row
 
             entry_time = datetime.fromisoformat(entry_time_str)
+            if entry_time.tzinfo is None:
+                entry_time = entry_time.replace(tzinfo=timezone.utc)
             exit_time = _utcnow()
             holding_minutes = (exit_time - entry_time).total_seconds() / 60.0
             notional = (size_usdt or 0) * (leverage or 1)
