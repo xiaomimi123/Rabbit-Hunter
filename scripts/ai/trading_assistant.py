@@ -255,6 +255,19 @@ class TradingAssistant:
         user_msg = build_v5_user_message(enriched, indicators, decision, risk)
         timeout_s = float(os.getenv("AI_DECISION_TIMEOUT", "20"))
 
+        # RAG 注入(仅 chat completions 路径用)
+        self._pending_rag_text = ""
+        if not (self.provider == "openai" and self.assistant_id):
+            try:
+                from scripts.ai.local_rag import find_similar_cases, format_cases_for_prompt
+                cases = find_similar_cases(
+                    indicators, side=decision.side or "SHORT", top_k=5,
+                    source_delta_15m_pct=enriched.delta_15m_pct,
+                )
+                self._pending_rag_text = format_cases_for_prompt(cases)
+            except Exception as e:
+                print(f"[AI] RAG 检索失败,跳过: {type(e).__name__}: {e}")
+
         try:
             if self.provider == "openai" and self.assistant_id:
                 raw_json = await asyncio.wait_for(
@@ -296,11 +309,7 @@ class TradingAssistant:
         return await self._extract_tool_output(thread.id, run)
 
     async def _decide_via_chat(self, system_prompt: str, user_msg: str) -> dict:
-        """Chat completions 路径 — DeepSeek / OpenAI 通用,无 Vector Store。
-
-        在 system prompt 末尾追加严格 JSON 输出约束。开启 response_format=
-        json_object,模型不会输出 markdown 围栏或解释性文字。
-        """
+        """Chat completions 路径,带 RAG-lite 注入。"""
         json_constraint = (
             "\n\nReturn ONLY a JSON object with exactly these keys: "
             'execute (boolean), sl_multiplier (number 1.0-3.0), '
@@ -308,10 +317,17 @@ class TradingAssistant:
             'confidence (number 0.0-1.0), reasoning (string ≤ 200 chars). '
             "No markdown, no surrounding text."
         )
+
+        rag_text = getattr(self, "_pending_rag_text", "") or ""
+        if rag_text:
+            system_full = system_prompt + "\n\n" + rag_text + json_constraint
+        else:
+            system_full = system_prompt + json_constraint
+
         resp = await self.client.chat.completions.create(
             model=self.chat_model,
             messages=[
-                {"role": "system", "content": system_prompt + json_constraint},
+                {"role": "system", "content": system_full},
                 {"role": "user", "content": user_msg},
             ],
             response_format={"type": "json_object"},
