@@ -31,8 +31,9 @@ def _bullish_cross(hist: float, hist_prev: float) -> bool:
 
 def decide(enriched: EnrichedItem, indicators: Indicators) -> Decision:
     """V5 AND 合谋决策。"""
-    overbought = _f("V5_RSI_OVERBOUGHT", 70.0)
-    oversold = _f("V5_RSI_OVERSOLD", 30.0)
+    from scripts.v5_params import get_param
+    overbought = get_param("v5_rsi_overbought", 70.0, float)
+    oversold = get_param("v5_rsi_oversold", 30.0, float)
 
     rsi = indicators.rsi_15m
     hist = indicators.macd_hist_15m

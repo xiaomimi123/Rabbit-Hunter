@@ -132,6 +132,13 @@ CREATE TABLE IF NOT EXISTS ai_training_data (
     uploaded_to_vector_store INTEGER DEFAULT 0,
     uploaded_at              TEXT
 );
+
+CREATE TABLE IF NOT EXISTS system_settings (
+    key        TEXT PRIMARY KEY,
+    value      TEXT,
+    created_at TEXT,
+    updated_at TEXT
+);
 """
 
 # V4.3/V4.4 废弃表列表 — init_local_db 会 DROP

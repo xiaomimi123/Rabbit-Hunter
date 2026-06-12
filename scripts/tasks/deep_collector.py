@@ -265,7 +265,8 @@ class DeepCollector:
         (K 线拉取失败 / |ΔP| 不达标 / EnrichedItem 构造失败 / 队列满)。
         run() 用返回值做精确统计,避免 enriched_queue.qsize() 受消费者速度影响。
         """
-        threshold = float(os.environ.get("V5_DELTA_15M_THRESHOLD", "0.03"))
+        from scripts.v5_params import get_param
+        threshold = get_param("v5_delta_15m_threshold", 0.03, float)
         try:
             klines_15m = await asyncio.to_thread(_ee_fetch_klines, symbol, "15m", 50)
             klines_4h = await asyncio.to_thread(_ee_fetch_klines, symbol, "4h", 50)

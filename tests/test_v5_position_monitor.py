@@ -66,9 +66,9 @@ def test_soft_target_reached_returns_timebox_intent():
 
 
 def test_max_extension_force_close():
-    from scripts.v5_position_monitor import check_exit_triggers, MAX_EXTENSIONS
+    from scripts.v5_position_monitor import check_exit_triggers, _max_extensions
     pos = _open_position(side="SHORT", entry=0.166, sl=0.169, tp=0.162,
-                         target_offset_min=-1, extension_count=MAX_EXTENSIONS)
+                         target_offset_min=-1, extension_count=_max_extensions())
     intent = check_exit_triggers(pos, _market(price=0.165))
     assert intent["exit_reason"] == "AI_EXTEND_MAX"
 

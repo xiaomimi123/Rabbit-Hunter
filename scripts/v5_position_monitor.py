@@ -9,9 +9,19 @@ from datetime import datetime, timezone
 from typing import Optional
 
 
-MAX_EXTENSIONS = int(os.environ.get("V5_MAX_EXTENSIONS", "3"))
-RSI_REVERSE_SHORT = float(os.environ.get("V5_RSI_REVERSE_SHORT", "65"))
-RSI_REVERSE_LONG = float(os.environ.get("V5_RSI_REVERSE_LONG", "35"))
+from scripts.v5_params import get_param
+
+
+def _max_extensions() -> int:
+    return int(get_param("v5_max_extensions", 3, int))
+
+
+def _rsi_reverse_short() -> float:
+    return float(get_param("v5_rsi_reverse_short", 65.0, float))
+
+
+def _rsi_reverse_long() -> float:
+    return float(get_param("v5_rsi_reverse_long", 35.0, float))
 
 
 def _utcnow() -> datetime:
@@ -36,12 +46,12 @@ def _signal_reversed(side: str, rsi: float, hist: float, hist_prev: float) -> bo
     - LONG: RSI 涨过 35,或 MACD 由金叉(hist>0)重新死叉(hist<0)
     """
     if side == "SHORT":
-        if rsi < RSI_REVERSE_SHORT:
+        if rsi < _rsi_reverse_short():
             return True
         if hist_prev < 0 and hist > 0:
             return True
     else:
-        if rsi > RSI_REVERSE_LONG:
+        if rsi > _rsi_reverse_long():
             return True
         if hist_prev > 0 and hist < 0:
             return True
@@ -72,7 +82,7 @@ def check_exit_triggers(position: dict, market: dict) -> Optional[dict]:
         if target.tzinfo is None:
             target = target.replace(tzinfo=timezone.utc)
         if _utcnow() >= target:
-            if (position.get("extension_count") or 0) >= MAX_EXTENSIONS:
+            if (position.get("extension_count") or 0) >= _max_extensions():
                 return {"position_id": position["id"], "exit_price": current_price,
                         "exit_reason": "AI_EXTEND_MAX"}
             return {"position_id": position["id"], "exit_price": current_price,
@@ -132,7 +142,7 @@ class V5PositionMonitor:
                 if ai_decision == "EXTEND":
                     pm.extend_position(position["id"], extra_minutes=15)
                     print(f"[V5PositionMonitor] {position['symbol']} AI 续仓 "
-                          f"(extension {position['extension_count'] + 1}/{MAX_EXTENSIONS})")
+                          f"(extension {position['extension_count'] + 1}/{_max_extensions()})")
                     continue
                 pm.close_position(position["id"], exit_price=intent["exit_price"],
                                   exit_reason="AI_TIMEBOX")
@@ -149,7 +159,7 @@ class V5PositionMonitor:
                 f"Position {position['symbol']} {position['side']} entry={position['entry_price']} "
                 f"current={market['price']} rsi_15m={market['rsi_15m']:.1f} "
                 f"hist={market['macd_hist_15m']:+.4f} (prev {market['macd_hist_prev_15m']:+.4f}). "
-                f"Soft target reached (ext {position['extension_count']}/{MAX_EXTENSIONS}). "
+                f"Soft target reached (ext {position['extension_count']}/{_max_extensions()}). "
                 "Reply with single word: EXTEND or CLOSE."
             )
             resp = await asyncio.wait_for(

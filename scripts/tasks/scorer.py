@@ -16,9 +16,19 @@ from v5_risk_calculator import plan
 from v5_types import AIResult, Decision, EnrichedItem, Indicators, RiskPlan
 
 
-MAX_CONCURRENT_POSITIONS = int(os.environ.get("V5_MAX_CONCURRENT", "3"))
-RISK_PER_TRADE = float(os.environ.get("V43_RISK_PER_TRADE", "0.015"))
-LEVERAGE = int(os.environ.get("BINANCE_LEVERAGE", "10"))
+from scripts.v5_params import get_param
+
+
+def _max_concurrent() -> int:
+    return int(get_param("v5_max_concurrent", 3, int))
+
+
+def _risk_per_trade() -> float:
+    return float(get_param("v5_risk_per_trade", 0.015, float))
+
+
+def _leverage() -> int:
+    return int(get_param("v5_leverage", 10, int))
 
 
 def _utcnow() -> str:
@@ -97,7 +107,7 @@ async def process_enriched_v5(*, enriched: EnrichedItem, ai, paper_pm, live_pm,
         _write_trade_score(db_path, enriched, indicators, decision)
         return
 
-    if _count_open_positions(db_path) >= MAX_CONCURRENT_POSITIONS:
+    if _count_open_positions(db_path) >= _max_concurrent():
         _write_trade_score(db_path, enriched, indicators, decision,
                           block_reason="MAX_CONCURRENT_POSITIONS")
         return
@@ -105,7 +115,7 @@ async def process_enriched_v5(*, enriched: EnrichedItem, ai, paper_pm, live_pm,
     risk = plan(
         side=decision.side, entry=enriched.current_price,
         atr=indicators.atr_15m, balance=balance_usdt,
-        risk_pct=RISK_PER_TRADE, leverage=LEVERAGE,
+        risk_pct=_risk_per_trade(), leverage=_leverage(),
     )
 
     # ai=None 兼容(OPENAI_AI_ENABLED=false 或 AI 初始化失败):

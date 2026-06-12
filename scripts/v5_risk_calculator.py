@@ -40,8 +40,9 @@ def plan(
     if entry <= 0:
         raise ValueError(f"entry must be > 0, got {entry}")
 
-    sl_mult = _f("V5_SL_ATR_MULT", 1.5)
-    tp_mult = _f("V5_TP_ATR_MULT", 2.5)
+    from scripts.v5_params import get_param
+    sl_mult = get_param("v5_sl_atr_mult", 1.5, float)
+    tp_mult = get_param("v5_tp_atr_mult", 2.5, float)
 
     sl_distance = sl_mult * atr
     tp_distance = tp_mult * atr
