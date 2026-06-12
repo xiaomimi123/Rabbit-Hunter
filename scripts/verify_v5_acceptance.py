@@ -87,7 +87,48 @@ def verify(db_path: str = "data/rabbit_hunter.db") -> bool:
         conn.close()
 
 
+def verify_plan_b_backend(db_path: str = "data/rabbit_hunter.db") -> bool:
+    conn = sqlite3.connect(db_path)
+    try:
+        print("\n=== Plan B-1 后端 ===")
+        try:
+            n_settings = conn.execute(
+                "SELECT COUNT(*) FROM system_settings WHERE key LIKE 'v5_%'"
+            ).fetchone()[0]
+            print(f"system_settings v5_* keys: {n_settings}")
+        except Exception as e:
+            print(f"system_settings 检查失败: {e}")
+            return False
+
+        try:
+            conn.execute("SELECT COUNT(*) FROM ws_event_queue").fetchone()
+            print("ws_event_queue table OK")
+        except Exception as e:
+            print(f"ws_event_queue 不存在: {e}")
+            return False
+
+        n_manual = conn.execute(
+            "SELECT COUNT(*) FROM paper_trades WHERE strategy_id='v5_manual'"
+        ).fetchone()[0]
+        print(f"v5_manual paper_trades: {n_manual}(可选指标)")
+
+        try:
+            n_rag = conn.execute(
+                "SELECT COUNT(*) FROM ai_training_data WHERE outcome IS NOT NULL"
+            ).fetchone()[0]
+            print(f"ai_training_data 已平仓: {n_rag}(冷启动 < 10)")
+        except Exception:
+            # ai_training_data 可能还没建表 — 这是冷启动条件,不算失败
+            print(f"ai_training_data 尚未创建(冷启动)")
+
+        print("\n✅ Plan B-1 后端结构验收通过")
+        return True
+    finally:
+        conn.close()
+
+
 if __name__ == "__main__":
-    db_path = os.environ.get("DB_PATH", "data/rabbit_hunter.db")
-    ok = verify(db_path)
-    sys.exit(0 if ok else 1)
+    db = os.environ.get("DB_PATH", "data/rabbit_hunter.db")
+    ok_a = verify(db)
+    ok_b = verify_plan_b_backend(db)
+    sys.exit(0 if (ok_a and ok_b) else 1)
