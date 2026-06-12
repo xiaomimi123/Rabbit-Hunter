@@ -239,7 +239,7 @@ class PaperPositionManager:
         try:
             cur = conn.execute(
                 "SELECT id, symbol, side, entry_price, target_close_at, "
-                "extension_count, entry_time, stop_loss, take_profit "
+                "extension_count, entry_time, stop_loss, take_profit, strategy_id "
                 "FROM paper_trades WHERE status='OPEN'")
             cols = [c[0] for c in cur.description]
             return [dict(zip(cols, row)) for row in cur.fetchall()]

@@ -104,3 +104,46 @@ def test_no_trigger_returns_none():
     intent = check_exit_triggers(pos, _market(price=0.165, rsi_15m=68.0,
                                               macd_hist=-0.0003, macd_hist_prev=-0.0005))
     assert intent is None
+
+
+def test_check_exit_triggers_skips_signal_reverse_for_manual_strategy():
+    """v5_manual 策略的持仓即使指标反转,monitor 也不应触发 SIGNAL_REVERSE 平仓。"""
+    from scripts.v5_position_monitor import check_exit_triggers
+
+    # SHORT 持仓,RSI 已经跌破 65 (SIGNAL_REVERSE 阈值默认 65) — 如果是 auto 单会被关
+    position_manual = {
+        "id": 99, "side": "SHORT",
+        "stop_loss": 200.0, "take_profit": 100.0,
+        "target_close_at": None,
+        "extension_count": 0,
+        "strategy_id": "v5_manual",
+    }
+    market = {
+        "price": 150.0,
+        "rsi_15m": 40.0,           # < 65 → 对 SHORT 反转
+        "macd_hist_15m": 0.005,    # > 0
+        "macd_hist_prev_15m": -0.005,  # 由负转正 = 反转
+    }
+    assert check_exit_triggers(position_manual, market) is None, \
+        "manual 单不应被 SIGNAL_REVERSE 关掉"
+
+    # 同一市场状态,但 strategy_id != 'v5_manual' → 必须返回 SIGNAL_REVERSE
+    position_auto = dict(position_manual, strategy_id="v5_rsi_macd")
+    intent = check_exit_triggers(position_auto, market)
+    assert intent is not None and intent["exit_reason"] == "SIGNAL_REVERSE"
+
+
+def test_check_exit_triggers_still_hits_sl_for_manual():
+    """v5_manual 不豁免 SL_HIT — SL/TP/SOFT_TARGET 都仍然适用。"""
+    from scripts.v5_position_monitor import check_exit_triggers
+    position = {
+        "id": 99, "side": "SHORT",
+        "stop_loss": 100.0, "take_profit": 50.0,
+        "target_close_at": None,
+        "extension_count": 0,
+        "strategy_id": "v5_manual",
+    }
+    market = {"price": 105.0, "rsi_15m": 80.0,
+              "macd_hist_15m": -0.001, "macd_hist_prev_15m": -0.002}
+    intent = check_exit_triggers(position, market)
+    assert intent is not None and intent["exit_reason"] == "SL_HIT"

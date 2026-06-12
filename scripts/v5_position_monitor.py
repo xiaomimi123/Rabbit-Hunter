@@ -105,10 +105,13 @@ def check_exit_triggers(position: dict, market: dict) -> Optional[dict]:
             return {"position_id": position["id"], "exit_price": current_price,
                     "exit_reason": "SOFT_TARGET_REACHED"}
 
-    if _signal_reversed(side, market["rsi_15m"],
-                        market["macd_hist_15m"], market["macd_hist_prev_15m"]):
-        return {"position_id": position["id"], "exit_price": current_price,
-                "exit_reason": "SIGNAL_REVERSE"}
+    # SIGNAL_REVERSE 只对 auto 策略生效:手动单是用户主观决定,
+    # 不应该被规则引擎"反悔"。SL/TP/SOFT_TARGET 仍然适用。
+    if position.get("strategy_id") != "v5_manual":
+        if _signal_reversed(side, market["rsi_15m"],
+                            market["macd_hist_15m"], market["macd_hist_prev_15m"]):
+            return {"position_id": position["id"], "exit_price": current_price,
+                    "exit_reason": "SIGNAL_REVERSE"}
 
     return None
 
