@@ -1,0 +1,264 @@
+// V5 API types. Field names mirror api/schemas/*.py exactly.
+// Time fields are ISO 8601 UTC strings (ensure_utc_iso()).
+
+export type Side = 'LONG' | 'SHORT';
+export type Mode = 'SHADOW' | 'LIVE';
+export type OutcomeLabel = 'WIN' | 'LOSS' | 'FLAT';
+export type EventType = 'entry' | 'exit' | 'extension';
+export type Interval = '15m' | '1h' | '4h';
+export type AIProvider = 'deepseek' | 'openai';
+
+// ── Signals ──
+export interface V5Signal {
+  id: number;
+  symbol: string;
+  created_at: string;
+  delta_15m_pct: number;
+  volume_24h_usdt: number;
+  rsi_15m: number;
+  rsi_4h: number | null;
+  macd_15m: number;
+  macd_signal_15m: number;
+  macd_hist_15m: number;
+  macd_hist_prev_15m: number;
+  macd_hist_4h: number | null;
+  atr_15m: number;
+  current_price: number;
+  should_trade: boolean;
+  side: Side | null;
+  reasoning: string;
+  block_reason: string | null;
+  ai_confidence: number | null;
+  ai_sl_multiplier: number | null;
+  ai_tp_multiplier: number | null;
+  ai_size_multiplier: number | null;
+  ai_reasoning: string | null;
+  entry_price: number | null;
+  sl_price: number | null;
+  tp_price: number | null;
+  size_usdt: number | null;
+  expected_rr: number | null;
+  executed: boolean;
+  position_id: number | null;
+}
+
+export interface V5SignalsResponse {
+  signals: V5Signal[];
+  count: number;
+}
+
+// ── Positions ──
+export interface V5Position {
+  id: number;
+  symbol: string;
+  side: Side;
+  status: 'OPEN' | 'CLOSED';
+  entry_price: number;
+  current_price: number | null;
+  stop_loss: number;
+  take_profit: number;
+  position_size_usdt: number;
+  leverage: number;
+  entry_time: string;
+  exit_time: string | null;
+  exit_price: number | null;
+  exit_reason: string | null;
+  pnl_percent: number | null;
+  pnl_usdt: number | null;
+  entry_rsi_15m: number | null;
+  entry_macd_hist_15m: number | null;
+  extension_count: number | null;
+  target_close_at: string | null;
+  ai_reason: string | null;
+  strategy_id: string | null;
+}
+
+export interface V5PositionsResponse {
+  positions: V5Position[];
+  count: number;
+}
+
+// ── Strategy Config ──
+export interface ParamSpec {
+  key: string;
+  value: number;
+  default: number;
+  min: number;
+  max: number;
+  unit: string;
+  description: string;
+}
+export interface StrategyConfigResponse {
+  params: ParamSpec[];
+}
+export interface StrategyConfigPatchRequest {
+  [key: string]: number;
+}
+export interface StrategyConfigPreviewResponse {
+  estimated_entries_per_hour: number;
+  estimated_win_rate: number;
+  note: string;
+}
+
+// ── Settings ──
+export interface SettingsResponse {
+  exchange: string;
+  openai_api_key_masked: string;
+  openai_assistant_id: string | null;
+  openai_vector_store_id: string | null;
+  deepseek_api_key_masked: string;
+  deepseek_enabled: boolean;
+  active_ai_provider: AIProvider | null;
+  active_chat_model: string;
+  system_mode: Mode;
+  enable_auto_trading: boolean;
+  ai_fail_open: boolean;
+  sl_tp_fail_open: boolean;
+}
+export interface SettingsPatchRequest {
+  exchange?: string;
+  openai_api_key?: string;
+  openai_assistant_id?: string | null;
+  deepseek_api_key?: string;
+  deepseek_enabled?: boolean;
+  system_mode?: Mode;
+  enable_auto_trading?: boolean;
+  ai_fail_open?: boolean;
+  sl_tp_fail_open?: boolean;
+}
+
+// ── AI Status ──
+export interface AIStatusResponse {
+  provider: AIProvider | null;
+  chat_model: string;
+  healthy: boolean;
+  last_latency_ms: number | null;
+  decisions_24h: number;
+  rag_utilization_24h: number;
+  rag_cases_in_db: number;
+}
+export interface AIDecisionItem {
+  id: number;
+  created_at: string;
+  symbol: string;
+  side: Side | null;
+  execute: boolean;
+  confidence: number | null;
+  reasoning: string;
+  top1_distance: number | null;
+  rag_case_count: number;
+}
+export interface AIDecisionsResponse {
+  decisions: AIDecisionItem[];
+  count: number;
+}
+
+// ── Charts ──
+export interface Kline {
+  ts: number;     // ms epoch
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+export interface KlinesResponse {
+  symbol: string;
+  interval: Interval;
+  klines: Kline[];
+}
+export interface SymbolEvent {
+  event_type: EventType;
+  side: Side;
+  price: number;
+  timestamp: string;
+  position_id: number;
+  reasoning?: string;
+  rsi_15m?: number | null;
+  macd_hist_15m?: number | null;
+  exit_reason?: string | null;
+  pnl_pct?: number | null;
+}
+export interface SymbolEventsResponse {
+  symbol: string;
+  events: SymbolEvent[];
+}
+
+// ── Manual Order ──
+export interface ManualOrderPreviewRequest {
+  symbol: string;
+  side: Side;
+  size_usdt: number;
+}
+export interface ManualOrderDecisionSnapshot {
+  should_trade: boolean;
+  side: Side | null;
+  reasoning: string;
+  block_reason: string | null;
+}
+export interface ManualOrderRagCase {
+  entry_rsi_15m: number;
+  entry_macd_hist_15m: number;
+  outcome: OutcomeLabel;
+  pnl_pct: number;
+  exit_reason: string | null;
+  distance: number;
+}
+export interface ManualOrderAiResult {
+  execute: boolean;
+  sl_multiplier: number;
+  tp_multiplier: number;
+  size_multiplier: number;
+  confidence: number;
+  reasoning: string;
+}
+export interface ManualOrderPreviewResponse {
+  symbol: string;
+  side: Side;
+  current_price: number;
+  indicators: Record<string, number>;
+  decision: ManualOrderDecisionSnapshot;
+  risk_plan: Record<string, number>;
+  ai_result: ManualOrderAiResult;
+  rag_cases: ManualOrderRagCase[];
+  rag_summary: string | null;
+}
+export interface ManualOrderExecuteRequest {
+  symbol: string;
+  side: Side;
+  size_usdt: number;
+  sl_multiplier: number;
+  tp_multiplier: number;
+  size_multiplier: number;
+}
+export interface ManualOrderExecuteResponse {
+  position_id: number;
+  symbol: string;
+  side: Side;
+  entry_price: number;
+  sl_price: number;
+  tp_price: number;
+  size_usdt: number;
+  strategy_id: string;
+}
+
+// ── Close Position ──
+export interface ClosePositionRequest {
+  exit_price: number;
+  exit_reason: string;
+}
+export interface ClosePositionResponse {
+  position_id: number;
+  status: 'CLOSED';
+  exit_price: number;
+  exit_reason: string;
+}
+
+// ── WebSocket ──
+export type WsEvent =
+  | { type: 'position_opened'; symbol: string; side: Side; entry: number; sl: number; tp: number; size_usdt: number; position_id: number; strategy_id: string; mode: Mode }
+  | { type: 'position_closed'; position_id: number; symbol: string; exit_price: number; exit_reason: string; pnl_usdt?: number; pnl_pct?: number; holding_minutes?: number }
+  | { type: 'position_extended'; position_id: number; symbol: string; new_target_close_at?: string; extension_count: number }
+  | { type: 'ai_health'; provider: AIProvider; chat_model: string; last_latency_ms: number | null; healthy: boolean }
+  | { type: 'scoring_stalled'; seconds_since_last_score: number; last_symbol_seen: string | null }
+  | { type: 'ping'; ts: number };
