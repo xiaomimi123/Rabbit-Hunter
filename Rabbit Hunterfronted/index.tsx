@@ -1,32 +1,26 @@
-
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import App from './App';
-import ErrorBoundary from './components/ErrorBoundary';
 import './index.css';
 
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       retry: 1,
-      staleTime: 5_000,
       refetchOnWindowFocus: false,
+      staleTime: 5_000,
     },
   },
 });
 
-const rootElement = document.getElementById('root');
-if (!rootElement) {
-  throw new Error('Could not find root element to mount to');
-}
+const root = document.getElementById('root');
+if (!root) throw new Error('#root not found');
 
-ReactDOM.createRoot(rootElement).render(
+ReactDOM.createRoot(root).render(
   <React.StrictMode>
-    <ErrorBoundary>
-      <QueryClientProvider client={queryClient}>
-        <App />
-      </QueryClientProvider>
-    </ErrorBoundary>
+    <QueryClientProvider client={queryClient}>
+      <App />
+    </QueryClientProvider>
   </React.StrictMode>
 );
