@@ -10,6 +10,7 @@ import { Select } from '../primitives/Select';
 import { IndicatorGauges } from '../shared/IndicatorGauges';
 import { signalScore, dotStateFor, formatSideBadgeTone, blockReasonZh } from './_signal_helpers';
 import { ChevronDown, ChevronUp, LineChart, Hand } from 'lucide-react';
+import { Term } from '../shared/Term';
 
 export function V5SignalsPage() {
   const [side, setSide] = useState<Side | 'ALL'>('ALL');
@@ -76,11 +77,11 @@ export function V5SignalsPage() {
                     <span className="text-base font-medium text-white">{s.symbol}</span>
                     <Badge variant={formatSideBadgeTone(s.side)}>{s.side ?? '—'}</Badge>
                     <span className={`font-mono text-sm ${s.delta_15m_pct >= 0 ? 'text-accent-long' : 'text-accent-short'}`}>
-                      ΔP15m: {s.delta_15m_pct >= 0 ? '+' : ''}{(s.delta_15m_pct * 100).toFixed(2)}%
+                      <Term k="ΔP15m">ΔP15m</Term>: {s.delta_15m_pct >= 0 ? '+' : ''}{(s.delta_15m_pct * 100).toFixed(2)}%
                     </span>
                   </div>
                   <div className="flex items-center gap-3 text-xs font-mono text-white/60">
-                    <span>score {signalScore(s)}</span>
+                    <span><Term k="score">score</Term> {signalScore(s)}</span>
                     <span className="text-base">{dotStateFor(s)}</span>
                     <span>{new Date(s.created_at).toLocaleTimeString('zh-CN', { hour12: false })}</span>
                     {isOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}

@@ -5,6 +5,7 @@ import { Card } from '../primitives/Card';
 import { LoadingSkeleton } from '../primitives/LoadingSkeleton';
 import { Badge } from '../primitives/Badge';
 import { LineChart } from 'lucide-react';
+import { Term } from '../shared/Term';
 
 export function V5OrderHistoryPage() {
   const q = useV5OrderHistory(200);
@@ -26,8 +27,8 @@ export function V5OrderHistoryPage() {
                 <th className="px-2 py-2 text-right">入场</th>
                 <th className="px-2 py-2 text-right">出场</th>
                 <th className="px-2 py-2">原因</th>
-                <th className="px-2 py-2 text-right">PnL$</th>
-                <th className="px-2 py-2 text-right">PnL%</th>
+                <th className="px-2 py-2 text-right"><Term k="PnL">PnL$</Term></th>
+                <th className="px-2 py-2 text-right"><Term k="PnL">PnL%</Term></th>
                 <th className="px-2 py-2 text-right">持仓min</th>
                 <th className="px-2 py-2">策略</th>
                 <th className="px-2 py-2"></th>
@@ -49,7 +50,7 @@ export function V5OrderHistoryPage() {
                     <td className="px-2 py-1.5"><Badge variant={p.side === 'LONG' ? 'long' : 'short'}>{p.side}</Badge></td>
                     <td className="px-2 py-1.5 text-right font-mono">{p.entry_price?.toFixed(4) ?? '—'}</td>
                     <td className="px-2 py-1.5 text-right font-mono">{p.exit_price?.toFixed(4) ?? '—'}</td>
-                    <td className="px-2 py-1.5 text-white/70">{p.exit_reason ?? '—'}</td>
+                    <td className="px-2 py-1.5 text-white/70"><Term k={p.exit_reason || ''}>{p.exit_reason ?? '—'}</Term></td>
                     <td className={`px-2 py-1.5 text-right font-mono ${pnlUsd >= 0 ? 'text-accent-long' : 'text-accent-short'}`}>{pnlUsd >= 0 ? '+' : ''}{pnlUsd.toFixed(2)}</td>
                     <td className={`px-2 py-1.5 text-right font-mono ${pnlPct >= 0 ? 'text-accent-long' : 'text-accent-short'}`}>{pnlPct >= 0 ? '+' : ''}{pnlPct.toFixed(2)}%</td>
                     <td className="px-2 py-1.5 text-right font-mono">{mins}</td>

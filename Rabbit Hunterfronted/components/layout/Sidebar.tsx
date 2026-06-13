@@ -4,7 +4,7 @@ import { useUIStore } from '../../services/store';
 import {
   Activity, ListOrdered, Briefcase, BarChart3,
   Brain, History, SlidersHorizontal, Settings, Hand,
-  ChevronLeft, ChevronRight,
+  ChevronLeft, ChevronRight, BookOpen,
 } from 'lucide-react';
 
 interface NavItem { to: string; label: string; Icon: any }
@@ -24,6 +24,7 @@ const GROUPS: { name: string; items: NavItem[] }[] = [
   { name: '系统', items: [
     { to: '/v5/dashboard', label: 'Dashboard', Icon: BarChart3 },
     { to: '/v5/settings', label: '系统设置', Icon: Settings },
+    { to: '/v5/glossary', label: '术语词典', Icon: BookOpen },
   ]},
 ];
 

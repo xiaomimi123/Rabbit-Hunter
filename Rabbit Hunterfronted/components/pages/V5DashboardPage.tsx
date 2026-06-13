@@ -8,6 +8,7 @@ import { SignalFunnel } from '../shared/SignalFunnel';
 import { WinRateRow } from '../shared/WinRateRow';
 import { LineChart as Lc, Line, XAxis, YAxis, ResponsiveContainer, Tooltip } from 'recharts';
 import { winRateOf, bySide, byStrategy, byExitReason, bestAndWorst, profitFactor, streaks } from './_winrate_helpers';
+import { Term } from '../shared/Term';
 
 export function V5DashboardPage() {
   const q = useV5Dashboard();
@@ -44,7 +45,7 @@ export function V5DashboardPage() {
         <KpiCard title="活仓数" value={`${d.active_count} / 3`} />
       </div>
 
-      <Card title="24h 信号漏斗">
+      <Card title={<span>24h <Term k="Funnel">信号漏斗</Term></span>}>
         <SignalFunnel steps={funnelSteps} onLayerClick={(s) => {
           if (s.name === '实际开仓') navigate('/v5/history?block_reason=EXECUTED');
           else navigate('/v5/history');
@@ -107,7 +108,7 @@ export function V5DashboardPage() {
                     </div>
                   </div>
                   <div>
-                    <div className="text-white/50 mb-1">Profit Factor</div>
+                    <div className="text-white/50 mb-1"><Term k="Profit Factor">Profit Factor</Term></div>
                     <div className="font-mono text-base text-white">
                       {pf === null ? '∞' : pf.toFixed(2)}
                       <span className="text-white/40 text-xs ml-2">gross win / gross loss</span>

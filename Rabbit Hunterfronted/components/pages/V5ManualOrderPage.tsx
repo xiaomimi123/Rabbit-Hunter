@@ -8,6 +8,7 @@ import { NumberInput } from '../primitives/NumberInput';
 import { Badge } from '../primitives/Badge';
 import { IndicatorGauges } from '../shared/IndicatorGauges';
 import type { Side, ManualOrderPreviewResponse } from '../../types';
+import { Term } from '../shared/Term';
 
 type Step = 1 | 2 | 3;
 
@@ -117,15 +118,15 @@ export function V5ManualOrderPage() {
                   </div>
                   <div className="text-xs text-white/60">{previewData.ai_result.reasoning}</div>
                   <div className="grid grid-cols-3 gap-2 text-xs font-mono">
-                    <label>SL × <NumberInput value={slMult} min={0.5} max={3} step={0.1} onChange={setSlMult} /></label>
-                    <label>TP × <NumberInput value={tpMult} min={0.5} max={5} step={0.1} onChange={setTpMult} /></label>
-                    <label>Size × <NumberInput value={sizeMult} min={0.1} max={2} step={0.1} onChange={setSizeMult} /></label>
+                    <label><Term k="SL Multiplier">SL ×</Term> <NumberInput value={slMult} min={0.5} max={3} step={0.1} onChange={setSlMult} /></label>
+                    <label><Term k="TP Multiplier">TP ×</Term> <NumberInput value={tpMult} min={0.5} max={5} step={0.1} onChange={setTpMult} /></label>
+                    <label><Term k="Size Multiplier">Size ×</Term> <NumberInput value={sizeMult} min={0.1} max={2} step={0.1} onChange={setSizeMult} /></label>
                   </div>
                 </div>
               </Card>
             </div>
 
-            <Card title={`RAG 历史相似 top-${previewData.rag_cases.length}`}>
+            <Card title={<span><Term k="RAG">RAG</Term> 历史相似 top-{previewData.rag_cases.length}</span>}>
               {previewData.rag_cases.length === 0 ? (
                 <div className="text-xs text-white/40">RAG 冷启动期,无相似 case</div>
               ) : (

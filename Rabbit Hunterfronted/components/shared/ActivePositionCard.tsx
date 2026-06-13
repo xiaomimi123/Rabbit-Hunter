@@ -1,6 +1,7 @@
 import React from 'react';
 import type { V5Position } from '../../types';
 import { Badge } from '../primitives/Badge';
+import { Term } from './Term';
 
 interface Props {
   position: V5Position;
@@ -32,7 +33,7 @@ export function ActivePositionCard({ position, onClose, onChart }: Props) {
         <div className="flex items-center gap-3">
           <div className="text-base font-medium text-white">{position.symbol}</div>
           <Badge variant={sideBadge}>{position.side}</Badge>
-          <span className="text-xs text-white/40 font-mono">×{position.leverage}</span>
+          <span className="text-xs text-white/40 font-mono">×<Term k="Leverage">{position.leverage}</Term></span>
         </div>
         <div className="flex gap-2">
           <button
@@ -54,16 +55,16 @@ export function ActivePositionCard({ position, onClose, onChart }: Props) {
 
       <div className="grid grid-cols-3 gap-3 font-mono text-sm">
         <div><div className="text-xs text-white/40">入场</div><div className="text-white">{fmtPrice(position.entry_price)}</div></div>
-        <div><div className="text-xs text-white/40">SL</div><div className="text-accent-short">{fmtPrice(position.sl_price)}</div></div>
-        <div><div className="text-xs text-white/40">TP</div><div className="text-accent-long">{fmtPrice(position.tp_price)}</div></div>
+        <div><div className="text-xs text-white/40"><Term k="SL">SL</Term></div><div className="text-accent-short">{fmtPrice(position.sl_price)}</div></div>
+        <div><div className="text-xs text-white/40"><Term k="TP">TP</Term></div><div className="text-accent-long">{fmtPrice(position.tp_price)}</div></div>
       </div>
 
       <div className="flex items-center justify-between text-sm">
         <div className={`font-mono ${isProfit ? 'text-accent-long' : 'text-accent-short'}`}>
-          PnL: {pnlPct >= 0 ? '+' : ''}{pnlPct.toFixed(2)}% ({pnlUsdt >= 0 ? '+' : ''}{pnlUsdt.toFixed(2)} USDT)
+          <Term k="PnL">PnL</Term>: {pnlPct >= 0 ? '+' : ''}{pnlPct.toFixed(2)}% ({pnlUsdt >= 0 ? '+' : ''}{pnlUsdt.toFixed(2)} USDT)
         </div>
         <div className="text-xs text-white/50 font-mono">
-          持仓 {mins}min · 续仓 {position.extension_count ?? 0}/3
+          持仓 {mins}min · <Term k="Extension">续仓</Term> {position.extension_count ?? 0}/3
         </div>
       </div>
     </div>
