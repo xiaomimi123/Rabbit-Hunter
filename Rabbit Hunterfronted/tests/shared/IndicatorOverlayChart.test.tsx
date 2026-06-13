@@ -22,11 +22,15 @@ vi.mock('lightweight-charts', () => {
     remove: vi.fn(),
     applyOptions: vi.fn(),
     resize: vi.fn(),
+    subscribeCrosshairMove: vi.fn(),
+    setCrosshairPosition: vi.fn(),
+    clearCrosshairPosition: vi.fn(),
   };
   return {
     createChart: vi.fn(() => chart),
     ColorType: { Solid: 'Solid' },
-    LineStyle: { Dashed: 1 },
+    LineStyle: { Dashed: 1, Solid: 0 },
+    CrosshairMode: { Normal: 1, Magnet: 2 },
   };
 });
 
@@ -44,5 +48,16 @@ describe('IndicatorOverlayChart', () => {
     expect(screen.getByText('15m')).toBeInTheDocument();
     expect(screen.getByText('1h')).toBeInTheDocument();
     expect(screen.getByText('4h')).toBeInTheDocument();
+  });
+
+  it('renders hover data row with placeholders', () => {
+    render(<IndicatorOverlayChart
+      klines={KLINES} events={[]} interval="15m" onIntervalChange={() => {}}
+      currentPrice={0.166} />);
+    expect(screen.getByText(/移动鼠标查看历史时点/)).toBeInTheDocument();
+    // The hover row has "RSI" and "MACD hist" labels; sub-chart labels may also match.
+    // Assert at least one of each exists.
+    expect(screen.getAllByText(/RSI/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/MACD hist/).length).toBeGreaterThan(0);
   });
 });
