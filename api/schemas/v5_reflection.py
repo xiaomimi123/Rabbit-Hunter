@@ -52,4 +52,23 @@ class ReflectionsResponse(BaseModel):
     data: List[ReflectionRecord]
 
 
+class FailureMode(BaseModel):
+    key: str
+    label_zh: str
+    label_en: str
+    description: str
+    detection_rule: Optional[str]
+    is_active: bool
+    sample_count: int
+    avg_loss_pct: Optional[float]
+    last_seen_at: Optional[str]
+    seeded: bool
+    approved_by: Optional[str]
+
+
+class FailureTaxonomyResponse(BaseModel):
+    status: str = "success"
+    data: List[FailureMode]
+
+
 PROMPT_VERSION = "reflection-prompt-v1"

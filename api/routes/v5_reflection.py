@@ -4,7 +4,10 @@ import sqlite3
 
 from fastapi import APIRouter, Query
 
-from api.schemas.v5_reflection import ReflectionRecord, ReflectionsResponse
+from api.schemas.v5_reflection import (
+    ReflectionRecord, ReflectionsResponse,
+    FailureMode, FailureTaxonomyResponse,
+)
 
 
 router = APIRouter(prefix="/api/v5", tags=["reflection"])
@@ -40,3 +43,32 @@ async def list_reflections(limit: int = Query(20, ge=1, le=200)) -> ReflectionsR
         d["pnl_pct"] = d.pop("pnl_percent", None)
         data.append(ReflectionRecord(**d))
     return ReflectionsResponse(data=data)
+
+
+@router.get("/failure-taxonomy", response_model=FailureTaxonomyResponse)
+async def list_failure_taxonomy() -> FailureTaxonomyResponse:
+    conn = sqlite3.connect(_db())
+    conn.row_factory = sqlite3.Row
+    try:
+        rows = conn.execute("""
+            SELECT t.key, t.label_zh, t.label_en, t.description,
+                   t.detection_rule, t.is_active, t.avg_loss_pct,
+                   t.seeded, t.approved_by, t.last_seen_at,
+                   (SELECT COUNT(*) FROM reflections r
+                      WHERE r.failure_mode_key = t.key) AS sample_count
+              FROM failure_taxonomy t
+             ORDER BY sample_count DESC, t.key
+        """).fetchall()
+    finally:
+        conn.close()
+    return FailureTaxonomyResponse(data=[
+        FailureMode(
+            key=r["key"], label_zh=r["label_zh"], label_en=r["label_en"],
+            description=r["description"], detection_rule=r["detection_rule"],
+            is_active=bool(r["is_active"]),
+            sample_count=r["sample_count"], avg_loss_pct=r["avg_loss_pct"],
+            last_seen_at=r["last_seen_at"], seeded=bool(r["seeded"]),
+            approved_by=r["approved_by"],
+        )
+        for r in rows
+    ])

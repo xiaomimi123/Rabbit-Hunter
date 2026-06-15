@@ -71,3 +71,29 @@ def test_list_respects_limit(client):
     r = c.get("/api/v5/reflections?limit=3")
     assert r.status_code == 200
     assert len(r.json()["data"]) == 3
+
+
+def test_failure_taxonomy_returns_8_seeds(client):
+    c, _ = client
+    r = c.get("/api/v5/failure-taxonomy")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["status"] == "success"
+    assert len(body["data"]) == 8
+    keys = {m["key"] for m in body["data"]}
+    assert "chase_after_3pct_move" in keys
+    for m in body["data"]:
+        assert m["seeded"] is True
+        assert m["sample_count"] == 0    # 还没 reflection 链上
+
+
+def test_failure_taxonomy_counts_reflections(client):
+    c, db = client
+    _insert_reflection(db, pid=1)
+    conn = sqlite3.connect(db)
+    conn.execute("UPDATE reflections SET failure_mode_key='chase_after_3pct_move' WHERE paper_trade_id=1")
+    conn.commit()
+    conn.close()
+    r = c.get("/api/v5/failure-taxonomy")
+    by_key = {m["key"]: m for m in r.json()["data"]}
+    assert by_key["chase_after_3pct_move"]["sample_count"] == 1

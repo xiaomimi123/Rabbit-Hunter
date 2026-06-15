@@ -293,6 +293,25 @@ export interface ReflectionsResponse {
   data: ReflectionRecord[];
 }
 
+export interface FailureMode {
+  key: string;
+  label_zh: string;
+  label_en: string;
+  description: string;
+  detection_rule: string | null;
+  is_active: boolean;
+  sample_count: number;
+  avg_loss_pct: number | null;
+  last_seen_at: string | null;
+  seeded: boolean;
+  approved_by: string | null;
+}
+
+export interface FailureTaxonomyResponse {
+  status: string;
+  data: FailureMode[];
+}
+
 // ── WebSocket ──
 export type WsEvent =
   | { type: 'position_opened'; symbol: string; side: Side; entry: number; sl: number; tp: number; size_usdt: number; position_id: number; strategy_id: string; mode: Mode }

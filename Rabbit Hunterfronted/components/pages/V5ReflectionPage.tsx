@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useV5Reflections } from '../../hooks/api/useV5Reflections';
+import { useV5Reflections, useV5FailureTaxonomy } from '../../hooks/api/useV5Reflections';
 import { Card } from '../primitives/Card';
 import { Badge } from '../primitives/Badge';
 import { LoadingSkeleton } from '../primitives/LoadingSkeleton';
@@ -27,7 +27,7 @@ export function V5ReflectionPage() {
       </div>
 
       {tab === 'recent' && <RecentReflectionsTab />}
-      {tab === 'taxonomy' && <Card title="失败模式"><div className="text-white/40 text-sm">阶段 2 上线后启用</div></Card>}
+      {tab === 'taxonomy' && <TaxonomyTab />}
       {tab === 'sizing' && <Card title="仓位建议"><div className="text-white/40 text-sm">阶段 3 上线后启用</div></Card>}
     </div>
   );
@@ -69,6 +69,57 @@ function RecentReflectionsTab() {
     <Card title={`最近复盘流 (n=${rows.length})`}>
       <div className="space-y-3">
         {rows.map(r => <ReflectionCard key={r.id} r={r} />)}
+      </div>
+    </Card>
+  );
+}
+
+function TaxonomyTab() {
+  const q = useV5FailureTaxonomy();
+  if (q.isLoading) return <LoadingSkeleton rows={5} />;
+  const rows = q.data?.data ?? [];
+
+  return (
+    <Card title={`失败模式分布 (n=${rows.length})`}>
+      <div className="overflow-hidden rounded-md border border-white/10">
+        <table className="w-full text-xs">
+          <thead className="bg-white/5">
+            <tr className="text-left text-white/60">
+              <th className="px-2 py-2">key</th>
+              <th className="px-2 py-2">中文标签</th>
+              <th className="px-2 py-2 text-right">命中次数</th>
+              <th className="px-2 py-2">detection_rule</th>
+              <th className="px-2 py-2">来源</th>
+              <th className="px-2 py-2 text-right">激活</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(m => (
+              <tr key={m.key} className="border-t border-white/5 hover:bg-white/[0.02]">
+                <td className="px-2 py-1.5 font-mono text-white/80">{m.key}</td>
+                <td className="px-2 py-1.5 text-white">{m.label_zh}</td>
+                <td className="px-2 py-1.5 text-right font-mono">
+                  {m.sample_count > 0
+                    ? <span className="text-accent-warn">{m.sample_count}</span>
+                    : <span className="text-white/30">0</span>}
+                </td>
+                <td className="px-2 py-1.5 font-mono text-white/50 truncate max-w-xs">
+                  {m.detection_rule ?? '—'}
+                </td>
+                <td className="px-2 py-1.5">
+                  {m.seeded
+                    ? <Badge variant="info">预置</Badge>
+                    : <Badge variant="warn">AI 提案</Badge>}
+                </td>
+                <td className="px-2 py-1.5 text-right">
+                  {m.is_active
+                    ? <span className="text-accent-long">●</span>
+                    : <span className="text-white/30">○</span>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </Card>
   );
