@@ -12,6 +12,7 @@ import { V5SettingsPage } from './components/pages/V5SettingsPage';
 import { V5ManualOrderPage } from './components/pages/V5ManualOrderPage';
 import { V5ChartPage } from './components/pages/V5ChartPage';
 import { V5GlossaryPage } from './components/pages/V5GlossaryPage';
+import { V5ReflectionPage } from './components/pages/V5ReflectionPage';
 
 export default function App() {
   return (
@@ -31,6 +32,7 @@ export default function App() {
           <Route path="manual"       element={<V5ManualOrderPage />} />
           <Route path="chart/:symbol" element={<V5ChartPage />} />
           <Route path="glossary"     element={<V5GlossaryPage />} />
+          <Route path="reflection"   element={<V5ReflectionPage />} />
         </Route>
         <Route path="/signals"   element={<Navigate to="/v5/signals" replace />} />
         <Route path="/positions" element={<Navigate to="/v5/active" replace />} />

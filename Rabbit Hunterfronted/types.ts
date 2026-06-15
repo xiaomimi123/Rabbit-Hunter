@@ -258,6 +258,41 @@ export interface ClosePositionResponse {
   exit_reason: string;
 }
 
+// ── Reflection ──
+export type OutcomeClass = 'WIN' | 'LOSS' | 'SCRATCH';
+
+export interface ReflectionRecord {
+  id: number;
+  paper_trade_id: number;
+  created_at: string;
+  why_entered: string;
+  what_was_expected: string;
+  what_actually_happened: string;
+  correction_idea: string;
+  failure_mode_key: string | null;
+  setup_type: string;
+  outcome_class: OutcomeClass;
+  realized_r: number;
+  holding_minutes: number;
+  confidence_at_entry: number;
+  self_assessed_prediction_accuracy: number | null;
+  is_in_predicted_failure_mode: boolean | null;
+  ai_provider: string | null;
+  ai_model: string | null;
+  ai_latency_ms: number | null;
+  symbol: string | null;
+  side: Side | null;
+  entry_price: number | null;
+  exit_price: number | null;
+  exit_reason: string | null;
+  pnl_pct: number | null;
+}
+
+export interface ReflectionsResponse {
+  status: string;
+  data: ReflectionRecord[];
+}
+
 // ── WebSocket ──
 export type WsEvent =
   | { type: 'position_opened'; symbol: string; side: Side; entry: number; sl: number; tp: number; size_usdt: number; position_id: number; strategy_id: string; mode: Mode }

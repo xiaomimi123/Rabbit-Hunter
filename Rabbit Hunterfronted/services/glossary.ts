@@ -130,6 +130,22 @@ export const GLOSSARY: Record<string, GlossaryEntry> = {
     key: 'Funnel', zh: '信号漏斗', en: 'Signal Funnel', category: '统计',
     desc: 'Scanner 扫到 → 通过 AND → 实际开仓,展示信号在每一层的过滤情况。',
   },
+  failure_mode: {
+    key: 'failure_mode', zh: '失败模式', en: 'Failure Mode', category: 'AI',
+    desc: 'AI 对这笔交易失败原因的分类,来自预置 8 种 + 新提案的 taxonomy。命中已知失败模式的新 setup 会被入场层 veto。',
+  },
+  reflection: {
+    key: 'reflection', zh: '复盘', en: 'Reflection', category: 'AI',
+    desc: '每笔关仓后,AI 用 5 问结构(为什么开 / 怎么想 / 实际怎么走 / 哪种失败 / 下次怎么改)分析,作为下次决策的 RAG 输入。',
+  },
+  realized_r: {
+    key: 'realized_r', zh: '实际 R 倍', en: 'Realized R-multiple', category: '统计',
+    desc: '盈亏百分比 ÷ SL 距离百分比。+1 = 触发 TP,-1 = 触发 SL。是跨币种比较交易质量的标准单位。',
+  },
+  setup_type: {
+    key: 'setup_type', zh: 'Setup 类型', en: 'Setup Type', category: '信号',
+    desc: '入场时根据 RSI 状态 × MACD 状态 × 方向(可能加 funding)派生的桶名。所有聚合按它分类。',
+  },
 };
 
 export const GLOSSARY_CATEGORIES: Array<{ name: GlossaryEntry['category']; label: string }> = [
