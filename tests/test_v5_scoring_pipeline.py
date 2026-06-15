@@ -19,6 +19,7 @@ def fresh_db():
 @pytest.mark.asyncio
 async def test_strong_signal_writes_trade_scores_v5_and_paper_trade(fresh_db, monkeypatch):
     """构造一个必然触发 SHORT 的输入 → 验证 paper_trades + trade_scores_v5 各写一行。"""
+    monkeypatch.setenv("V5_STRATEGY_MODE", "and_strict")
     monkeypatch.setenv("V5_RSI_OVERBOUGHT", "60")
     monkeypatch.setenv("DB_PATH", fresh_db)
 

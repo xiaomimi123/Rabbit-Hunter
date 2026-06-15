@@ -1,9 +1,11 @@
-"""V5Strategy AND 合谋决策器测试。
+"""V5Strategy AND 合谋决策器测试 — and_strict 模式回归保护。
 
 边界:
 - RSI > 70 且 MACD hist 由正变负 → SHORT
 - RSI < 30 且 MACD hist 由负变正 → LONG
 - 任一条件不满足 → 不开单 + 给清晰 block_reason
+
+所有测试显式设 V5_STRATEGY_MODE=and_strict 以保留旧行为覆盖。
 """
 import pytest
 from v5_types import Decision, EnrichedItem, Indicators
@@ -26,48 +28,56 @@ def _indicators(rsi_15m=50.0, hist=0.0, hist_prev=0.0,
     )
 
 
-def test_short_when_rsi_overbought_and_macd_bearish_cross():
+def test_short_when_rsi_overbought_and_macd_bearish_cross(monkeypatch):
+    monkeypatch.setenv("V5_STRATEGY_MODE", "and_strict")
     d = decide(_enriched(), _indicators(rsi_15m=72.0, hist=-0.001, hist_prev=0.001))
     assert d.should_trade is True
     assert d.side == "SHORT"
     assert "RSI" in d.reasoning
 
 
-def test_long_when_rsi_oversold_and_macd_bullish_cross():
+def test_long_when_rsi_oversold_and_macd_bullish_cross(monkeypatch):
+    monkeypatch.setenv("V5_STRATEGY_MODE", "and_strict")
     d = decide(_enriched(), _indicators(rsi_15m=28.0, hist=0.001, hist_prev=-0.001))
     assert d.should_trade is True
     assert d.side == "LONG"
 
 
-def test_reject_when_rsi_not_extreme():
+def test_reject_when_rsi_not_extreme(monkeypatch):
+    monkeypatch.setenv("V5_STRATEGY_MODE", "and_strict")
     d = decide(_enriched(), _indicators(rsi_15m=50.0, hist=-0.001, hist_prev=0.001))
     assert d.should_trade is False
     assert d.side is None
     assert d.block_reason == "NOT_RSI_AND_MACD"
 
 
-def test_reject_when_rsi_overbought_but_macd_no_bearish_cross():
+def test_reject_when_rsi_overbought_but_macd_no_bearish_cross(monkeypatch):
+    monkeypatch.setenv("V5_STRATEGY_MODE", "and_strict")
     d = decide(_enriched(), _indicators(rsi_15m=72.0, hist=0.001, hist_prev=0.0005))
     assert d.should_trade is False
     assert d.block_reason == "NOT_RSI_AND_MACD"
 
 
-def test_reject_when_rsi_oversold_but_macd_no_bullish_cross():
+def test_reject_when_rsi_oversold_but_macd_no_bullish_cross(monkeypatch):
+    monkeypatch.setenv("V5_STRATEGY_MODE", "and_strict")
     d = decide(_enriched(), _indicators(rsi_15m=28.0, hist=-0.001, hist_prev=-0.0005))
     assert d.should_trade is False
 
 
-def test_rsi_exactly_70_does_not_trigger_short():
+def test_rsi_exactly_70_does_not_trigger_short(monkeypatch):
+    monkeypatch.setenv("V5_STRATEGY_MODE", "and_strict")
     d = decide(_enriched(), _indicators(rsi_15m=70.0, hist=-0.001, hist_prev=0.001))
     assert d.should_trade is False
 
 
-def test_rsi_exactly_30_does_not_trigger_long():
+def test_rsi_exactly_30_does_not_trigger_long(monkeypatch):
+    monkeypatch.setenv("V5_STRATEGY_MODE", "and_strict")
     d = decide(_enriched(), _indicators(rsi_15m=30.0, hist=0.001, hist_prev=-0.001))
     assert d.should_trade is False
 
 
 def test_custom_thresholds_from_env(monkeypatch):
+    monkeypatch.setenv("V5_STRATEGY_MODE", "and_strict")
     monkeypatch.setenv("V5_RSI_OVERBOUGHT", "65")
     monkeypatch.setenv("V5_RSI_OVERSOLD", "35")
     d = decide(_enriched(), _indicators(rsi_15m=66.0, hist=-0.001, hist_prev=0.001))

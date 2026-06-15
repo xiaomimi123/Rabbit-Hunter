@@ -28,6 +28,11 @@ _ENV_MAP = {
     "v5_risk_per_trade":          "V43_RISK_PER_TRADE",
     "v5_leverage":                "BINANCE_LEVERAGE",
     "v5_soft_target_minutes":     "V5_SOFT_TARGET_MINUTES",
+    "v5_strategy_mode":             "V5_STRATEGY_MODE",
+    "v5_trend_rsi_short_threshold": "V5_TREND_RSI_SHORT_THRESHOLD",
+    "v5_trend_rsi_long_threshold":  "V5_TREND_RSI_LONG_THRESHOLD",
+    "v5_anti_chase_pct":            "V5_ANTI_CHASE_PCT",
+    "v5_anti_chase_window_bars":    "V5_ANTI_CHASE_WINDOW_BARS",
 }
 
 
@@ -102,6 +107,11 @@ DEFAULTS = {
     "v5_risk_per_trade":          0.015,
     "v5_leverage":                10,
     "v5_soft_target_minutes":     15,
+    "v5_strategy_mode":             "trend_aligned",   # "trend_aligned" | "and_strict"
+    "v5_trend_rsi_short_threshold": 60.0,
+    "v5_trend_rsi_long_threshold":  40.0,
+    "v5_anti_chase_pct":            0.005,
+    "v5_anti_chase_window_bars":    5,
 }
 
 PARAM_META = {
@@ -118,4 +128,9 @@ PARAM_META = {
     "v5_risk_per_trade":          (0.001, 0.05, "", "单笔风险预算"),
     "v5_leverage":                (1, 100, "x", "杠杆"),
     "v5_soft_target_minutes":     (5, 60, "分钟", "持仓软目标"),
+    "v5_strategy_mode":             (None, None, "", "策略模式 trend_aligned 或 and_strict"),
+    "v5_trend_rsi_short_threshold": (50.0, 75.0, "", "trend_aligned SHORT RSI 触发阈值"),
+    "v5_trend_rsi_long_threshold":  (25.0, 50.0, "", "trend_aligned LONG RSI 触发阈值"),
+    "v5_anti_chase_pct":            (0.0, 0.02, "", "anti-chase 缓冲 % (0 = 关闭)"),
+    "v5_anti_chase_window_bars":    (0, 20, "", "anti-chase 回看 K 线根数 (0 = 关闭)"),
 }

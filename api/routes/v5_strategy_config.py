@@ -40,7 +40,13 @@ def _cast_for(key: str):
 async def get_strategy_config() -> StrategyConfigResponse:
     params = []
     for key, default in DEFAULTS.items():
+        # Skip string-typed params (e.g. v5_strategy_mode) — no numeric range to expose
+        if isinstance(default, str):
+            continue
         meta = PARAM_META.get(key, (0, 0, "", ""))
+        # Skip params whose meta range is None (non-numeric)
+        if meta[0] is None or meta[1] is None:
+            continue
         cur = get_param(key, default, _cast_for(key))
         params.append(ParamSpec(
             key=key,
@@ -64,6 +70,10 @@ async def patch_strategy_config(req: StrategyConfigPatchRequest) -> StrategyConf
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"unknown param key: {key}",
             )
+        default = DEFAULTS.get(key)
+        # String-typed params (e.g. v5_strategy_mode) skip numeric range check
+        if isinstance(default, str):
+            continue
         lo, hi, _, _ = PARAM_META.get(key, (None, None, "", ""))
         if lo is not None and not (float(lo) <= float(val) <= float(hi)):
             raise HTTPException(
