@@ -102,14 +102,16 @@ class V5ReflectionWorker:
         from datetime import datetime, timezone
         print(f"[V5ReflectionWorker] 启动,间隔 {self.poll_interval_s}s")
         last_daily_date: Optional[str] = None
+        last_weekly_date: Optional[str] = None
 
         while True:
             try:
                 await self._tick()
 
-                # Daily aggregate at 03:00 UTC (once per UTC date)
                 now = datetime.now(timezone.utc)
                 today_str = now.strftime("%Y-%m-%d")
+
+                # Daily aggregate at 03:00 UTC (once per UTC date)
                 if now.hour >= 3 and last_daily_date != today_str:
                     try:
                         from scripts.ai.setup_aggregator import aggregate_daily
@@ -120,6 +122,17 @@ class V5ReflectionWorker:
                         last_daily_date = today_str
                     except Exception as e:
                         print(f"[V5ReflectionWorker] daily aggregate failed: {e}")
+
+                # Weekly sizing recommendations: Sunday 04:00 UTC
+                if (now.weekday() == 6 and now.hour >= 4
+                        and last_weekly_date != today_str):
+                    try:
+                        from scripts.ai.kelly_sizing import generate_sizing_recommendations
+                        recs = generate_sizing_recommendations(db_path=self.db_path)
+                        print(f"[V5ReflectionWorker] weekly sizing: {len(recs)} recommendations")
+                        last_weekly_date = today_str
+                    except Exception as e:
+                        print(f"[V5ReflectionWorker] weekly sizing failed: {e}")
 
             except asyncio.CancelledError:
                 print("[V5ReflectionWorker] 取消信号,退出")
