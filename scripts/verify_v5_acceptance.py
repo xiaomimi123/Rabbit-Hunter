@@ -144,9 +144,42 @@ def verify_plan_b_frontend(repo_root: str = "/app") -> bool:
     return False
 
 
+def verify_reflection_phase_1_3(db_path: str = "data/rabbit_hunter.db") -> bool:
+    import os, sqlite3
+    print("\n=== Reflection Worker (Phases 1-3) ===")
+    if not os.path.exists(db_path):
+        print(f"db not found: {db_path}")
+        return False
+    conn = sqlite3.connect(db_path)
+    try:
+        for table in ("reflection_queue", "reflections", "failure_taxonomy",
+                      "setup_performance_daily", "position_sizing_recommendations",
+                      "ai_confidence_calibration"):
+            try:
+                n = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+                print(f"  {table}: {n} rows")
+            except sqlite3.OperationalError as e:
+                print(f"  {table}: MISSING ({e})")
+                return False
+
+        n_seeds = conn.execute(
+            "SELECT COUNT(*) FROM failure_taxonomy WHERE seeded=1"
+        ).fetchone()[0]
+        if n_seeds != 8:
+            print(f"  expected 8 seeded failure modes, got {n_seeds}")
+            return False
+        print(f"  ✓ 8 seeded failure_taxonomy modes present")
+
+        print("\n✅ Reflection Phases 1-3 schema verification passed")
+        return True
+    finally:
+        conn.close()
+
+
 if __name__ == "__main__":
     db = os.environ.get("DB_PATH", "data/rabbit_hunter.db")
     ok_a = verify(db)
     ok_b = verify_plan_b_backend(db)
     ok_c = verify_plan_b_frontend()
-    sys.exit(0 if (ok_a and ok_b and ok_c) else 1)
+    ok_d = verify_reflection_phase_1_3(db)
+    sys.exit(0 if (ok_a and ok_b and ok_c and ok_d) else 1)
