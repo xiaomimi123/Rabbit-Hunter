@@ -185,6 +185,22 @@ CREATE TABLE IF NOT EXISTS reflections (
 
 CREATE INDEX IF NOT EXISTS idx_reflections_setup_type
     ON reflections(setup_type, created_at);
+
+CREATE TABLE IF NOT EXISTS failure_taxonomy (
+    key TEXT PRIMARY KEY,
+    label_zh TEXT NOT NULL,
+    label_en TEXT NOT NULL,
+    description TEXT NOT NULL,
+    detection_rule TEXT,
+    is_active INTEGER DEFAULT 1,
+    sample_count INTEGER DEFAULT 0,
+    avg_loss_pct REAL,
+    last_seen_at TEXT,
+    seeded INTEGER DEFAULT 0,
+    approved_by TEXT,
+    approved_at TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+);
 """
 
 # V4.3/V4.4 废弃表列表 — init_local_db 会 DROP
@@ -517,6 +533,7 @@ def init_local_db(db_path: str = "data/rabbit_hunter.db") -> None:
                    OR key LIKE 'v43_%'
             """)
 
+        _seed_failure_taxonomy(conn)
         conn.commit()
     finally:
         conn.close()
@@ -840,3 +857,16 @@ def enqueue_reflection(paper_trade_id: int, *, db_path: str = "data/rabbit_hunte
         conn.commit()
     finally:
         conn.close()
+
+
+def _seed_failure_taxonomy(conn) -> None:
+    """Idempotent — INSERT OR IGNORE 8 预置失败模式。"""
+    from scripts.ai.failure_taxonomy_seed import SEEDS
+    for s in SEEDS:
+        conn.execute("""
+            INSERT OR IGNORE INTO failure_taxonomy
+                (key, label_zh, label_en, description, detection_rule,
+                 seeded, approved_by, approved_at)
+            VALUES (?, ?, ?, ?, ?, 1, 'system', datetime('now'))
+        """, (s["key"], s["label_zh"], s["label_en"],
+              s["description"], s["detection_rule"]))
