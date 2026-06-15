@@ -54,6 +54,13 @@ async def close_position(
     pm = PaperPositionManager(db_path=db)
     pm.close_position(position_id, exit_price=body.exit_price, exit_reason=body.exit_reason)
 
+    # Reflection 入队(跟 v5_position_monitor 的 close 路径对齐)
+    try:
+        from scripts.local_db import enqueue_reflection
+        enqueue_reflection(position_id, db_path=db)
+    except Exception as e:
+        print(f"[v5_position_close] reflection enqueue failed: {e}")
+
     return CloseResponse(
         position_id=position_id,
         status="CLOSED",
