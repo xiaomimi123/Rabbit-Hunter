@@ -72,3 +72,62 @@ class FailureTaxonomyResponse(BaseModel):
 
 
 PROMPT_VERSION = "reflection-prompt-v1"
+
+
+class SetupPerformanceItem(BaseModel):
+    date: str
+    setup_type: str
+    sample_count: int
+    win_count: int
+    loss_count: int
+    win_rate: float
+    avg_realized_r: float
+    expectancy: Optional[float]
+    top_failure_mode: Optional[str]
+
+
+class SetupPerformanceResponse(BaseModel):
+    status: str = "success"
+    data: List[SetupPerformanceItem]
+
+
+class SizingRecommendation(BaseModel):
+    id: int
+    setup_type: str
+    proposed_at: str
+    current_size_multiplier: float
+    recommended_size_multiplier: float
+    confidence_score: float
+    rationale: str
+    sample_count_30d: Optional[int]
+    sample_count_60d: Optional[int]
+    sample_count_90d: Optional[int]
+    kelly_f_30d: Optional[float]
+    kelly_f_60d: Optional[float]
+    kelly_f_90d: Optional[float]
+    status: str
+
+
+class SizingRecommendationsResponse(BaseModel):
+    status: str = "success"
+    data: List[SizingRecommendation]
+
+
+class SizingDecisionRequest(BaseModel):
+    decision: Literal["approve", "reject", "modify"]
+    modified_value: Optional[float] = None
+    note: Optional[str] = None
+
+
+class CalibrationPoint(BaseModel):
+    ai_model: str
+    confidence_bucket: float
+    predicted_win_rate: float
+    actual_win_rate: float
+    sample_count: int
+    calibration_multiplier: float
+
+
+class CalibrationResponse(BaseModel):
+    status: str = "success"
+    data: List[CalibrationPoint]

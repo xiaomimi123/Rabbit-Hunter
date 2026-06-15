@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { useV5AIStatus, useV5AIDecisions } from '../../hooks/api/useV5AIStatus';
+import { useV5Calibration } from '../../hooks/api/useV5Reflections';
 import { useUIStore } from '../../services/store';
 import { LoadingSkeleton } from '../primitives/LoadingSkeleton';
 import { Sparkline } from '../primitives/Sparkline';
@@ -160,6 +161,53 @@ export function V5AIStatusPage() {
           </div>
         )}
       </HoloCard>
+
+      <CalibrationCurveCard />
     </div>
+  );
+}
+
+function CalibrationCurveCard() {
+  const q = useV5Calibration();
+  const points = q.data?.data ?? [];
+  return (
+    <HoloCard>
+      <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.3em] text-cyan-300/80 mb-3">
+        ▌ CONFIDENCE CALIBRATION CURVE
+      </div>
+      {points.length === 0 ? (
+        <div className="py-8 text-center font-mono text-cyan-300/40 text-xs">
+          ▌ awaiting first 10 reflections per bucket...
+        </div>
+      ) : (
+        <div className="space-y-1 font-mono text-xs">
+          {points.map(p => {
+            const drift = p.actual_win_rate - p.predicted_win_rate;
+            const tone = Math.abs(drift) < 0.05 ? 'text-accent-long'
+                       : Math.abs(drift) < 0.15 ? 'text-accent-warn'
+                       : 'text-accent-short';
+            return (
+              <div key={`${p.ai_model}-${p.confidence_bucket}`}
+                   className="grid grid-cols-12 gap-2 py-1 border-b border-white/5">
+                <div className="col-span-2 text-cyan-300/70">{p.ai_model}</div>
+                <div className="col-span-2 text-white">{(p.confidence_bucket * 100).toFixed(0)}%</div>
+                <div className="col-span-3 text-white/60">
+                  predicted → actual {(p.actual_win_rate * 100).toFixed(0)}%
+                </div>
+                <div className={`col-span-2 ${tone}`}>
+                  Δ {drift >= 0 ? '+' : ''}{(drift * 100).toFixed(0)}pt
+                </div>
+                <div className="col-span-2 text-violet-300/70">
+                  ×{p.calibration_multiplier.toFixed(2)}
+                </div>
+                <div className="col-span-1 text-white/40 text-right">
+                  n={p.sample_count}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </HoloCard>
   );
 }

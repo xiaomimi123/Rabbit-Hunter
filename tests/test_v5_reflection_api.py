@@ -97,3 +97,70 @@ def test_failure_taxonomy_counts_reflections(client):
     r = c.get("/api/v5/failure-taxonomy")
     by_key = {m["key"]: m for m in r.json()["data"]}
     assert by_key["chase_after_3pct_move"]["sample_count"] == 1
+
+
+def test_setup_performance_returns_empty(client):
+    c, _ = client
+    r = c.get("/api/v5/setup-performance?days=7")
+    assert r.status_code == 200
+    assert r.json() == {"status": "success", "data": []}
+
+
+def test_sizing_recommendations_pending_only(client):
+    c, db = client
+    conn = sqlite3.connect(db)
+    conn.execute("""
+        INSERT INTO position_sizing_recommendations
+            (setup_type, current_size_multiplier, recommended_size_multiplier,
+             confidence_score, rationale, status)
+        VALUES ('rsi_overbought_macd_bearish_short', 1.0, 0.6, 0.78,
+                'test', 'pending'),
+               ('other', 1.0, 0.8, 0.5, 'test2', 'approved')
+    """)
+    conn.commit()
+    conn.close()
+    r = c.get("/api/v5/sizing-recommendations")
+    body = r.json()
+    assert len(body["data"]) == 1
+    assert body["data"][0]["setup_type"] == "rsi_overbought_macd_bearish_short"
+
+
+def test_decide_sizing_approve(client):
+    c, db = client
+    conn = sqlite3.connect(db)
+    cur = conn.execute("""
+        INSERT INTO position_sizing_recommendations
+            (setup_type, current_size_multiplier, recommended_size_multiplier,
+             confidence_score, rationale)
+        VALUES ('X', 1.0, 0.7, 0.8, 'x')
+    """)
+    rec_id = cur.lastrowid
+    conn.commit()
+    conn.close()
+    r = c.patch(f"/api/v5/sizing-recommendations/{rec_id}",
+                json={"decision": "approve"})
+    assert r.status_code == 200
+    conn = sqlite3.connect(db)
+    status = conn.execute(
+        "SELECT status FROM position_sizing_recommendations WHERE id=?", (rec_id,)
+    ).fetchone()[0]
+    conn.close()
+    assert status == "approved"
+
+
+def test_calibration_returns_inserted_buckets(client):
+    c, db = client
+    conn = sqlite3.connect(db)
+    conn.execute("""
+        INSERT INTO ai_confidence_calibration
+            (ai_model, confidence_bucket, predicted_win_rate, actual_win_rate,
+             sample_count, calibration_multiplier)
+        VALUES ('deepseek-chat', 0.7, 0.7, 0.5, 15, 0.714)
+    """)
+    conn.commit()
+    conn.close()
+    r = c.get("/api/v5/confidence-calibration")
+    body = r.json()
+    assert len(body["data"]) == 1
+    assert body["data"][0]["confidence_bucket"] == 0.7
+    assert body["data"][0]["actual_win_rate"] == 0.5

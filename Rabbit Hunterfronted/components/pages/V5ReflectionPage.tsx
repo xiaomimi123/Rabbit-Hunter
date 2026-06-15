@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { useV5Reflections, useV5FailureTaxonomy } from '../../hooks/api/useV5Reflections';
+import { useV5Reflections, useV5FailureTaxonomy,
+         useV5SizingRecommendations, useV5DecideSizing } from '../../hooks/api/useV5Reflections';
 import { Card } from '../primitives/Card';
 import { Badge } from '../primitives/Badge';
 import { LoadingSkeleton } from '../primitives/LoadingSkeleton';
@@ -28,7 +29,7 @@ export function V5ReflectionPage() {
 
       {tab === 'recent' && <RecentReflectionsTab />}
       {tab === 'taxonomy' && <TaxonomyTab />}
-      {tab === 'sizing' && <Card title="仓位建议"><div className="text-white/40 text-sm">阶段 3 上线后启用</div></Card>}
+      {tab === 'sizing' && <SizingTab />}
     </div>
   );
 }
@@ -122,6 +123,103 @@ function TaxonomyTab() {
         </table>
       </div>
     </Card>
+  );
+}
+
+function SizingTab() {
+  const q = useV5SizingRecommendations();
+  const decide = useV5DecideSizing();
+  if (q.isLoading) return <LoadingSkeleton rows={4} />;
+  const rows = q.data?.data ?? [];
+
+  if (rows.length === 0) {
+    return (
+      <Card title="仓位建议(等审批)">
+        <div className="py-12 text-center text-white/40">
+          ▌ 还没有 pending 的仓位建议。每周日 04:00 UTC 自动生成
+        </div>
+      </Card>
+    );
+  }
+
+  return (
+    <Card title={`仓位建议 — 待审批 (${rows.length})`}>
+      <div className="space-y-3">
+        {rows.map(r => <SizingCard key={r.id} r={r} onDecide={decide.mutate} />)}
+      </div>
+    </Card>
+  );
+}
+
+function SizingCard({ r, onDecide }: {
+  r: any; onDecide: (args: any) => void;
+}) {
+  const [modValue, setModValue] = useState<number | ''>('');
+  const deltaPct = ((r.recommended_size_multiplier - r.current_size_multiplier)
+                    / r.current_size_multiplier) * 100;
+  const tone = deltaPct >= 0 ? 'text-accent-long' : 'text-accent-short';
+  return (
+    <div className="rounded-md border border-white/10 bg-bg-base p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="font-mono text-sm text-white">setup_type: {r.setup_type}</div>
+        <div className="text-xs text-white/50 font-mono">
+          confidence {(r.confidence_score * 100).toFixed(0)}%
+        </div>
+      </div>
+      <div className="grid grid-cols-3 gap-3 text-xs font-mono">
+        <div>
+          <div className="text-white/50">当前 size 倍数</div>
+          <div className="text-white text-base">{r.current_size_multiplier.toFixed(3)}</div>
+        </div>
+        <div>
+          <div className="text-white/50">推荐 size 倍数</div>
+          <div className={`${tone} text-base`}>
+            {r.recommended_size_multiplier.toFixed(3)}
+            <span className="text-xs ml-2">({deltaPct >= 0 ? '+' : ''}{deltaPct.toFixed(0)}%)</span>
+          </div>
+        </div>
+        <div>
+          <div className="text-white/50">Kelly 30/60/90d</div>
+          <div className="text-white/80 text-xs">
+            {r.kelly_f_30d?.toFixed(3) ?? '—'} / {r.kelly_f_60d?.toFixed(3) ?? '—'} / {r.kelly_f_90d?.toFixed(3) ?? '—'}
+          </div>
+        </div>
+      </div>
+      <div className="text-xs text-white/60">{r.rationale}</div>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => onDecide({ id: r.id, decision: 'approve' })}
+          className="rounded-sm border border-accent-long/40 bg-accent-long/10 px-3 py-1 text-xs text-accent-long"
+        >
+          批准
+        </button>
+        <button
+          type="button"
+          onClick={() => onDecide({ id: r.id, decision: 'reject' })}
+          className="rounded-sm border border-accent-short/40 bg-accent-short/10 px-3 py-1 text-xs text-accent-short"
+        >
+          拒绝
+        </button>
+        <input
+          type="number"
+          step="0.001"
+          value={modValue}
+          onChange={(e) => setModValue(e.target.value === '' ? '' : Number(e.target.value))}
+          placeholder="改值"
+          className="w-24 rounded-sm border border-white/15 bg-bg-base px-2 py-1 text-xs text-white"
+        />
+        <button
+          type="button"
+          disabled={modValue === ''}
+          onClick={() => onDecide({ id: r.id, decision: 'modify',
+                                     modified_value: Number(modValue) })}
+          className="rounded-sm border border-accent-info/40 bg-accent-info/10 px-3 py-1 text-xs text-accent-info disabled:opacity-40"
+        >
+          修改后批准
+        </button>
+      </div>
+    </div>
   );
 }
 

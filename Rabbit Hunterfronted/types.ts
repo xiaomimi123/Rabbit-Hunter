@@ -312,6 +312,59 @@ export interface FailureTaxonomyResponse {
   data: FailureMode[];
 }
 
+export interface SetupPerformanceItem {
+  date: string;
+  setup_type: string;
+  sample_count: number;
+  win_count: number;
+  loss_count: number;
+  win_rate: number;
+  avg_realized_r: number;
+  expectancy: number | null;
+  top_failure_mode: string | null;
+}
+
+export interface SetupPerformanceResponse {
+  status: string;
+  data: SetupPerformanceItem[];
+}
+
+export interface SizingRecommendation {
+  id: number;
+  setup_type: string;
+  proposed_at: string;
+  current_size_multiplier: number;
+  recommended_size_multiplier: number;
+  confidence_score: number;
+  rationale: string;
+  sample_count_30d: number | null;
+  sample_count_60d: number | null;
+  sample_count_90d: number | null;
+  kelly_f_30d: number | null;
+  kelly_f_60d: number | null;
+  kelly_f_90d: number | null;
+  status: string;
+}
+
+export interface SizingRecommendationsResponse {
+  status: string;
+  data: SizingRecommendation[];
+}
+
+export interface CalibrationPoint {
+  ai_model: string;
+  confidence_bucket: number;
+  predicted_win_rate: number;
+  actual_win_rate: number;
+  sample_count: number;
+  calibration_multiplier: number;
+}
+
+export interface CalibrationResponse {
+  status: string;
+  data: CalibrationPoint[];
+}
+
 // ── WebSocket ──
 export type WsEvent =
   | { type: 'position_opened'; symbol: string; side: Side; entry: number; sl: number; tp: number; size_usdt: number; position_id: number; strategy_id: string; mode: Mode }
