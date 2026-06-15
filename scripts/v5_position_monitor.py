@@ -182,6 +182,12 @@ class V5PositionMonitor:
                     "exit_price": intent["exit_price"],
                     "exit_reason": "AI_TIMEBOX",
                 })
+                # B-Phase-1: 触发 reflection 入队 (best-effort, don't block monitor)
+                try:
+                    from scripts.local_db import enqueue_reflection
+                    enqueue_reflection(position["id"], db_path=self.db_path)
+                except Exception as e:
+                    print(f"[V5PositionMonitor] reflection enqueue failed: {e}")
             else:
                 pm.close_position(position["id"], exit_price=intent["exit_price"],
                                   exit_reason=reason)
@@ -193,6 +199,12 @@ class V5PositionMonitor:
                     "exit_price": intent["exit_price"],
                     "exit_reason": reason,
                 })
+                # B-Phase-1: 触发 reflection 入队 (best-effort, don't block monitor)
+                try:
+                    from scripts.local_db import enqueue_reflection
+                    enqueue_reflection(position["id"], db_path=self.db_path)
+                except Exception as e:
+                    print(f"[V5PositionMonitor] reflection enqueue failed: {e}")
 
     async def _ask_ai_extend(self, position: dict, market: dict) -> str:
         try:

@@ -278,6 +278,30 @@ async def main() -> None:
     except Exception as e:
         print(f"[collector_main] MemoryAutoUploader 初始化失败,本次启动不跑自动上传: {e}")
 
+    # Reflection worker (阶段 1)
+    from scripts.tasks.v5_reflection_worker import V5ReflectionWorker
+
+    async def _reflection_ai_call(prompt: str) -> str:
+        """用 trading_assistant 已有的 LLM 客户端做轻量 chat 调用。
+        失败时上层 worker 会落 error + retry。"""
+        if ai is None or ai.client is None:
+            raise RuntimeError("AI client not configured for reflection")
+        resp = await ai.client.chat.completions.create(
+            model=ai.chat_model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.3,
+            response_format={"type": "json_object"},
+        )
+        return resp.choices[0].message.content or ""
+
+    reflection_worker = V5ReflectionWorker(
+        db_path=db_path,
+        ai_call=_reflection_ai_call,
+        ai_provider=(ai.provider if ai else None),
+        ai_model=(ai.chat_model if ai else None),
+        taxonomy_keys=[],   # Phase 2 会填充
+    )
+
     mode = _resolve_mode_db()
     print(f"[collector_main] V5 启动 — mode={mode} db={db_path} "
           f"auto_trading={'ON' if cfg.enable_auto_trading else 'OFF'} "
@@ -294,6 +318,7 @@ async def main() -> None:
         scorer.run(),
         monitor.run(),
         _healthcheck_loop(db_path),
+        reflection_worker.run(),
     ]
     if memory_uploader is not None:
         coroutines.append(memory_uploader.run())
