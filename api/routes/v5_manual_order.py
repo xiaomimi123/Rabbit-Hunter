@@ -59,7 +59,8 @@ async def _build_full_context(symbol: str, side_hint: Optional[str]):
 
     ta = TradingAssistant()
     if ta.client:
-        ai_result = await ta.decide(enriched, indicators, decision, risk)
+        ai_result = await ta.decide(enriched, indicators, decision, risk,
+                                     strategy_id="v5_manual")
         ai_dict = {
             "execute": ai_result.execute,
             "sl_multiplier": ai_result.sl_multiplier,

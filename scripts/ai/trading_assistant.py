@@ -239,11 +239,51 @@ class TradingAssistant:
         indicators,         # Indicators
         decision,           # Decision
         risk,               # RiskPlan
+        *,
+        strategy_id: Optional[str] = None,
     ) -> "AIResult":
-        """V5 二次审查 — 根据 provider 走 Assistants(OpenAI+assistant_id)
+        """Pre-decision veto: 命中 failure_taxonomy 直接返回 execute=False。
+        v5_manual 单豁免 (用户主导)。
+        V5 二次审查 — 根据 provider 走 Assistants(OpenAI+assistant_id)
         或 chat completions(DeepSeek / OpenAI 无 assistant_id)。
         """
         from v5_types import AIResult
+
+        if strategy_id != "v5_manual":
+            from scripts.ai.failure_taxonomy import match_failure_modes
+
+            side_int = 1 if decision.side == "LONG" else -1
+            sl_dist = abs((risk.sl_price or 0) - (risk.entry_price or 0))
+            tp_dist = abs((risk.tp_price or 0) - (risk.entry_price or 0))
+            atr = indicators.atr_15m or 0.0
+            candidate = {
+                "symbol": enriched.symbol,
+                "side": decision.side,
+                "side_int": side_int,
+                "rsi_15m": indicators.rsi_15m,
+                "macd_hist_15m": indicators.macd_hist_15m,
+                "macd_hist_prev_15m": indicators.macd_hist_prev_15m,
+                "macd_hist_4h": indicators.macd_hist_4h,
+                "atr_15m": atr,
+                "sl_distance_atr_ratio": (sl_dist / atr) if atr > 0 else 0,
+                "tp_distance_atr_ratio": (tp_dist / atr) if atr > 0 else 0,
+                "delta_15m_pct": enriched.delta_15m_pct,
+                "funding_z_score": None,    # V6 上线后填
+            }
+            try:
+                hits = match_failure_modes(candidate)
+            except Exception as e:
+                print(f"[trading_assistant] taxonomy match error: {e}")
+                hits = []
+            if hits:
+                return AIResult(
+                    execute=False,
+                    sl_multiplier=1.0, tp_multiplier=1.0,
+                    size_multiplier=0.0, confidence=0.0,
+                    reasoning=f"FAILURE_MODE_MATCH: {','.join(hits)}",
+                )
+
+        # ── 原 RAG + AI call 路径继续 (existing code) ──
         from scripts.ai.prompt import V5_SYSTEM_PROMPT, build_v5_user_message
         from scripts.ai.guardrails import clamp_ai_result
 
@@ -279,6 +319,8 @@ class TradingAssistant:
                     self._decide_via_chat(V5_SYSTEM_PROMPT, user_msg),
                     timeout=timeout_s,
                 )
+            if isinstance(raw_json, AIResult):
+                return clamp_ai_result(raw_json)
             result = AIResult(
                 execute=bool(raw_json.get("execute", False)),
                 sl_multiplier=float(raw_json.get("sl_multiplier", 1.0)),

@@ -299,7 +299,12 @@ async def main() -> None:
         ai_call=_reflection_ai_call,
         ai_provider=(ai.provider if ai else None),
         ai_model=(ai.chat_model if ai else None),
-        taxonomy_keys=[],   # Phase 2 会填充
+        taxonomy_keys=[
+            "late_entry_signal_decay", "macd_false_cross",
+            "against_4h_trend_no_funding_filter", "sl_too_tight_in_high_atr",
+            "tp_too_far_in_low_atr", "news_event_30min_blackout",
+            "chase_after_3pct_move", "repeat_failure_same_symbol_24h",
+        ],
     )
 
     mode = _resolve_mode_db()
