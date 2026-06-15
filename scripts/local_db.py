@@ -145,6 +145,46 @@ CREATE TABLE IF NOT EXISTS ws_event_queue (
     payload_json TEXT NOT NULL,
     created_at   TEXT DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS reflection_queue (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    paper_trade_id INTEGER NOT NULL UNIQUE,
+    enqueued_at TEXT NOT NULL DEFAULT (datetime('now')),
+    started_at TEXT,
+    completed_at TEXT,
+    error TEXT,
+    retry_count INTEGER DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_reflection_queue_pending
+    ON reflection_queue(completed_at, retry_count)
+    WHERE completed_at IS NULL;
+
+CREATE TABLE IF NOT EXISTS reflections (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    paper_trade_id INTEGER NOT NULL UNIQUE,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    why_entered TEXT NOT NULL,
+    what_was_expected TEXT NOT NULL,
+    what_actually_happened TEXT NOT NULL,
+    correction_idea TEXT NOT NULL,
+    failure_mode_key TEXT,
+    setup_type TEXT NOT NULL,
+    outcome_class TEXT NOT NULL,
+    realized_r REAL NOT NULL,
+    holding_minutes INTEGER NOT NULL,
+    confidence_at_entry REAL NOT NULL,
+    self_assessed_prediction_accuracy REAL,
+    is_in_predicted_failure_mode INTEGER,
+    ai_provider TEXT,
+    ai_model TEXT,
+    ai_latency_ms INTEGER,
+    prompt_version TEXT,
+    raw_response_json TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_reflections_setup_type
+    ON reflections(setup_type, created_at);
 """
 
 # V4.3/V4.4 废弃表列表 — init_local_db 会 DROP
@@ -787,3 +827,16 @@ def get_local_db() -> LocalDB:
     if _instance is None:
         _instance = LocalDB()
     return _instance
+
+
+def enqueue_reflection(paper_trade_id: int, *, db_path: str = "data/rabbit_hunter.db") -> None:
+    """关仓后入队 reflection。idempotent — 重复入队同一 paper_trade 安全忽略。"""
+    conn = sqlite3.connect(db_path)
+    try:
+        conn.execute(
+            "INSERT OR IGNORE INTO reflection_queue (paper_trade_id) VALUES (?)",
+            (paper_trade_id,),
+        )
+        conn.commit()
+    finally:
+        conn.close()
