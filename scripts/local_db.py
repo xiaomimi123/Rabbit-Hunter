@@ -201,6 +201,57 @@ CREATE TABLE IF NOT EXISTS failure_taxonomy (
     approved_at TEXT,
     created_at TEXT DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS setup_performance_daily (
+    date TEXT NOT NULL,
+    setup_type TEXT NOT NULL,
+    sample_count INTEGER NOT NULL,
+    win_count INTEGER NOT NULL,
+    loss_count INTEGER NOT NULL,
+    scratch_count INTEGER NOT NULL,
+    win_rate REAL NOT NULL,
+    avg_realized_r REAL NOT NULL,
+    avg_holding_minutes REAL,
+    expectancy REAL,
+    sharpe_30d REAL,
+    top_failure_mode TEXT,
+    PRIMARY KEY (date, setup_type)
+);
+
+CREATE TABLE IF NOT EXISTS position_sizing_recommendations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    setup_type TEXT NOT NULL,
+    proposed_at TEXT DEFAULT (datetime('now')),
+    current_size_multiplier REAL NOT NULL,
+    recommended_size_multiplier REAL NOT NULL,
+    confidence_score REAL NOT NULL,
+    rationale TEXT NOT NULL,
+    sample_count_30d INTEGER,
+    sample_count_60d INTEGER,
+    sample_count_90d INTEGER,
+    kelly_f_30d REAL,
+    kelly_f_60d REAL,
+    kelly_f_90d REAL,
+    fractional_kelly_applied REAL,
+    status TEXT DEFAULT 'pending',
+    user_decision_at TEXT,
+    user_decision_note TEXT,
+    user_modified_value REAL,
+    ab_test_started_at TEXT,
+    ab_test_target_sample INTEGER,
+    ab_test_result TEXT
+);
+
+CREATE TABLE IF NOT EXISTS ai_confidence_calibration (
+    ai_model TEXT NOT NULL,
+    confidence_bucket REAL NOT NULL,
+    predicted_win_rate REAL NOT NULL,
+    actual_win_rate REAL NOT NULL,
+    sample_count INTEGER NOT NULL,
+    calibration_multiplier REAL NOT NULL,
+    last_updated TEXT DEFAULT (datetime('now')),
+    PRIMARY KEY (ai_model, confidence_bucket)
+);
 """
 
 # V4.3/V4.4 废弃表列表 — init_local_db 会 DROP

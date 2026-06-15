@@ -99,10 +99,28 @@ class V5ReflectionWorker:
                 traceback.print_exc()
 
     async def run(self) -> None:
+        from datetime import datetime, timezone
         print(f"[V5ReflectionWorker] 启动,间隔 {self.poll_interval_s}s")
+        last_daily_date: Optional[str] = None
+
         while True:
             try:
                 await self._tick()
+
+                # Daily aggregate at 03:00 UTC (once per UTC date)
+                now = datetime.now(timezone.utc)
+                today_str = now.strftime("%Y-%m-%d")
+                if now.hour >= 3 and last_daily_date != today_str:
+                    try:
+                        from scripts.ai.setup_aggregator import aggregate_daily
+                        from datetime import timedelta
+                        yday = (now - timedelta(days=1)).strftime("%Y-%m-%d")
+                        n = aggregate_daily(db_path=self.db_path, target_date=yday)
+                        print(f"[V5ReflectionWorker] daily aggregate {yday}: {n} setup_types")
+                        last_daily_date = today_str
+                    except Exception as e:
+                        print(f"[V5ReflectionWorker] daily aggregate failed: {e}")
+
             except asyncio.CancelledError:
                 print("[V5ReflectionWorker] 取消信号,退出")
                 return
