@@ -320,16 +320,35 @@ class TradingAssistant:
                     timeout=timeout_s,
                 )
             if isinstance(raw_json, AIResult):
-                return clamp_ai_result(raw_json)
-            result = AIResult(
-                execute=bool(raw_json.get("execute", False)),
-                sl_multiplier=float(raw_json.get("sl_multiplier", 1.0)),
-                tp_multiplier=float(raw_json.get("tp_multiplier", 1.0)),
-                size_multiplier=float(raw_json.get("size_multiplier", 1.0)),
-                confidence=float(raw_json.get("confidence", 0.5)),
-                reasoning=str(raw_json.get("reasoning", "")),
-            )
-            return clamp_ai_result(result)
+                ai_result = raw_json
+            else:
+                ai_result = AIResult(
+                    execute=bool(raw_json.get("execute", False)),
+                    sl_multiplier=float(raw_json.get("sl_multiplier", 1.0)),
+                    tp_multiplier=float(raw_json.get("tp_multiplier", 1.0)),
+                    size_multiplier=float(raw_json.get("size_multiplier", 1.0)),
+                    confidence=float(raw_json.get("confidence", 0.5)),
+                    reasoning=str(raw_json.get("reasoning", "")),
+                )
+            # B-Phase-3: apply calibration multiplier
+            try:
+                from scripts.ai.confidence_calibration import get_calibration_multiplier
+                mult = get_calibration_multiplier(
+                    ai_model=self.chat_model,
+                    confidence=ai_result.confidence,
+                )
+                if mult != 1.0:
+                    ai_result = AIResult(
+                        execute=ai_result.execute,
+                        sl_multiplier=ai_result.sl_multiplier,
+                        tp_multiplier=ai_result.tp_multiplier,
+                        size_multiplier=ai_result.size_multiplier,
+                        confidence=ai_result.confidence * mult,
+                        reasoning=ai_result.reasoning + f" [calibrated x{mult:.2f}]",
+                    )
+            except Exception as e:
+                print(f"[trading_assistant] calibration apply failed: {e}")
+            return clamp_ai_result(ai_result)
         except asyncio.TimeoutError:
             return AIResult(execute=False, sl_multiplier=1.0, tp_multiplier=1.0,
                             size_multiplier=0.0, confidence=0.0,

@@ -172,3 +172,16 @@ async def run_reflection_for_trade(*, paper_trade_id: int, db_path: str,
         raise ValueError(f"reflection AI response failed schema: {e}") from e
 
     _persist(db_path, ctx, ai_out, raw, latency_ms, ai_provider, ai_model)
+
+    # B-Phase-3: 更新 calibration
+    if ai_model:
+        try:
+            from scripts.ai.confidence_calibration import update_calibration
+            update_calibration(
+                ai_model=ai_model,
+                confidence_at_entry=ctx["confidence_at_entry"],
+                won=(ctx["realized_r"] > 0),
+                db_path=db_path,
+            )
+        except Exception as e:
+            print(f"[reflection] calibration update failed: {e}")
