@@ -66,11 +66,38 @@ def _load_close_context(db_path: str, paper_trade_id: int,
     macd_hist = float(pt["entry_macd_hist_15m"] or (ts["macd_hist_15m"] if ts else 0.0))
     macd_hist_prev = float(ts["macd_hist_prev_15m"] if ts else 0.0)
 
+    # V6: 拉 funding state at entry
+    funding_z_score_at_entry = None
+    funding_rate_at_entry = None
+    try:
+        # Prefer trade_scores_v5.funding_z_score (scorer 写入时刻的快照)
+        if ts is not None and ts["funding_z_score"] is not None:
+            funding_z_score_at_entry = float(ts["funding_z_score"])
+            funding_rate_at_entry = (
+                float(ts["funding_rate_8h"]) if ts["funding_rate_8h"] is not None
+                else None
+            )
+        else:
+            # Fallback: 找最接近 entry_time 的 funding_rates 行
+            conn2 = sqlite3.connect(db_path)
+            try:
+                fr_row = conn2.execute("""
+                    SELECT funding_rate FROM funding_rates
+                     WHERE symbol = ? AND funding_time <= ?
+                     ORDER BY funding_time DESC LIMIT 1
+                """, (pt["symbol"], pt["entry_time"])).fetchone()
+                if fr_row:
+                    funding_rate_at_entry = float(fr_row[0])
+            finally:
+                conn2.close()
+    except Exception as e:
+        print(f"[reflection_runner] funding lookup failed: {e}")
+
     setup_type = derive_setup_type({
         "side": side, "strategy_id": pt["strategy_id"] or "v5_rsi_macd",
         "rsi_15m": rsi_15m,
         "macd_hist": macd_hist, "macd_hist_prev": macd_hist_prev,
-        "funding_z_score": None,
+        "funding_z_score": funding_z_score_at_entry,
     })
 
     return {
@@ -91,7 +118,8 @@ def _load_close_context(db_path: str, paper_trade_id: int,
         "entry_macd_hist_15m": macd_hist,
         "entry_macd_hist_prev_15m": macd_hist_prev,
         "entry_atr_15m": float(pt["atr_k"] or (ts["atr_15m"] if ts else 0.0)),
-        "funding_z_score": None,
+        "funding_z_score": funding_z_score_at_entry,
+        "funding_rate_at_entry": funding_rate_at_entry,
         "rule_reasoning": ts["reasoning"] if ts else None,
         "ai_reasoning": pt["ai_reason"],
         "rag_cases_text": None,    # 阶段 1 暂不回填,留 prompt 优雅处理 None
@@ -114,8 +142,9 @@ def _persist(db_path: str, ctx: dict, ai_out: ReflectionAIOutput,
                 correction_idea, failure_mode_key, setup_type, outcome_class,
                 realized_r, holding_minutes, confidence_at_entry,
                 self_assessed_prediction_accuracy, is_in_predicted_failure_mode,
-                ai_provider, ai_model, ai_latency_ms, prompt_version, raw_response_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ai_provider, ai_model, ai_latency_ms, prompt_version, raw_response_json,
+                funding_z_score_at_entry, funding_rate_at_entry
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             ctx["paper_trade_id"], ai_out.why_entered, ai_out.what_was_expected,
             ai_out.what_actually_happened, ai_out.correction_idea,
@@ -125,6 +154,7 @@ def _persist(db_path: str, ctx: dict, ai_out: ReflectionAIOutput,
             ai_out.self_assessed_prediction_accuracy,
             1 if ai_out.is_in_predicted_failure_mode else 0,
             ai_provider, ai_model, latency_ms, PROMPT_VERSION, raw,
+            ctx.get("funding_z_score"), ctx.get("funding_rate_at_entry"),
         ))
         conn.commit()
     finally:

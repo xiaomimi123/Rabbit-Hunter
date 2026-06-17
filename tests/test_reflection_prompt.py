@@ -96,3 +96,57 @@ def test_prompt_handles_missing_funding_gracefully():
     prompt = build_reflection_prompt(ctx)
     # 不应当抛异常,出现 funding 行但标注 N/A
     assert "Funding" in prompt or "funding" in prompt
+
+
+def test_prompt_includes_funding_when_present():
+    from scripts.ai.reflection_prompt import build_reflection_prompt
+    ctx = {
+        "paper_trade_id": 1,
+        "symbol": "BTCUSDT",
+        "side": "SHORT",
+        "strategy_id": "v5_rsi_macd",
+        "entry_price": 50000, "exit_price": 49000,
+        "entry_time": "2026-06-17T08:00:00+00:00",
+        "exit_time": "2026-06-17T08:30:00+00:00",
+        "exit_reason": "TP_HIT",
+        "realized_r": +1.0, "holding_minutes": 30,
+        "confidence_at_entry": 0.7,
+        "entry_rsi_15m": 72.0, "entry_rsi_4h": 65.0,
+        "entry_macd_hist_15m": -0.001, "entry_macd_hist_prev_15m": +0.001,
+        "entry_atr_15m": 0.0015,
+        "funding_z_score": 2.5,
+        "funding_rate_at_entry": 0.0005,
+        "rule_reasoning": "test",
+        "ai_reasoning": "test",
+        "rag_cases_text": "",
+        "during_hold_path": "",
+        "taxonomy_keys": [],
+    }
+    prompt = build_reflection_prompt(ctx)
+    assert "FUNDING" in prompt.upper() or "funding" in prompt
+    assert "2.5" in prompt
+
+
+def test_prompt_handles_missing_funding():
+    """funding_z_score is None → 不抛异常,prompt 含 N/A 标记."""
+    from scripts.ai.reflection_prompt import build_reflection_prompt
+    ctx = {
+        "paper_trade_id": 1, "symbol": "BTCUSDT", "side": "SHORT",
+        "strategy_id": "v5_rsi_macd",
+        "entry_price": 50000, "exit_price": 49000,
+        "entry_time": "2026-06-17T08:00:00+00:00",
+        "exit_time": "2026-06-17T08:30:00+00:00",
+        "exit_reason": "TP_HIT",
+        "realized_r": +1.0, "holding_minutes": 30,
+        "confidence_at_entry": 0.7,
+        "entry_rsi_15m": 72.0, "entry_rsi_4h": 65.0,
+        "entry_macd_hist_15m": -0.001, "entry_macd_hist_prev_15m": +0.001,
+        "entry_atr_15m": 0.0015,
+        "funding_z_score": None,
+        "funding_rate_at_entry": None,
+        "rule_reasoning": "x", "ai_reasoning": "x",
+        "rag_cases_text": "", "during_hold_path": "",
+        "taxonomy_keys": [],
+    }
+    prompt = build_reflection_prompt(ctx)
+    assert prompt  # no exception

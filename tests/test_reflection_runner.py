@@ -184,3 +184,70 @@ def test_run_reflection_idempotent_skip_if_already_done(db, monkeypatch):
         paper_trade_id=5, db_path=db, ai_call=mock_ai, taxonomy_keys=[]
     ))
     mock_ai.assert_not_called()
+
+
+def test_run_reflection_loads_funding_from_db(db, monkeypatch):
+    """注入 funding_rates + paper_trade,reflection_runner 应当从 DB 取 funding_z_score_at_entry."""
+    import json
+    import asyncio
+    from datetime import datetime, timezone, timedelta
+    from unittest.mock import AsyncMock
+    from scripts.ai.reflection_runner import run_reflection_for_trade
+
+    et = (datetime.now(timezone.utc) - timedelta(minutes=30)).isoformat()
+    xt = datetime.now(timezone.utc).isoformat()
+
+    conn = sqlite3.connect(db)
+    # Paper trade
+    conn.execute("""
+        INSERT INTO paper_trades (id, symbol, side, entry_price, entry_time, status,
+            stop_loss, take_profit, position_size_usdt, leverage, strategy_id,
+            created_at, exit_price, exit_time, exit_reason, pnl_percent,
+            entry_rsi_15m, entry_macd_hist_15m, ai_confidence, ai_reason)
+        VALUES (50, 'BTCUSDT', 'SHORT', 50000, ?, 'CLOSED',
+                51000, 49500, 15.0, 10, 'v5_rsi_macd', ?,
+                49500, ?, 'TP_HIT', 1.0,
+                72.0, -0.001, 0.7, 'test')
+    """, (et, et, xt))
+    # trade_scores_v5 入场行(scorer 写的,包含 funding_z_score 快照)
+    conn.execute("""
+        INSERT INTO trade_scores_v5 (
+            symbol, created_at, rsi_15m, macd_hist_15m, macd_hist_prev_15m,
+            atr_15m, current_price, executed, position_id, should_trade, side,
+            funding_z_score, funding_rate_8h
+        ) VALUES ('BTCUSDT', ?, 72.0, -0.001, 0.0008, 0.0015, 50000, 1, 50, 1, 'SHORT',
+                  2.5, 0.0008)
+    """, (et,))
+    # funding_rate at entry (用于 fallback 查询)
+    conn.execute("""
+        INSERT INTO funding_rates (symbol, instrument_id, funding_time,
+            funding_rate, annualized_rate, source)
+        VALUES ('BTCUSDT', 'BTC-USDT-SWAP', ?, 0.0008, 0.876, 'okx')
+    """, (et,))
+    conn.commit()
+    conn.close()
+
+    fake_ai = AsyncMock(return_value=json.dumps({
+        "why_entered": "RSI 72 + funding extreme long crowding observed at entry",
+        "what_was_expected": "Expected pullback as longs got squeezed by funding cost",
+        "what_actually_happened": "Hit TP within 30 min, funding stayed elevated",
+        "correction_idea": "Keep funding z>2 setups as priority",
+        "failure_mode_key": None,
+        "self_assessed_prediction_accuracy": 0.8,
+        "is_in_predicted_failure_mode": False,
+    }))
+
+    asyncio.run(run_reflection_for_trade(
+        paper_trade_id=50, db_path=db,
+        ai_call=fake_ai, taxonomy_keys=[],
+    ))
+
+    conn = sqlite3.connect(db)
+    row = conn.execute(
+        "SELECT funding_z_score_at_entry, funding_rate_at_entry "
+        "FROM reflections WHERE paper_trade_id=50"
+    ).fetchone()
+    conn.close()
+    assert row is not None
+    assert row[0] == 2.5
+    assert row[1] == 0.0008

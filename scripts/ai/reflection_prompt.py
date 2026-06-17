@@ -17,6 +17,18 @@ def build_reflection_prompt(ctx: dict) -> str:
         else "N/A (V6 funding feed not active for this trade)"
     )
 
+    fz = ctx.get("funding_z_score")
+    fr = ctx.get("funding_rate_at_entry")
+    if fz is not None and fr is not None:
+        annualized = fr * 365 * 3 * 100
+        funding_block = (
+            f"\n[ENTRY FUNDING SNAPSHOT]\n"
+            f"8h funding rate: {fr*100:+.4f}% (annualized {annualized:+.1f}%)\n"
+            f"30d z-score: {fz:+.2f}\n"
+        )
+    else:
+        funding_block = "\n[ENTRY FUNDING SNAPSHOT]\nN/A (no funding data available)\n"
+
     taxonomy_lines = "\n".join(f"  - {k}" for k in ctx.get("taxonomy_keys", []))
 
     return f"""You are reviewing a CLOSED trade made by an automated quant bot.
@@ -43,7 +55,7 @@ Funding rate z-score: {funding_str}
 Rule engine reasoning: {ctx.get('rule_reasoning', 'N/A')}
 AI confidence at entry: {ctx['confidence_at_entry']:.2f}
 AI reasoning at entry: {ctx.get('ai_reasoning', 'N/A')}
-
+{funding_block}
 [RAG CASES AI SAW AT ENTRY]
 {ctx.get('rag_cases_text') or '(none — cold start)'}
 
