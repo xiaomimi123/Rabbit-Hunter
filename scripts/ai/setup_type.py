@@ -3,10 +3,12 @@ from typing import Optional
 
 
 def derive_setup_type(entry: dict) -> str:
-    """从 entry snapshot 派生 setup_type 字符串。AI 不参与。
+    """从 entry snapshot 派生 setup_type。AI 不参与。
 
-    entry 必须含字段:side / strategy_id / rsi_15m / macd_hist / macd_hist_prev
-    可选: funding_z_score(V6 上线后才有)
+    优先级:
+      1. v5_manual → manual_<side>
+      2. |funding_z_score| >= 2.0 → funding_extreme_<dir>_<rsi_state>
+      3. RSI×MACD×side → rsi_<state>_macd_<state>_<side>
     """
     side = (entry.get("side") or "").upper()
     side_lower = side.lower() if side else "unknown"
@@ -25,16 +27,16 @@ def derive_setup_type(entry: dict) -> str:
     else:
         rsi_state = "rsi_neutral"
 
+    fz = entry.get("funding_z_score")
+    if fz is not None and abs(fz) >= 2.0:
+        direction = "short" if fz > 0 else "long"
+        return f"funding_extreme_{direction}_{rsi_state}"
+
     if hist_prev < 0 and hist > 0:
         macd_state = "macd_bullish"
     elif hist_prev > 0 and hist < 0:
         macd_state = "macd_bearish"
     else:
         macd_state = "macd_extending"
-
-    fz: Optional[float] = entry.get("funding_z_score")
-    if fz is not None and abs(fz) >= 2.0:
-        direction = "short" if fz > 0 else "long"
-        return f"funding_extreme_{direction}_{rsi_state}"
 
     return f"{rsi_state}_{macd_state}_{side_lower}"
