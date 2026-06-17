@@ -1,8 +1,8 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { ReactNode, useState, useRef, useEffect } from 'react';
 
 interface Props {
-  content: React.ReactNode;
-  children: React.ReactNode;
+  content: ReactNode;
+  children: ReactNode;
   className?: string;
   maxWidth?: number;
 }
@@ -31,9 +31,9 @@ export function Tooltip({ content, children, className = '', maxWidth = 320 }: P
       {children}
       {open && (
         <span
-          className={`absolute z-40 rounded-md border border-white/15 bg-bg-base px-3 py-2 text-xs text-white/90 shadow-xl ${
+          className={`absolute z-40 border border-hairline-strong bg-bg-elevated px-3 py-2 font-body italic text-[0.78rem] text-ivory-70 shadow-xl ${
             placement === 'top' ? 'bottom-full mb-2' : 'top-full mt-2'
-          } left-1/2 -translate-x-1/2 pointer-events-none whitespace-normal`}
+          } left-1/2 -translate-x-1/2 pointer-events-none whitespace-normal leading-relaxed`}
           style={{ maxWidth, minWidth: 180 }}
         >
           {content}

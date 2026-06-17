@@ -1,18 +1,28 @@
-import React from 'react';
+import { ReactNode } from 'react';
 
-type Variant = 'long' | 'short' | 'warn' | 'info' | 'neutral';
+type Variant = 'long' | 'short' | 'warn' | 'info' | 'neutral' | 'brass' | 'alarm';
 
-const BG: Record<Variant, string> = {
-  long: 'bg-accent-long/15 text-accent-long border-accent-long/30',
-  short: 'bg-accent-short/15 text-accent-short border-accent-short/30',
-  warn: 'bg-accent-warn/15 text-accent-warn border-accent-warn/30',
-  info: 'bg-accent-info/15 text-accent-info border-accent-info/30',
-  neutral: 'bg-white/5 text-white/70 border-white/10',
+const STYLE: Record<Variant, string> = {
+  long:    'text-sage border-sage bg-sage-soft',
+  short:   'text-oxblood border-oxblood bg-oxblood-soft',
+  warn:    'text-brass border-brass bg-brass-soft',
+  info:    'text-ink border-ink bg-ink-soft',
+  neutral: 'text-ivory-70 border-hairline-strong bg-transparent',
+  brass:   'text-brass border-brass bg-brass-soft',
+  alarm:   'text-alarm border-alarm bg-alarm/10',
 };
 
-export function Badge({ variant = 'neutral', children }: { variant?: Variant; children: React.ReactNode }) {
+interface BadgeProps {
+  variant?: Variant;
+  children: ReactNode;
+  className?: string;
+}
+
+export function Badge({ variant = 'neutral', children, className = '' }: BadgeProps) {
   return (
-    <span className={`inline-flex items-center gap-1 rounded-sm border px-2 py-0.5 text-xs font-mono ${BG[variant]}`}>
+    <span
+      className={`inline-flex items-center gap-1.5 font-mono text-[0.7rem] tracking-wider2 px-2.5 py-0.5 border ${STYLE[variant]} ${className}`}
+    >
       {children}
     </span>
   );

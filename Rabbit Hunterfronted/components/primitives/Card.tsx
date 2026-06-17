@@ -1,22 +1,31 @@
-import React from 'react';
+import { ReactNode } from 'react';
+import { Aperture } from './Aperture';
 
 interface CardProps {
-  title?: React.ReactNode;
-  actions?: React.ReactNode;
+  title?: ReactNode;
+  actions?: ReactNode;
   className?: string;
-  children: React.ReactNode;
+  children: ReactNode;
+  /** Show an Aperture marker before the title. Default true when title is set. */
+  aperture?: boolean;
 }
 
-export function Card({ title, actions, className = '', children }: CardProps) {
+export function Card({ title, actions, className = '', children, aperture }: CardProps) {
+  const showAperture = aperture ?? !!title;
   return (
-    <div className={`rounded-md border border-white/10 bg-bg-surface ${className}`}>
+    <section className={`bg-bg-base ${className}`}>
       {(title || actions) && (
-        <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
-          {title && <div className="text-sm font-medium text-white/90">{title}</div>}
-          {actions && <div className="flex items-center gap-2">{actions}</div>}
-        </div>
+        <header className="flex items-center gap-3.5 pb-4 border-b border-hairline mb-5">
+          {showAperture && title && <Aperture size={18} className="text-brass" />}
+          {title && <h3 className="font-display text-[1.4rem] tracking-tight leading-none">{title}</h3>}
+          {actions && (
+            <div className="ml-auto flex items-center gap-2 font-mono text-[0.7rem] text-ivory-40 tracking-wide">
+              {actions}
+            </div>
+          )}
+        </header>
       )}
-      <div className="p-4">{children}</div>
-    </div>
+      {children}
+    </section>
   );
 }
