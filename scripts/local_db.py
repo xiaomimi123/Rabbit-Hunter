@@ -252,6 +252,34 @@ CREATE TABLE IF NOT EXISTS ai_confidence_calibration (
     last_updated TEXT DEFAULT (datetime('now')),
     PRIMARY KEY (ai_model, confidence_bucket)
 );
+
+CREATE TABLE IF NOT EXISTS funding_rates (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    symbol TEXT NOT NULL,
+    instrument_id TEXT NOT NULL,
+    funding_time TEXT NOT NULL,
+    funding_rate REAL NOT NULL,
+    annualized_rate REAL NOT NULL,
+    settled_rate REAL,
+    source TEXT NOT NULL DEFAULT 'okx',
+    fetched_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(symbol, funding_time, source)
+);
+
+CREATE INDEX IF NOT EXISTS idx_funding_rates_symbol_time
+    ON funding_rates(symbol, funding_time DESC);
+
+CREATE TABLE IF NOT EXISTS funding_zscore_cache (
+    symbol TEXT PRIMARY KEY,
+    computed_at TEXT NOT NULL DEFAULT (datetime('now')),
+    current_funding_rate REAL NOT NULL,
+    mean_30d REAL,
+    std_30d REAL,
+    zscore_30d REAL,
+    sample_size_30d INTEGER,
+    is_extreme INTEGER NOT NULL DEFAULT 0,
+    extreme_direction TEXT
+);
 """
 
 # V4.3/V4.4 废弃表列表 — init_local_db 会 DROP
@@ -585,6 +613,7 @@ def init_local_db(db_path: str = "data/rabbit_hunter.db") -> None:
             """)
 
         _seed_failure_taxonomy(conn)
+        _migrate_funding_columns(conn)
         conn.commit()
     finally:
         conn.close()
@@ -908,6 +937,21 @@ def enqueue_reflection(paper_trade_id: int, *, db_path: str = "data/rabbit_hunte
         conn.commit()
     finally:
         conn.close()
+
+
+def _migrate_funding_columns(conn) -> None:
+    """ALTER 现有表加 funding 字段(idempotent — 重复 ALTER 不报错)."""
+    for sql in (
+        "ALTER TABLE trade_scores_v5 ADD COLUMN funding_z_score REAL",
+        "ALTER TABLE trade_scores_v5 ADD COLUMN funding_rate_8h REAL",
+        "ALTER TABLE reflections ADD COLUMN funding_z_score_at_entry REAL",
+        "ALTER TABLE reflections ADD COLUMN funding_rate_at_entry REAL",
+    ):
+        try:
+            conn.execute(sql)
+        except sqlite3.OperationalError as e:
+            if "duplicate column" not in str(e).lower():
+                raise
 
 
 def _seed_failure_taxonomy(conn) -> None:
