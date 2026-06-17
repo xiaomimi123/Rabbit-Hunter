@@ -68,7 +68,9 @@ def _write_trade_score(db_path: str, enriched: EnrichedItem, indicators: Indicat
                        decision: Decision, ai: Optional[AIResult] = None,
                        risk: Optional[RiskPlan] = None, executed: bool = False,
                        position_id: Optional[int] = None,
-                       block_reason: Optional[str] = None) -> int:
+                       block_reason: Optional[str] = None,
+                       funding_z_score: Optional[float] = None,
+                       funding_rate_8h: Optional[float] = None) -> int:
     conn = sqlite3.connect(db_path)
     try:
         cur = conn.execute("""
@@ -80,9 +82,10 @@ def _write_trade_score(db_path: str, enriched: EnrichedItem, indicators: Indicat
                 ai_confidence, ai_sl_multiplier, ai_tp_multiplier, ai_size_multiplier,
                 ai_reasoning,
                 entry_price, sl_price, tp_price, size_usdt, expected_rr,
-                executed, position_id
+                executed, position_id,
+                funding_z_score, funding_rate_8h
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             enriched.symbol, _utcnow(), enriched.delta_15m_pct, enriched.volume_24h_usdt,
             indicators.rsi_15m, indicators.macd_15m, indicators.macd_signal_15m,
@@ -102,6 +105,7 @@ def _write_trade_score(db_path: str, enriched: EnrichedItem, indicators: Indicat
             risk.size_usdt if risk else None,
             risk.expected_rr if risk else None,
             1 if executed else 0, position_id,
+            funding_z_score, funding_rate_8h,
         ))
         sid = cur.lastrowid
         conn.commit()
@@ -128,14 +132,30 @@ async def process_enriched_v5(*, enriched: EnrichedItem, ai, paper_pm, live_pm,
         print(f"[V5Scorer] {enriched.symbol} 指标计算失败: {e}")
         return
 
+    # V6: 拉 funding z-score 并注入 trade_scores
+    funding_z_score: Optional[float] = None
+    funding_rate_8h: Optional[float] = None
+    try:
+        from scripts.ai.funding_rate_calculator import get_cached_zscore
+        fz_row = get_cached_zscore(enriched.symbol, db_path=db_path)
+        if fz_row:
+            funding_z_score = fz_row["zscore_30d"]
+            funding_rate_8h = fz_row["current_funding_rate"]
+    except Exception as e:
+        print(f"[V5Scorer] funding lookup 失败 ({enriched.symbol}): {e}")
+
     decision = decide(enriched, indicators)
     if not decision.should_trade:
-        _write_trade_score(db_path, enriched, indicators, decision)
+        _write_trade_score(db_path, enriched, indicators, decision,
+                          funding_z_score=funding_z_score,
+                          funding_rate_8h=funding_rate_8h)
         return
 
     if _count_open_positions(db_path) >= _max_concurrent():
         _write_trade_score(db_path, enriched, indicators, decision,
-                          block_reason="MAX_CONCURRENT_POSITIONS")
+                          block_reason="MAX_CONCURRENT_POSITIONS",
+                          funding_z_score=funding_z_score,
+                          funding_rate_8h=funding_rate_8h)
         return
 
     risk = plan(
@@ -154,13 +174,17 @@ async def process_enriched_v5(*, enriched: EnrichedItem, ai, paper_pm, live_pm,
                                   reasoning="AI disabled — SHADOW pass-through")
         else:
             _write_trade_score(db_path, enriched, indicators, decision,
-                              block_reason="AI_UNAVAILABLE_LIVE_FAIL_CLOSED")
+                              block_reason="AI_UNAVAILABLE_LIVE_FAIL_CLOSED",
+                              funding_z_score=funding_z_score,
+                              funding_rate_8h=funding_rate_8h)
             return
     else:
         ai_result = await ai.decide(enriched, indicators, decision, risk)
         if not ai_result.execute:
             _write_trade_score(db_path, enriched, indicators, decision,
-                              ai=ai_result, risk=risk, block_reason="AI_REJECTED")
+                              ai=ai_result, risk=risk, block_reason="AI_REJECTED",
+                              funding_z_score=funding_z_score,
+                              funding_rate_8h=funding_rate_8h)
             return
 
     try:
@@ -179,12 +203,16 @@ async def process_enriched_v5(*, enriched: EnrichedItem, ai, paper_pm, live_pm,
     except Exception as e:
         _write_trade_score(db_path, enriched, indicators, decision,
                           ai=ai_result, risk=risk,
-                          block_reason=f"OPEN_FAILED:{type(e).__name__}")
+                          block_reason=f"OPEN_FAILED:{type(e).__name__}",
+                          funding_z_score=funding_z_score,
+                          funding_rate_8h=funding_rate_8h)
         return
 
     _write_trade_score(db_path, enriched, indicators, decision,
                       ai=ai_result, risk=risk, executed=True,
-                      position_id=position_id)
+                      position_id=position_id,
+                      funding_z_score=funding_z_score,
+                      funding_rate_8h=funding_rate_8h)
     print(f"[V5Scorer] {enriched.symbol} OPEN {decision.side} executed,position_id={position_id}")
     _enqueue_ws(db_path, {
         "type": "position_opened",

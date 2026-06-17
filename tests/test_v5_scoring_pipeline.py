@@ -68,3 +68,104 @@ async def test_strong_signal_writes_trade_scores_v5_and_paper_trade(fresh_db, mo
     assert scores[0][3] == 1
     assert len(trades) == 1
     assert trades[0] == ("TEST/USDT", "SHORT", "OPEN")
+
+
+def test_process_enriched_v5_injects_funding_zscore(monkeypatch):
+    """funding_zscore_cache 有数据时,trade_scores 应当含 funding_z_score。"""
+    import asyncio
+    import sqlite3
+    import tempfile
+    from unittest.mock import MagicMock
+
+    tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+    tmp.close()
+    monkeypatch.setenv("DB_PATH", tmp.name)
+    monkeypatch.setenv("V5_USE_SYMBOL_WHITELIST", "false")
+    monkeypatch.setenv("V5_STRATEGY_MODE", "and_strict")
+
+    from scripts.local_db import init_local_db
+    init_local_db(tmp.name)
+
+    # 注入 funding cache for BTCUSDT
+    conn = sqlite3.connect(tmp.name)
+    conn.execute("""
+        INSERT INTO funding_zscore_cache (symbol, current_funding_rate,
+            zscore_30d, sample_size_30d, is_extreme, extreme_direction)
+        VALUES ('BTCUSDT', 0.0008, 2.5, 30, 1, 'long_crowded')
+    """)
+    conn.commit()
+    conn.close()
+
+    from v5_types import EnrichedItem
+    from scripts.tasks.scorer import process_enriched_v5
+    from tests.conftest import _build_klines
+
+    # 给足 K 线让 indicators 算得出
+    klines_15m = _build_klines([100 + i for i in range(50)])
+    klines_4h = _build_klines([100 + i * 2 for i in range(50)])
+
+    enriched = EnrichedItem(
+        symbol="BTCUSDT", current_price=150.0,
+        delta_15m_pct=0.005, volume_24h_usdt=5e7,
+        klines_15m=klines_15m, klines_4h=klines_4h,
+    )
+
+    asyncio.run(process_enriched_v5(
+        enriched=enriched, ai=None,
+        paper_pm=MagicMock(), live_pm=MagicMock(),
+        mode="SHADOW", db_path=tmp.name, balance_usdt=1000.0,
+    ))
+
+    conn = sqlite3.connect(tmp.name)
+    row = conn.execute(
+        "SELECT funding_z_score, funding_rate_8h FROM trade_scores_v5 "
+        "WHERE symbol='BTCUSDT' ORDER BY id DESC LIMIT 1"
+    ).fetchone()
+    conn.close()
+    assert row is not None
+    assert row[0] == 2.5
+    assert row[1] == 0.0008
+
+
+def test_process_enriched_v5_funding_null_when_cache_miss(monkeypatch):
+    """cache 没数据时,funding_z_score 写 NULL,不阻塞。"""
+    import asyncio
+    import sqlite3
+    import tempfile
+    from unittest.mock import MagicMock
+
+    tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+    tmp.close()
+    monkeypatch.setenv("DB_PATH", tmp.name)
+    monkeypatch.setenv("V5_USE_SYMBOL_WHITELIST", "false")
+    monkeypatch.setenv("V5_STRATEGY_MODE", "and_strict")
+
+    from scripts.local_db import init_local_db
+    init_local_db(tmp.name)
+
+    from v5_types import EnrichedItem
+    from scripts.tasks.scorer import process_enriched_v5
+    from tests.conftest import _build_klines
+
+    klines_15m = _build_klines([100 + i for i in range(50)])
+    klines_4h = _build_klines([100 + i * 2 for i in range(50)])
+
+    enriched = EnrichedItem(
+        symbol="UNKNOWN_NOT_IN_CACHE_USDT", current_price=150.0,
+        delta_15m_pct=0.005, volume_24h_usdt=5e7,
+        klines_15m=klines_15m, klines_4h=klines_4h,
+    )
+
+    asyncio.run(process_enriched_v5(
+        enriched=enriched, ai=None,
+        paper_pm=MagicMock(), live_pm=MagicMock(),
+        mode="SHADOW", db_path=tmp.name, balance_usdt=1000.0,
+    ))
+
+    conn = sqlite3.connect(tmp.name)
+    row = conn.execute(
+        "SELECT funding_z_score FROM trade_scores_v5 ORDER BY id DESC LIMIT 1"
+    ).fetchone()
+    conn.close()
+    assert row is not None
+    assert row[0] is None    # NULL = cache miss
