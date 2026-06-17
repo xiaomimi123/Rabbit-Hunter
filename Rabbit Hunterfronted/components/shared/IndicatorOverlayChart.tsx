@@ -73,7 +73,7 @@ function macdHistSeries(klines: Kline[], fast = 12, slow = 26, signalP = 9) {
   return macd.map((v, i) => ({
     time: Math.floor(klines[i].ts / 1000),
     value: v - sig[i],
-    color: v - sig[i] >= 0 ? '#10B981' : '#EF4444',
+    color: v - sig[i] >= 0 ? '#6B8568' : '#A53E32',
   }));
 }
 
@@ -109,19 +109,20 @@ export function IndicatorOverlayChart({ klines, events, interval, onIntervalChan
 
     const common = {
       layout: {
-        background: { type: ColorType.Solid, color: '#0F1419' },
-        textColor: 'rgba(255,255,255,0.7)',
+        background: { type: ColorType.Solid, color: '#0F1115' },
+        textColor: 'rgba(241,236,221,0.72)',
+        fontFamily: '"Fira Code", monospace',
       },
       grid: {
-        horzLines: { color: 'rgba(255,255,255,0.04)' },
-        vertLines: { color: 'rgba(255,255,255,0.04)' },
+        horzLines: { color: 'rgba(241,236,221,0.04)' },
+        vertLines: { color: 'rgba(241,236,221,0.04)' },
       },
-      rightPriceScale: { borderColor: 'rgba(255,255,255,0.08)' },
-      timeScale: { borderColor: 'rgba(255,255,255,0.08)' },
+      rightPriceScale: { borderColor: 'rgba(241,236,221,0.10)' },
+      timeScale: { borderColor: 'rgba(241,236,221,0.10)' },
       crosshair: {
         mode: CrosshairMode.Normal,
-        vertLine: { color: 'rgba(34,211,238,0.6)', width: 1 as const, style: LineStyle.Solid, labelVisible: true },
-        horzLine: { color: 'rgba(34,211,238,0.4)', width: 1 as const, style: LineStyle.Solid, labelVisible: true },
+        vertLine: { color: 'rgba(201,161,75,0.65)', width: 1 as const, style: LineStyle.Solid, labelVisible: true },
+        horzLine: { color: 'rgba(201,161,75,0.45)', width: 1 as const, style: LineStyle.Solid, labelVisible: true },
       },
     } as const;
 
@@ -130,9 +131,9 @@ export function IndicatorOverlayChart({ klines, events, interval, onIntervalChan
     const macd: IChartApi = createChart(macdRef.current, { ...common, height: 120 });
 
     const candle = main.addCandlestickSeries({
-      upColor: '#10B981', downColor: '#EF4444',
-      borderUpColor: '#10B981', borderDownColor: '#EF4444',
-      wickUpColor: '#10B981', wickDownColor: '#EF4444',
+      upColor: '#6B8568', downColor: '#A53E32',
+      borderUpColor: '#6B8568', borderDownColor: '#A53E32',
+      wickUpColor: '#6B8568', wickDownColor: '#A53E32',
     });
     candle.setData(klineToSeriesData(klines));
 
@@ -143,11 +144,11 @@ export function IndicatorOverlayChart({ klines, events, interval, onIntervalChan
     };
     const sideToColor = (e: SymbolEvent) => {
       if (e.event_type === 'exit') {
-        if (e.exit_reason === 'TP_HIT') return '#10B981';
-        if (e.exit_reason === 'SL_HIT') return '#EF4444';
-        return '#F59E0B';
+        if (e.exit_reason === 'TP_HIT') return '#6B8568';
+        if (e.exit_reason === 'SL_HIT') return '#A53E32';
+        return '#C9A14B';
       }
-      return e.side === 'SHORT' ? '#EF4444' : '#10B981';
+      return e.side === 'SHORT' ? '#A53E32' : '#6B8568';
     };
     const markers = events.map(e => ({
       time: Math.floor(new Date(e.timestamp).getTime() / 1000) as any,
@@ -163,7 +164,7 @@ export function IndicatorOverlayChart({ klines, events, interval, onIntervalChan
     if (currentPrice != null) {
       candle.createPriceLine({
         price: currentPrice,
-        color: '#3B82F6',
+        color: '#C9A14B',
         lineStyle: LineStyle.Dashed,
         lineWidth: 1,
         axisLabelVisible: true,
@@ -171,12 +172,12 @@ export function IndicatorOverlayChart({ klines, events, interval, onIntervalChan
       });
     }
 
-    const rsiLine = rsi.addLineSeries({ color: '#F59E0B', lineWidth: 2 });
+    const rsiLine = rsi.addLineSeries({ color: '#C9A14B', lineWidth: 2 });
     const rsiData = rsiSeries(klines);
     rsiLine.setData(rsiData as any);
     rsi.applyOptions({ rightPriceScale: { autoScale: false, scaleMargins: { top: 0.1, bottom: 0.1 } } });
-    rsiLine.createPriceLine({ price: 70, color: '#EF4444', lineStyle: LineStyle.Dashed, lineWidth: 1, axisLabelVisible: true, title: '70' });
-    rsiLine.createPriceLine({ price: 30, color: '#10B981', lineStyle: LineStyle.Dashed, lineWidth: 1, axisLabelVisible: true, title: '30' });
+    rsiLine.createPriceLine({ price: 70, color: '#A53E32', lineStyle: LineStyle.Dashed, lineWidth: 1, axisLabelVisible: true, title: '70' });
+    rsiLine.createPriceLine({ price: 30, color: '#6B8568', lineStyle: LineStyle.Dashed, lineWidth: 1, axisLabelVisible: true, title: '30' });
 
     const histSeries = macd.addHistogramSeries({ priceFormat: { type: 'price', precision: 6, minMove: 0.000001 } });
     const macdData = macdHistSeries(klines);
@@ -302,43 +303,43 @@ export function IndicatorOverlayChart({ klines, events, interval, onIntervalChan
   }, [klines, events, currentPrice]);
 
   const rsiTone = hover.rsi == null
-    ? 'text-white/40'
-    : hover.rsi >= 70 ? 'text-accent-short'
-    : hover.rsi <= 30 ? 'text-accent-long'
-    : 'text-white/70';
+    ? 'text-ivory-40'
+    : hover.rsi >= 70 ? 'text-oxblood'
+    : hover.rsi <= 30 ? 'text-sage'
+    : 'text-ivory-70';
 
   const macdTone = hover.macd_hist == null
-    ? 'text-white/40'
-    : hover.macd_hist >= 0 ? 'text-accent-long' : 'text-accent-short';
+    ? 'text-ivory-40'
+    : hover.macd_hist >= 0 ? 'text-sage' : 'text-oxblood';
 
   return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
-          <span className="text-cyan-300/80">
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center justify-between gap-3 px-3 py-2 border border-hairline bg-bg-base">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[0.78rem] font-mono">
+          <span className="text-brass">
             ▌ {hover.time != null ? fmtTime(hover.time) : '移动鼠标查看历史时点'}
           </span>
           {hover.ohlc && (
             <>
-              <span className="text-white/60">O <span className="text-white">{fmtPrice(hover.ohlc.open)}</span></span>
-              <span className="text-white/60">H <span className="text-white">{fmtPrice(hover.ohlc.high)}</span></span>
-              <span className="text-white/60">L <span className="text-white">{fmtPrice(hover.ohlc.low)}</span></span>
-              <span className="text-white/60">C <span className="text-white">{fmtPrice(hover.ohlc.close)}</span></span>
+              <span className="text-ivory-40">O <span className="text-ivory">{fmtPrice(hover.ohlc.open)}</span></span>
+              <span className="text-ivory-40">H <span className="text-ivory">{fmtPrice(hover.ohlc.high)}</span></span>
+              <span className="text-ivory-40">L <span className="text-ivory">{fmtPrice(hover.ohlc.low)}</span></span>
+              <span className="text-ivory-40">C <span className="text-ivory">{fmtPrice(hover.ohlc.close)}</span></span>
             </>
           )}
-          <span className="text-white/60">RSI <span className={`${rsiTone} font-bold`}>{hover.rsi == null ? '—' : hover.rsi.toFixed(1)}</span></span>
-          <span className="text-white/60">MACD hist <span className={`${macdTone} font-bold`}>{hover.macd_hist == null ? '—' : hover.macd_hist.toFixed(4)}</span></span>
+          <span className="text-ivory-40">RSI <span className={`${rsiTone} font-medium`}>{hover.rsi == null ? '—' : hover.rsi.toFixed(1)}</span></span>
+          <span className="text-ivory-40">MACD hist <span className={`${macdTone} font-medium`}>{hover.macd_hist == null ? '—' : hover.macd_hist.toFixed(4)}</span></span>
         </div>
-        <div className="flex items-center gap-1 text-xs">
+        <div className="inline-flex border border-hairline-strong">
           {INTERVALS.map(i => (
             <button
               key={i}
               type="button"
               onClick={() => onIntervalChange(i)}
-              className={`rounded-sm border px-2 py-1 font-mono ${
+              className={`font-mono text-[0.7rem] tracking-wider2 px-3 py-1 border-r border-hairline-strong last:border-r-0 ${
                 interval === i
-                  ? 'border-accent-info bg-accent-info/10 text-accent-info'
-                  : 'border-white/10 text-white/60 hover:bg-white/5'
+                  ? 'bg-brass-soft text-brass'
+                  : 'text-ivory-70 hover:bg-white/[0.04]'
               }`}
             >
               {i}
@@ -346,15 +347,15 @@ export function IndicatorOverlayChart({ klines, events, interval, onIntervalChan
           ))}
         </div>
       </div>
-      <div ref={mainRef} className="w-full rounded-md border border-white/10" />
-      <div className="grid grid-cols-2 gap-2">
+      <div ref={mainRef} className="w-full border border-hairline" />
+      <div className="grid grid-cols-2 max-[640px]:grid-cols-1 gap-2">
         <div>
-          <div className="text-xs text-white/50 mb-1 px-2">RSI 14</div>
-          <div ref={rsiRef} className="w-full rounded-md border border-white/10" />
+          <div className="font-mono text-[0.62rem] tracking-wider3 text-ivory-40 uppercase mb-1 px-2">RSI 14</div>
+          <div ref={rsiRef} className="w-full border border-hairline" />
         </div>
         <div>
-          <div className="text-xs text-white/50 mb-1 px-2">MACD hist (12/26/9)</div>
-          <div ref={macdRef} className="w-full rounded-md border border-white/10" />
+          <div className="font-mono text-[0.62rem] tracking-wider3 text-ivory-40 uppercase mb-1 px-2">MACD hist (12/26/9)</div>
+          <div ref={macdRef} className="w-full border border-hairline" />
         </div>
       </div>
     </div>
