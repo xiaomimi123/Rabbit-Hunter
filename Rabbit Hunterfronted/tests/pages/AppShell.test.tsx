@@ -37,7 +37,7 @@ describe('AppShell', () => {
         </MemoryRouter>
       </QueryClientProvider>
     );
-    expect(screen.getByText('猎兔者 V5')).toBeInTheDocument();
+    expect(screen.getByText(/猎兔者/)).toBeInTheDocument();
     expect(screen.getByText('交易')).toBeInTheDocument();
     expect(screen.getByText('智能')).toBeInTheDocument();
     expect(screen.getByText('系统')).toBeInTheDocument();

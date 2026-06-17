@@ -1,4 +1,3 @@
-import React from 'react';
 import { Outlet } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { TopBar } from './TopBar';
@@ -14,11 +13,11 @@ function wsUrl(): string {
 export function AppShell() {
   const status = useV5WebSocket(wsUrl());
   return (
-    <div className="flex h-screen bg-bg-base text-white">
+    <div className="grid grid-cols-[232px_1fr] min-h-screen bg-bg-base text-ivory">
       <Sidebar />
-      <div className="flex flex-1 flex-col">
+      <div className="flex flex-col min-w-0">
         <TopBar wsConnected={status.connected} />
-        <main className="flex-1 overflow-y-auto p-6">
+        <main className="flex-1 overflow-y-auto">
           <ErrorBoundary>
             <Outlet />
           </ErrorBoundary>

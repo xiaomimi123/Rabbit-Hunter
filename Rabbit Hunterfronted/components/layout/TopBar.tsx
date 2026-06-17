@@ -1,8 +1,5 @@
-import React from 'react';
 import { useUIStore } from '../../services/store';
 import { useSystemMode } from '../../hooks/useSystemMode';
-import { Badge } from '../primitives/Badge';
-import { Wifi, WifiOff, Bell } from 'lucide-react';
 
 interface Props {
   wsConnected: boolean;
@@ -12,30 +9,42 @@ export function TopBar({ wsConnected }: Props) {
   const { mode } = useSystemMode();
   const provider = useUIStore(s => s.effectiveAiProvider);
   const queueLen = useUIStore(s => s.recentWsEvents.length);
+
+  const modeBadgeClass = mode === 'LIVE'
+    ? 'border-alarm/40 text-alarm bg-alarm/10'
+    : 'border-brass-soft text-brass bg-brass-soft';
+
   return (
-    <header className="flex h-12 items-center justify-between border-b border-white/10 bg-bg-surface px-4">
-      <div className="flex items-center gap-3 text-xs text-white/60">
-        <span className="font-mono">v5.0.0</span>
+    <header className="flex items-center justify-between h-14 border-b border-hairline bg-bg-base px-8 sticky top-0 z-10">
+      <div className="flex items-center gap-[18px]">
+        <span className="font-mono text-[0.7rem] tracking-wider text-ivory-70">v6.0.0</span>
         {mode && (
-          <Badge variant={mode === 'LIVE' ? 'short' : 'info'}>
-            {mode === 'LIVE' ? '🔴 LIVE' : '🟡 SHADOW'}
-          </Badge>
+          <span className={`inline-flex items-center gap-1.5 font-mono text-[0.7rem] tracking-wide px-2.5 py-0.5 border ${modeBadgeClass}`}>
+            {mode === 'LIVE' ? '⬤' : '◐'} {mode}
+          </span>
         )}
-        {provider && <Badge variant="neutral">AI: {provider}</Badge>}
+        {provider && (
+          <span className="inline-flex items-center gap-1.5 font-mono text-[0.7rem] tracking-wide px-2.5 py-0.5 border border-ink-soft text-ink bg-ink-soft">
+            AI · {provider}
+          </span>
+        )}
       </div>
-      <div className="flex items-center gap-3">
-        <span className={`flex items-center gap-1 text-xs ${wsConnected ? 'text-accent-long' : 'text-accent-short'}`}>
-          {wsConnected ? <Wifi size={14} /> : <WifiOff size={14} />}
-          {wsConnected ? 'WS 在线' : 'WS 离线'}
+      <div className="flex items-center gap-[18px]">
+        <span className="inline-flex gap-2 items-center font-mono text-[0.72rem] text-ivory-70">
+          <span
+            className={`w-1.5 h-1.5 rounded-full ${
+              wsConnected
+                ? 'bg-sage shadow-[0_0_6px_rgba(107,133,104,0.6)]'
+                : 'bg-oxblood'
+            }`}
+          />
+          WS · {wsConnected ? '在线' : '离线'}
         </span>
-        <button type="button" className="relative text-white/50 hover:text-white">
-          <Bell size={16} />
-          {queueLen > 0 && (
-            <span className="absolute -right-1 -top-1 rounded-full bg-accent-info px-1 text-[10px] font-mono text-white">
-              {queueLen}
-            </span>
-          )}
-        </button>
+        {queueLen > 0 && (
+          <span className="font-mono text-[0.7rem] tracking-wider text-brass">
+            ↗ {queueLen} events
+          </span>
+        )}
       </div>
     </header>
   );

@@ -1,59 +1,71 @@
-import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { useUIStore } from '../../services/store';
-import {
-  Activity, ListOrdered, Briefcase, BarChart3,
-  Brain, History, SlidersHorizontal, Settings, Hand,
-  ChevronLeft, ChevronRight, BookOpen, BookText,
-} from 'lucide-react';
+import { Aperture } from '../primitives/Aperture';
 
-interface NavItem { to: string; label: string; Icon: any }
+interface NavItem { to: string; label: string; glyph: string; }
 
 const GROUPS: { name: string; items: NavItem[] }[] = [
-  { name: '交易', items: [
-    { to: '/v5/signals', label: '实时信号', Icon: Activity },
-    { to: '/v5/active', label: '活仓监控', Icon: Briefcase },
-    { to: '/v5/orders', label: '订单历史', Icon: ListOrdered },
-    { to: '/v5/manual', label: '手动开单', Icon: Hand },
-  ]},
-  { name: '智能', items: [
-    { to: '/v5/ai', label: 'AI 状态', Icon: Brain },
-    { to: '/v5/history', label: '信号历史', Icon: History },
-    { to: '/v5/config', label: '策略配置', Icon: SlidersHorizontal },
-    { to: '/v5/reflection', label: '复盘工作台', Icon: BookText },
-  ]},
-  { name: '系统', items: [
-    { to: '/v5/dashboard', label: 'Dashboard', Icon: BarChart3 },
-    { to: '/v5/settings', label: '系统设置', Icon: Settings },
-    { to: '/v5/glossary', label: '术语词典', Icon: BookOpen },
-  ]},
+  {
+    name: '交易',
+    items: [
+      { to: '/v5/signals', label: '实时信号', glyph: '●' },
+      { to: '/v5/active',  label: '活仓监控', glyph: '●' },
+      { to: '/v5/orders',  label: '订单历史', glyph: '●' },
+      { to: '/v5/manual',  label: '手动开单', glyph: '●' },
+    ],
+  },
+  {
+    name: '智能',
+    items: [
+      { to: '/v5/ai',         label: 'AI 状态',    glyph: '◆' },
+      { to: '/v5/history',    label: '信号历史',   glyph: '◆' },
+      { to: '/v5/config',     label: '策略配置',   glyph: '◆' },
+      { to: '/v5/reflection', label: '复盘工作台', glyph: '◆' },
+    ],
+  },
+  {
+    name: '系统',
+    items: [
+      { to: '/v5/dashboard', label: 'Dashboard', glyph: '⊕' },
+      { to: '/v5/settings',  label: '系统设置',  glyph: '○' },
+      { to: '/v5/glossary',  label: '术语词典',  glyph: '○' },
+    ],
+  },
 ];
 
 export function Sidebar() {
-  const collapsed = useUIStore(s => s.sidebarCollapsed);
-  const toggle = useUIStore(s => s.toggleSidebar);
   return (
-    <aside className={`flex h-full flex-col border-r border-white/10 bg-bg-surface ${collapsed ? 'w-14' : 'w-52'} transition-all duration-base`}>
-      <div className="flex h-12 items-center justify-between px-3 border-b border-white/10">
-        {!collapsed && <span className="text-sm font-medium text-white">猎兔者 V5</span>}
-        <button type="button" onClick={toggle} className="text-white/50 hover:text-white">
-          {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
-        </button>
+    <aside className="flex flex-col w-[232px] border-r border-hairline bg-bg-base py-5 sticky top-0 h-screen overflow-y-auto">
+      <div className="flex items-center gap-3 px-5 pb-6 border-b border-hairline">
+        <Aperture size={28} className="text-brass" />
+        <div>
+          <div className="font-display text-[1.4rem] leading-none">
+            猎兔者<span className="not-italic text-brass">·</span>R
+          </div>
+          <div className="font-mono text-[0.65rem] text-ivory-40 tracking-wider2 mt-1">
+            v6.0 · FIELD
+          </div>
+        </div>
       </div>
-      <nav className="flex-1 overflow-y-auto py-3 space-y-4">
+      <nav className="flex-1 overflow-y-auto pt-[18px] pb-2">
         {GROUPS.map(g => (
-          <div key={g.name}>
-            {!collapsed && <div className="px-3 pb-1 text-[10px] uppercase tracking-wider text-white/40">{g.name}</div>}
-            {g.items.map(({ to, label, Icon }) => (
+          <div key={g.name} className="pb-1.5">
+            <div className="px-5 pb-2 font-mono text-[0.62rem] tracking-wider4 text-ivory-40 uppercase">
+              {g.name}
+            </div>
+            {g.items.map(({ to, label, glyph }) => (
               <NavLink
                 key={to}
                 to={to}
-                className={({ isActive }) => `flex items-center gap-2 px-3 py-1.5 text-sm ${
-                  isActive ? 'bg-accent-info/15 text-accent-info' : 'text-white/70 hover:bg-white/5'
-                }`}
+                className={({ isActive }) =>
+                  `flex items-center gap-2.5 py-1.5 px-5 font-cn text-sm border-l-2 transition-all duration-200 ${
+                    isActive
+                      ? 'text-brass border-brass bg-brass-soft'
+                      : 'text-ivory-70 border-transparent hover:text-ivory hover:bg-white/[0.02]'
+                  }`
+                }
               >
-                <Icon size={16} />
-                {!collapsed && <span>{label}</span>}
+                <span className="font-mono text-[0.7rem] w-4 opacity-60">{glyph}</span>
+                <span>{label}</span>
               </NavLink>
             ))}
           </div>
