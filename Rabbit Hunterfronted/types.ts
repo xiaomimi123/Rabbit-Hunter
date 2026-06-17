@@ -365,6 +365,38 @@ export interface CalibrationResponse {
   data: CalibrationPoint[];
 }
 
+// ── Funding (V6) ──
+export interface FundingZScoreItem {
+  symbol: string;
+  computed_at: string;
+  current_funding_rate: number;
+  annualized_rate_pct: number;
+  mean_30d: number | null;
+  std_30d: number | null;
+  zscore_30d: number | null;
+  sample_size_30d: number;
+  is_extreme: boolean;
+  extreme_direction: string | null;
+}
+
+export interface FundingStatusResponse {
+  status: string;
+  data: FundingZScoreItem[];
+}
+
+export interface FundingHistoryItem {
+  funding_time: string;
+  funding_rate: number;
+  annualized_rate: number;
+  source: string;
+}
+
+export interface FundingHistoryResponse {
+  status: string;
+  symbol: string;
+  data: FundingHistoryItem[];
+}
+
 // ── WebSocket ──
 export type WsEvent =
   | { type: 'position_opened'; symbol: string; side: Side; entry: number; sl: number; tp: number; size_usdt: number; position_id: number; strategy_id: string; mode: Mode }

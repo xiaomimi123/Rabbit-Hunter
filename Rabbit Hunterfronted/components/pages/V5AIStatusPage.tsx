@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { useV5AIStatus, useV5AIDecisions } from '../../hooks/api/useV5AIStatus';
 import { useV5Calibration } from '../../hooks/api/useV5Reflections';
+import { useV5FundingStatus } from '../../hooks/api/useV5Funding';
 import { useUIStore } from '../../services/store';
 import { LoadingSkeleton } from '../primitives/LoadingSkeleton';
 import { Sparkline } from '../primitives/Sparkline';
@@ -163,7 +164,58 @@ export function V5AIStatusPage() {
       </HoloCard>
 
       <CalibrationCurveCard />
+      <FundingHeatmapCard />
     </div>
+  );
+}
+
+function FundingHeatmapCard() {
+  const q = useV5FundingStatus();
+  const rows = q.data?.data ?? [];
+
+  return (
+    <HoloCard>
+      <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.3em] text-cyan-300/80 mb-3">
+        ▌ FUNDING RATE STATUS (TOP-20)
+      </div>
+      {rows.length === 0 ? (
+        <div className="py-8 text-center font-mono text-cyan-300/40 text-xs">
+          ▌ awaiting funding cache refresh...
+        </div>
+      ) : (
+        <div className="space-y-1 font-mono text-[11px]">
+          {rows.map(r => {
+            const z = r.zscore_30d ?? 0;
+            const absZ = Math.abs(z);
+            const tone = r.is_extreme
+              ? (z > 0 ? 'text-accent-short' : 'text-accent-long')
+              : absZ >= 1 ? 'text-accent-warn'
+              : 'text-white/60';
+            const dirLabel = r.extreme_direction === 'long_crowded'
+              ? '★ LONG CROWDED ★'
+              : r.extreme_direction === 'short_crowded'
+              ? '★ SHORT CROWDED ★'
+              : absZ >= 1 ? (z > 0 ? 'mild long bias' : 'mild short bias')
+              : 'neutral';
+            // Visual bar: z mapped to position 0-10
+            const barPos = Math.max(0, Math.min(10, Math.round(5 + z * 2)));
+            const bar = '░'.repeat(barPos) + '▓' + '░'.repeat(10 - barPos);
+            return (
+              <div key={r.symbol} className="grid grid-cols-12 gap-2 py-1 border-b border-white/5">
+                <div className="col-span-2 text-white">{r.symbol}</div>
+                <div className="col-span-2 text-white/70">
+                  {(r.current_funding_rate * 100).toFixed(4)}%/8h
+                </div>
+                <div className={`col-span-1 ${tone}`}>z={z.toFixed(2)}</div>
+                <div className="col-span-3 text-cyan-300/40 tracking-tighter">{bar}</div>
+                <div className={`col-span-3 ${tone}`}>{dirLabel}</div>
+                <div className="col-span-1 text-white/40 text-right">n={r.sample_size_30d}</div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </HoloCard>
   );
 }
 
