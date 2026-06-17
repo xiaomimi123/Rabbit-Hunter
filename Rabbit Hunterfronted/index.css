@@ -4,68 +4,68 @@
 
 :root {
   color-scheme: dark;
-  font-family: "PingFang SC", "Noto Sans CJK SC", system-ui, sans-serif;
-  background-color: #0F1419;
-  color: #FFFFFF;
 }
 
-body {
+html, body {
+  background-color: #0F1115;
+  color: #F1ECDD;
+  font-family: "Source Serif 4", "Noto Serif SC", serif;
+  font-feature-settings: "tnum" on, "lnum" on;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   margin: 0;
   min-height: 100vh;
-  background-color: #0F1419;
-  color: #FFFFFF;
+}
+
+/* paper-grain: diagonal hatch at 1.2% opacity (replaces V1 cyber-grid) */
+body {
+  background-image:
+    repeating-linear-gradient(
+      45deg,
+      rgba(241, 236, 221, 0.012) 0,
+      rgba(241, 236, 221, 0.012) 1px,
+      transparent 1px,
+      transparent 6px
+    );
 }
 
 #root {
   min-height: 100vh;
 }
 
-.font-mono {
-  font-family: "JetBrains Mono", "IBM Plex Mono", monospace;
+/* tabular numbers — sacred */
+.font-mono,
+.mono,
+.num {
+  font-family: "Fira Code", ui-monospace, monospace;
   font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
 }
 
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+/* selection */
+::selection {
+  background: rgba(201, 161, 75, 0.4);
+  color: #F1ECDD;
 }
-::-webkit-scrollbar-track {
-  background: transparent;
-}
+
+/* scrollbars — slim, ivory tint to match paper grain */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(241, 236, 221, 0.10);
   border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.24);
+  background: rgba(241, 236, 221, 0.22);
 }
 
-/* Cyber utilities for V5AIStatusPage and elsewhere */
-@keyframes neonPulse {
-  0%, 100% { box-shadow: 0 0 8px rgba(34, 211, 238, 0.4), inset 0 0 8px rgba(34, 211, 238, 0.1); }
-  50%      { box-shadow: 0 0 16px rgba(34, 211, 238, 0.7), inset 0 0 16px rgba(34, 211, 238, 0.2); }
-}
+/* hairline utility for places where Tailwind's 1px border on dark feels too thick */
+.hairline { border-color: rgba(241, 236, 221, 0.10); }
+.hairline-strong { border-color: rgba(241, 236, 221, 0.18); }
 
-@keyframes tickerSlide {
-  from { transform: translateY(-100%); opacity: 0; }
-  to   { transform: translateY(0); opacity: 1; }
+/* Ticker reveal kept for AI Status decision-row animation */
+@keyframes ticker-slide {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
-
-.neon-pulse {
-  animation: neonPulse 2.4s ease-in-out infinite;
-}
-
-.cyber-grid {
-  background-image:
-    linear-gradient(rgba(34, 211, 238, 0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(34, 211, 238, 0.04) 1px, transparent 1px);
-  background-size: 32px 32px;
-}
-
-.ticker-row {
-  animation: tickerSlide 200ms ease-out;
-}
-
-.cyan-glow {
-  text-shadow: 0 0 4px rgba(34, 211, 238, 0.4);
-}
+.ticker-row { animation: ticker-slide 200ms cubic-bezier(0.4, 0, 0.2, 1); }
