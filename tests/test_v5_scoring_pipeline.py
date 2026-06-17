@@ -22,6 +22,7 @@ async def test_strong_signal_writes_trade_scores_v5_and_paper_trade(fresh_db, mo
     monkeypatch.setenv("V5_STRATEGY_MODE", "and_strict")
     monkeypatch.setenv("V5_RSI_OVERBOUGHT", "60")
     monkeypatch.setenv("DB_PATH", fresh_db)
+    monkeypatch.setenv("V5_USE_SYMBOL_WHITELIST", "false")  # 测试用的 TEST/USDT 不在白名单
 
     rising_then_drop = [100 + i * 2 for i in range(40)] + [180, 178, 176]
     klines_15m = _build_klines(rising_then_drop)

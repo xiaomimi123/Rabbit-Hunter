@@ -33,6 +33,8 @@ _ENV_MAP = {
     "v5_trend_rsi_long_threshold":  "V5_TREND_RSI_LONG_THRESHOLD",
     "v5_anti_chase_pct":            "V5_ANTI_CHASE_PCT",
     "v5_anti_chase_window_bars":    "V5_ANTI_CHASE_WINDOW_BARS",
+    "v5_use_symbol_whitelist":      "V5_USE_SYMBOL_WHITELIST",
+    "v5_symbol_whitelist":          "V5_SYMBOL_WHITELIST",
 }
 
 
@@ -112,6 +114,8 @@ DEFAULTS = {
     "v5_trend_rsi_long_threshold":  40.0,
     "v5_anti_chase_pct":            0.005,
     "v5_anti_chase_window_bars":    5,
+    "v5_use_symbol_whitelist":      True,
+    "v5_symbol_whitelist":          "",     # 空 = 用默认 V5_TOP20_WHITELIST
 }
 
 PARAM_META = {
@@ -133,4 +137,6 @@ PARAM_META = {
     "v5_trend_rsi_long_threshold":  (25.0, 50.0, "", "trend_aligned LONG RSI 触发阈值"),
     "v5_anti_chase_pct":            (0.0, 0.02, "", "anti-chase 缓冲 % (0 = 关闭)"),
     "v5_anti_chase_window_bars":    (0, 20, "", "anti-chase 回看 K 线根数 (0 = 关闭)"),
+    "v5_use_symbol_whitelist":      (None, None, "", "是否启用 top-20 白名单(false = 全币)"),
+    "v5_symbol_whitelist":          (None, None, "", "自定义白名单(逗号分隔,空 = 用默认 top-20)"),
 }

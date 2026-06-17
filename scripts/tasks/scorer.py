@@ -113,6 +113,15 @@ def _write_trade_score(db_path: str, enriched: EnrichedItem, indicators: Indicat
 async def process_enriched_v5(*, enriched: EnrichedItem, ai, paper_pm, live_pm,
                               mode: str, db_path: str, balance_usdt: float) -> None:
     """处理一个 enriched item 走完 V5 管道。"""
+    # Top-20 whitelist filter (V5.1)
+    if get_param("v5_use_symbol_whitelist", True,
+                 lambda v: str(v).lower() not in ("false", "0", "no")):
+        from scripts.v5_symbol_whitelist import parse_whitelist_param, is_symbol_allowed
+        whitelist_raw = get_param("v5_symbol_whitelist", "", str)
+        whitelist = parse_whitelist_param(whitelist_raw)
+        if not is_symbol_allowed(enriched.symbol, whitelist):
+            return    # Skip silently — not in whitelist, don't even write a trade_score
+
     try:
         indicators = calculate_indicators(enriched.klines_15m, enriched.klines_4h)
     except ValueError as e:
