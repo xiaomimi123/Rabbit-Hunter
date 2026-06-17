@@ -1,76 +1,154 @@
-import React from 'react';
+import { ReactNode, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useV5OrderHistory } from '../../hooks/api/useV5OrderHistory';
-import { Card } from '../primitives/Card';
 import { LoadingSkeleton } from '../primitives/LoadingSkeleton';
-import { Badge } from '../primitives/Badge';
-import { LineChart } from 'lucide-react';
+import { Aperture } from '../primitives/Aperture';
 import { Term } from '../shared/Term';
+import type { V5Position } from '../../types';
+
+const EXIT_BADGE: Record<string, string> = {
+  TP_HIT:         'text-sage border-sage bg-sage-soft',
+  SL_HIT:         'text-oxblood border-oxblood bg-oxblood-soft',
+  SOFT_TARGET:    'text-brass border-brass bg-brass-soft',
+  SIGNAL_REVERSE: 'text-brass border-brass bg-brass-soft',
+  MANUAL_USER:    'text-ink border-ink bg-ink-soft',
+};
 
 export function V5OrderHistoryPage() {
   const q = useV5OrderHistory(200);
   const navigate = useNavigate();
+  const [now, setNow] = useState(() => new Date());
   const rows = q.data ?? [];
 
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(t);
+  }, []);
+
   return (
-    <div className="space-y-4">
-      <Card title="订单历史" actions={<span className="text-xs text-white/40">每 30s 自动刷新 · 共 {rows.length} 条</span>}>
-        {q.isLoading && <LoadingSkeleton rows={6} />}
-        {!q.isLoading && rows.length === 0 && <div className="py-8 text-center text-white/40">暂无历史订单</div>}
-        <div className="overflow-hidden rounded-md border border-white/10">
-          <table className="w-full text-xs">
-            <thead className="bg-white/5">
-              <tr className="text-left text-white/60">
-                <th className="px-2 py-2">平仓时间</th>
-                <th className="px-2 py-2">币种</th>
-                <th className="px-2 py-2">方向</th>
-                <th className="px-2 py-2 text-right">入场</th>
-                <th className="px-2 py-2 text-right">出场</th>
-                <th className="px-2 py-2">原因</th>
-                <th className="px-2 py-2 text-right"><Term k="PnL">PnL$</Term></th>
-                <th className="px-2 py-2 text-right"><Term k="PnL">PnL%</Term></th>
-                <th className="px-2 py-2 text-right">持仓min</th>
-                <th className="px-2 py-2">策略</th>
-                <th className="px-2 py-2"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map(p => {
-                const mins = p.entry_time && p.exit_time
-                  ? Math.round((new Date(p.exit_time).getTime() - new Date(p.entry_time).getTime()) / 60_000)
-                  : 0;
-                const pnlPct = p.pnl_pct ?? 0;
-                const pnlUsd = p.pnl_usdt ?? 0;
-                return (
-                  <tr key={p.id} className="border-t border-white/5 hover:bg-white/[0.02]">
-                    <td className="px-2 py-1.5 font-mono text-white/70">
-                      {p.exit_time ? new Date(p.exit_time).toLocaleString('zh-CN', { hour12: false }) : '—'}
-                    </td>
-                    <td className="px-2 py-1.5 text-white/90">{p.symbol}</td>
-                    <td className="px-2 py-1.5"><Badge variant={p.side === 'LONG' ? 'long' : 'short'}>{p.side}</Badge></td>
-                    <td className="px-2 py-1.5 text-right font-mono">{p.entry_price?.toFixed(4) ?? '—'}</td>
-                    <td className="px-2 py-1.5 text-right font-mono">{p.exit_price?.toFixed(4) ?? '—'}</td>
-                    <td className="px-2 py-1.5 text-white/70"><Term k={p.exit_reason || ''}>{p.exit_reason ?? '—'}</Term></td>
-                    <td className={`px-2 py-1.5 text-right font-mono ${pnlUsd >= 0 ? 'text-accent-long' : 'text-accent-short'}`}>{pnlUsd >= 0 ? '+' : ''}{pnlUsd.toFixed(2)}</td>
-                    <td className={`px-2 py-1.5 text-right font-mono ${pnlPct >= 0 ? 'text-accent-long' : 'text-accent-short'}`}>{pnlPct >= 0 ? '+' : ''}{pnlPct.toFixed(2)}%</td>
-                    <td className="px-2 py-1.5 text-right font-mono">{mins}</td>
-                    <td className="px-2 py-1.5"><Badge variant="neutral">自动</Badge></td>
-                    <td className="px-2 py-1.5">
-                      <button
-                        type="button"
-                        onClick={() => navigate(`/v5/chart/${p.symbol}?eventId=${p.id}`)}
-                        className="flex items-center gap-1 rounded-sm border border-white/15 px-2 py-0.5 text-xs text-white/70 hover:bg-white/5"
-                      >
-                        <LineChart size={10} /> 图表
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </Card>
+    <div className="px-8 py-7 pb-16 flex flex-col gap-7 max-w-[1400px]">
+      <PageHead now={now} count={rows.length} />
+
+      {q.isLoading && <LoadingSkeleton message="拉取订单历史…" />}
+      {!q.isLoading && rows.length === 0 && (
+        <EmptyState>暂无历史订单</EmptyState>
+      )}
+
+      {rows.length > 0 && (
+        <table className="w-full text-[0.78rem] border-collapse">
+          <thead>
+            <tr>
+              <Th>exit time</Th>
+              <Th>symbol</Th>
+              <Th>side</Th>
+              <Th align="right">entry</Th>
+              <Th align="right">exit</Th>
+              <Th>reason</Th>
+              <Th align="right"><Term k="PnL">PnL $</Term></Th>
+              <Th align="right">PnL %</Th>
+              <Th align="right">hold</Th>
+              <Th></Th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(p => (
+              <Row
+                key={p.id}
+                p={p}
+                onChart={() => navigate(`/v5/chart/${p.symbol}?eventId=${p.id}`)}
+              />
+            ))}
+          </tbody>
+        </table>
+      )}
     </div>
+  );
+}
+
+function PageHead({ now, count }: { now: Date; count: number }) {
+  const t = now.toLocaleTimeString('zh-CN', { hour12: false });
+  return (
+    <header className="grid grid-cols-[1fr_auto] items-end gap-6 pb-4 border-b border-hairline-strong">
+      <div className="flex items-center gap-4">
+        <Aperture size={34} rotate className="text-brass" />
+        <div>
+          <h1 className="font-display text-[2.6rem] leading-none tracking-tight">Order History</h1>
+          <p className="font-cn text-ivory-40 text-[0.85rem] mt-1.5">已平仓订单 · {count} 条记录</p>
+        </div>
+      </div>
+      <div className="text-right font-mono text-[0.72rem] text-ivory-40 leading-relaxed">
+        <div className="tracking-wider2 uppercase">Observation Time</div>
+        <div><strong className="text-ivory font-medium">{t}</strong> · UTC+8</div>
+        <div>refresh · <strong className="text-ivory font-medium">30s</strong></div>
+      </div>
+    </header>
+  );
+}
+
+function Row({ p, onChart }: { p: V5Position; onChart: () => void }) {
+  const pnlPct = p.pnl_pct ?? 0;
+  const pnlUsd = p.pnl_usdt ?? 0;
+  const mins = p.entry_time && p.exit_time
+    ? Math.round((new Date(p.exit_time).getTime() - new Date(p.entry_time).getTime()) / 60_000)
+    : 0;
+  const sideCls = p.side === 'LONG'
+    ? 'text-sage border-sage bg-sage-soft'
+    : 'text-oxblood border-oxblood bg-oxblood-soft';
+  const exitCls = p.exit_reason ? (EXIT_BADGE[p.exit_reason] || 'text-ivory-70 border-hairline-strong') : 'text-ivory-40 border-hairline';
+  const pnlPctCls = pnlPct >= 0 ? 'text-sage' : 'text-oxblood';
+  const pnlUsdCls = pnlUsd >= 0 ? 'text-sage' : 'text-oxblood';
+
+  return (
+    <tr className="border-b border-hairline hover:bg-brass/[0.04]">
+      <Td className="text-ivory-70">{p.exit_time ? new Date(p.exit_time).toLocaleString('zh-CN', { hour12: false }) : '—'}</Td>
+      <Td className="text-ivory font-medium">{p.symbol}</Td>
+      <Td>
+        <span className={`inline-block font-mono text-[0.7rem] tracking-wider2 px-2 py-0.5 border ${sideCls}`}>{p.side}</span>
+      </Td>
+      <Td align="right">{p.entry_price?.toFixed(4) ?? '—'}</Td>
+      <Td align="right">{p.exit_price?.toFixed(4) ?? '—'}</Td>
+      <Td>
+        <span className={`inline-block font-mono text-[0.66rem] tracking-wider2 px-2 py-0.5 border uppercase ${exitCls}`}>
+          {p.exit_reason ?? '—'}
+        </span>
+      </Td>
+      <Td align="right" className={pnlUsdCls}>{pnlUsd >= 0 ? '+' : ''}{pnlUsd.toFixed(2)}</Td>
+      <Td align="right" className={pnlPctCls}>{pnlPct >= 0 ? '+' : ''}{pnlPct.toFixed(2)}%</Td>
+      <Td align="right" className="text-ivory-70">{mins}</Td>
+      <Td>
+        <button
+          type="button"
+          onClick={onChart}
+          className="font-mono text-[0.7rem] text-brass hover:underline"
+        >
+          → chart
+        </button>
+      </Td>
+    </tr>
+  );
+}
+
+function EmptyState({ children }: { children: ReactNode }) {
+  return (
+    <div className="py-14 text-center font-body italic text-ivory-40">
+      <Aperture size={42} rotate="slow" className="text-ivory-25 mx-auto block mb-3" />
+      <span className="opacity-60 mr-2">▌</span>{children}
+    </div>
+  );
+}
+
+function Th({ children, align = 'left' }: { children: ReactNode; align?: 'left' | 'right' }) {
+  return (
+    <th className={`text-${align} font-mono text-[0.62rem] tracking-wider3 text-ivory-40 uppercase font-normal px-3.5 py-2.5 border-b border-hairline`}>
+      {children}
+    </th>
+  );
+}
+
+function Td({ children, align = 'left', className = '' }: { children: ReactNode; align?: 'left' | 'right'; className?: string }) {
+  return (
+    <td className={`px-3.5 py-2.5 font-mono text-[0.78rem] tabular-nums ${align === 'right' ? 'text-right' : ''} ${className}`}>
+      {children}
+    </td>
   );
 }
