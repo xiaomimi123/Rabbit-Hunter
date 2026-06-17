@@ -39,18 +39,45 @@ _4H_HIST_THRESHOLD = 0.004  # 4H MACD hist 绝对值需超过此阈值才视为�
 
 
 def _h_against_4h_trend_no_funding(c: dict, db_path: str) -> bool:
+    """逆 4h 趋势 + funding 不背书 candidate side → 触发(veto).
+
+    Logic:
+      - 同向 4h: 不触发
+      - 4h |hist| < 0.004 (噪声): 不触发
+      - 反向 4h + funding 中性 (|fz|<1.5): 触发
+      - 反向 4h + funding 背书 candidate side (|fz|>=1.5): 不触发
+      - 反向 4h + funding 不背书 candidate side (|fz|>=1.5): 触发
+      - 反向 4h + 无 funding 数据 (fz is None): 触发 (fallback 保守)
+
+    funding 背书规则:
+      SHORT wants z > 0 (多头拥挤 -> 反转 SHORT)
+      LONG  wants z < 0 (空头拥挤 -> 反转 LONG)
+    """
     side_int = c.get("side_int") or 0
     macd_4h = c.get("macd_hist_4h") or 0
     fz = c.get("funding_z_score")
-    if side_int == 0 or abs(macd_4h) < _4H_HIST_THRESHOLD:
+
+    if side_int == 0 or macd_4h == 0:
         return False
+    if abs(macd_4h) < _4H_HIST_THRESHOLD:
+        return False
+
     same_dir = (side_int > 0 and macd_4h > 0) or (side_int < 0 and macd_4h < 0)
     if same_dir:
         return False
-    # 反向 + funding 没给极端确认 → 触发
+
+    # 反向 4h,看 funding
     if fz is None:
         return True
-    return abs(fz) < 1.5
+    if abs(fz) < 1.5:
+        return True
+
+    # |fz| >= 1.5,判断 funding 方向是否跟 candidate side 一致(背书)
+    funding_supports_side = (
+        (side_int > 0 and fz < 0) or   # LONG wants short_crowded (z<0)
+        (side_int < 0 and fz > 0)      # SHORT wants long_crowded (z>0)
+    )
+    return not funding_supports_side
 
 
 def _h_sl_too_tight_high_atr(c: dict, db_path: str) -> bool:

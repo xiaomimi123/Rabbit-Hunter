@@ -99,3 +99,37 @@ def test_only_active_taxonomy_is_matched(db):
     conn.close()
     hits = match_failure_modes(_candidate(delta_15m_pct=0.03), db_path=db)
     assert "chase_after_3pct_move" not in hits
+
+
+def test_funding_extreme_overrides_4h_filter_when_supports(db):
+    """SHORT + 4h 上行(逆) + funding z=+2.5(多头拥挤背书 SHORT) → 不触发 against_4h."""
+    from scripts.ai.failure_taxonomy import match_failure_modes
+    hits = match_failure_modes(_candidate(
+        side="SHORT", side_int=-1,
+        macd_hist_4h=0.005,           # 4h 看多
+        funding_z_score=2.5,           # funding 背书 SHORT
+    ), db_path=db)
+    assert "against_4h_trend_no_funding_filter" not in hits
+
+
+def test_funding_extreme_against_direction_still_triggers(db):
+    """SHORT + 4h 上行 + funding z=-2.5(空头拥挤,反向 → LONG 才合理)
+    funding 不背书 SHORT → against_4h 触发."""
+    from scripts.ai.failure_taxonomy import match_failure_modes
+    hits = match_failure_modes(_candidate(
+        side="SHORT", side_int=-1,
+        macd_hist_4h=0.005,
+        funding_z_score=-2.5,
+    ), db_path=db)
+    assert "against_4h_trend_no_funding_filter" in hits
+
+
+def test_funding_moderate_does_not_override(db):
+    """funding |z| < 1.5 (中性) → 不算背书,against_4h 仍触发."""
+    from scripts.ai.failure_taxonomy import match_failure_modes
+    hits = match_failure_modes(_candidate(
+        side="SHORT", side_int=-1,
+        macd_hist_4h=0.005,
+        funding_z_score=1.0,
+    ), db_path=db)
+    assert "against_4h_trend_no_funding_filter" in hits
