@@ -286,6 +286,8 @@ export interface ReflectionRecord {
   exit_price: number | null;
   exit_reason: string | null;
   pnl_pct: number | null;
+  funding_z_score_at_entry: number | null;
+  funding_rate_at_entry: number | null;
 }
 
 export interface ReflectionsResponse {

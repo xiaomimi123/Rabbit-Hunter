@@ -1,6 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useV5Dashboard } from '../../hooks/api/useV5Dashboard';
+import { useV5SetupPerformance } from '../../hooks/api/useV5Reflections';
 import { Card } from '../primitives/Card';
 import { LoadingSkeleton } from '../primitives/LoadingSkeleton';
 import { KpiCard } from '../shared/KpiCard';
@@ -158,6 +159,72 @@ export function V5DashboardPage() {
             ))}
         </div>
       </Card>
+
+      <Card title="24h Setup Type 分项 (含 funding 维度)">
+        <SetupBreakdownTable />
+      </Card>
+    </div>
+  );
+}
+
+function SetupBreakdownTable() {
+  const q = useV5SetupPerformance(7);   // 7d window
+  const rows = q.data?.data ?? [];
+  // 聚合多天 → 按 setup_type
+  const byType = new Map<string, { n: number; w: number; sumR: number }>();
+  for (const r of rows) {
+    const cur = byType.get(r.setup_type) ?? { n: 0, w: 0, sumR: 0 };
+    cur.n += r.sample_count;
+    cur.w += r.win_count;
+    cur.sumR += r.avg_realized_r * r.sample_count;
+    byType.set(r.setup_type, cur);
+  }
+  const sorted = Array.from(byType.entries())
+    .map(([t, v]) => ({
+      setup_type: t,
+      n: v.n,
+      win_rate: v.n > 0 ? v.w / v.n : 0,
+      avg_r: v.n > 0 ? v.sumR / v.n : 0,
+      is_funding: t.startsWith('funding_extreme'),
+    }))
+    .sort((a, b) => b.n - a.n);
+  if (sorted.length === 0) {
+    return <div className="py-6 text-center text-white/40">7d 内无 reflection 样本</div>;
+  }
+  return (
+    <div className="overflow-hidden rounded-md border border-white/10">
+      <table className="w-full text-xs">
+        <thead className="bg-white/5">
+          <tr className="text-left text-white/60">
+            <th className="px-2 py-2">setup_type</th>
+            <th className="px-2 py-2 text-right">n</th>
+            <th className="px-2 py-2 text-right">胜率</th>
+            <th className="px-2 py-2 text-right">avg R</th>
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map(r => (
+            <tr key={r.setup_type}
+                className={`border-t border-white/5 ${r.is_funding ? 'bg-violet-500/10' : ''}`}>
+              <td className="px-2 py-1.5 font-mono text-white/80">
+                {r.setup_type}
+                {r.is_funding && <span className="ml-2 text-violet-300">★</span>}
+              </td>
+              <td className="px-2 py-1.5 text-right font-mono">{r.n}</td>
+              <td className={`px-2 py-1.5 text-right font-mono ${
+                r.win_rate >= 0.5 ? 'text-accent-long' : 'text-accent-short'
+              }`}>
+                {(r.win_rate * 100).toFixed(0)}%
+              </td>
+              <td className={`px-2 py-1.5 text-right font-mono ${
+                r.avg_r >= 0 ? 'text-accent-long' : 'text-accent-short'
+              }`}>
+                {r.avg_r >= 0 ? '+' : ''}{r.avg_r.toFixed(2)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

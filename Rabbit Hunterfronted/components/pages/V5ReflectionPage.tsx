@@ -245,6 +245,16 @@ function ReflectionCard({ r }: { r: ReflectionRecord }) {
         </div>
       </div>
 
+      {r.funding_z_score_at_entry != null && (
+        <div className="text-[11px] font-mono text-violet-300/70">
+          funding @ entry: {((r.funding_rate_at_entry ?? 0) * 100).toFixed(4)}%/8h
+          {' • '}z={r.funding_z_score_at_entry.toFixed(2)}
+          {Math.abs(r.funding_z_score_at_entry) >= 2.0 && (
+            <span className="ml-2 text-accent-warn">★ extreme</span>
+          )}
+        </div>
+      )}
+
       <div className="grid grid-cols-2 gap-3 text-xs">
         <div>
           <div className="text-cyan-300/70 mb-1">▶ 为什么开仓</div>

@@ -146,6 +146,23 @@ export const GLOSSARY: Record<string, GlossaryEntry> = {
     key: 'setup_type', zh: 'Setup 类型', en: 'Setup Type', category: '信号',
     desc: '入场时根据 RSI 状态 × MACD 状态 × 方向(可能加 funding)派生的桶名。所有聚合按它分类。',
   },
+  funding_rate: {
+    key: 'funding_rate', zh: '资金费率', en: 'Funding Rate', category: '指标',
+    desc: '永续合约每 8 小时结算一次的费用。多头付钱给空头 = 正费率(多头拥挤);反之负费率(空头拥挤)。极端 funding 不可持续,反转信号。',
+    example: 'BTC funding +0.05%/8h = 多头每 8h 付出 0.05% 持仓成本 ≈ 年化 +55%',
+  },
+  funding_z_score: {
+    key: 'funding_z_score', zh: 'funding z 分数', en: 'Funding Z-Score', category: '指标',
+    desc: '当前 funding rate 相对过去 30 天历史均值的标准差倍数。z > 2 = 多头极端拥挤(SHORT 候选);z < -2 = 空头极端拥挤(LONG 候选);中间 = 中性。',
+  },
+  funding_extreme: {
+    key: 'funding_extreme', zh: '资金费率极端', en: 'Funding Extreme', category: '信号',
+    desc: '|z| ≥ 2.0 的 funding 状态。setup_type 派生时优先此维度,因为这是独立于价格指标的 alpha 信号。',
+  },
+  crowding: {
+    key: 'crowding', zh: '杠杆拥挤', en: 'Leverage Crowding', category: '信号',
+    desc: '同方向杠杆持仓过度集中。long_crowded = 多头杠杆超额(反转预期下跌);short_crowded = 空头杠杆超额(反转预期上涨)。',
+  },
 };
 
 export const GLOSSARY_CATEGORIES: Array<{ name: GlossaryEntry['category']; label: string }> = [

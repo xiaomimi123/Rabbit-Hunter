@@ -45,6 +45,9 @@ class ReflectionRecord(BaseModel):
     exit_price: Optional[float] = None
     exit_reason: Optional[str] = None
     pnl_pct: Optional[float] = None
+    # V6 Funding 维度
+    funding_z_score_at_entry: Optional[float] = None
+    funding_rate_at_entry: Optional[float] = None
 
 
 class ReflectionsResponse(BaseModel):
