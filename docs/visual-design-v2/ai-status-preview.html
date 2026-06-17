@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>猎兔者 V6 · Field Instrument · AI Status</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Source+Serif+4:ital,opsz,wght@0,8..60,300..700;1,8..60,300..700&family=Fira+Code:wght@300;400;500;600&family=Noto+Serif+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-base:        #0F1115;
+    --bg-surface:     #171A20;
+    --bg-elevated:    #22272F;
+    --bg-deep:        #0A0C0F;
+    --hairline:       rgba(241, 236, 221, 0.10);
+    --hairline-strong: rgba(241, 236, 221, 0.18);
+
+    --text-ivory:     #F1ECDD;
+    --text-sec:       rgba(241, 236, 221, 0.72);
+    --text-mut:       rgba(241, 236, 221, 0.42);
+    --text-dim:       rgba(241, 236, 221, 0.26);
+
+    --sage:    #6B8568;
+    --sage-soft: rgba(107, 133, 104, 0.18);
+    --oxblood: #A53E32;
+    --oxblood-soft: rgba(165, 62, 50, 0.18);
+    --brass:   #C9A14B;
+    --brass-soft: rgba(201, 161, 75, 0.14);
+    --ink:     #5A7691;
+    --ink-soft: rgba(90, 118, 145, 0.18);
+    --ash:     #7B8590;
+    --alarm:   #D03B30;
+
+    --font-display: 'Instrument Serif', 'Source Han Serif SC', 'Noto Serif SC', serif;
+    --font-body:    'Source Serif 4', 'Noto Serif SC', serif;
+    --font-mono:    'Fira Code', ui-monospace, monospace;
+    --font-cn:      'Noto Serif SC', serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { font-size: 14px; }
+  body {
+    background: var(--bg-base);
+    background-image:
+      repeating-linear-gradient(45deg,
+        rgba(241,236,221,0.012) 0,
+        rgba(241,236,221,0.012) 1px,
+        transparent 1px, transparent 6px);
+    color: var(--text-ivory);
+    font-family: var(--font-body);
+    font-feature-settings: "tnum" on, "lnum" on;
+    min-height: 100vh;
+  }
+  .mono, .num {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
+  }
+
+  /* shell same */
+  .app { display: grid; grid-template-columns: 232px 1fr; min-height: 100vh; }
+  .sidebar { border-right: 1px solid var(--hairline); background: var(--bg-base); padding: 20px 0 32px; display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
+  .brand { padding: 0 20px 24px; border-bottom: 1px solid var(--hairline); display: flex; align-items: center; gap: 12px; }
+  .brand-name { font-family: var(--font-display); font-size: 1.4rem; letter-spacing: 0.01em; line-height: 1; }
+  .brand-name em { font-style: italic; color: var(--brass); }
+  .brand-version { font-family: var(--font-mono); font-size: 0.65rem; color: var(--text-mut); letter-spacing: 0.1em; margin-top: 4px; }
+  .nav-group { padding: 18px 0 6px; }
+  .nav-group-label { font-family: var(--font-mono); font-size: 0.62rem; letter-spacing: 0.24em; color: var(--text-mut); padding: 0 20px 8px; text-transform: uppercase; }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 7px 20px; color: var(--text-sec); text-decoration: none; font-family: var(--font-cn); font-size: 0.875rem; border-left: 2px solid transparent; transition: all 200ms; }
+  .nav-item:hover { color: var(--text-ivory); background: rgba(241,236,221,0.02); }
+  .nav-item.active { color: var(--brass); border-left-color: var(--brass); background: var(--brass-soft); }
+  .nav-item .glyph { font-family: var(--font-mono); font-size: 0.7rem; width: 16px; opacity: 0.6; }
+
+  .topbar { height: 56px; border-bottom: 1px solid var(--hairline); display: flex; align-items: center; justify-content: space-between; padding: 0 32px; background: var(--bg-base); position: sticky; top: 0; z-index: 5; }
+  .tb-left, .tb-right { display: flex; align-items: center; gap: 18px; }
+  .tb-chip { font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.08em; color: var(--text-sec); }
+  .tb-badge { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.06em; padding: 3px 10px; border: 1px solid var(--hairline); }
+  .tb-badge.shadow { color: var(--brass); border-color: var(--brass-soft); background: var(--brass-soft); }
+  .tb-badge.ai { color: var(--ink); border-color: var(--ink-soft); background: var(--ink-soft); }
+  .tb-dot { width: 6px; height: 6px; background: var(--sage); border-radius: 50%; box-shadow: 0 0 6px rgba(107, 133, 104, 0.6); }
+  .tb-live-row { display: inline-flex; gap: 8px; align-items: center; color: var(--text-sec); font-family: var(--font-mono); font-size: 0.72rem; }
+
+  .main { display: flex; flex-direction: column; background: var(--bg-base); }
+  .content { padding: 28px 32px 64px; display: flex; flex-direction: column; gap: 28px; max-width: 1400px; }
+
+  /* page head */
+  .page-head { display: grid; grid-template-columns: 1fr auto; align-items: end; gap: 24px; padding-bottom: 18px; border-bottom: 1px solid var(--hairline-strong); }
+  .page-title { display: flex; align-items: center; gap: 16px; }
+  .page-aperture { width: 34px; height: 34px; color: var(--brass); animation: aperture-sweep 6s linear infinite; }
+  @keyframes aperture-sweep { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+  .page-name { font-family: var(--font-display); font-size: 2.6rem; line-height: 1; letter-spacing: -0.01em; }
+  .page-sub { font-family: var(--font-cn); color: var(--text-mut); font-size: 0.85rem; margin-top: 6px; }
+  .page-meta { text-align: right; font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-mut); letter-spacing: 0.04em; line-height: 1.5; }
+  .page-meta strong { color: var(--text-ivory); font-weight: 500; }
+
+  /* section heads (shared) */
+  .section { display: grid; grid-template-columns: 1fr 200px; gap: 28px; align-items: start; }
+  .section-head { display: flex; align-items: center; gap: 14px; padding-bottom: 16px; border-bottom: 1px solid var(--hairline); margin-bottom: 20px; }
+  .section-aperture { width: 18px; height: 18px; color: var(--brass); }
+  .section-name { font-family: var(--font-display); font-size: 1.4rem; letter-spacing: -0.01em; }
+  .section-meta { margin-left: auto; font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-mut); letter-spacing: 0.06em; }
+  .marginalia { font-family: var(--font-body); font-style: italic; font-size: 0.78rem; color: var(--text-mut); line-height: 1.55; padding-top: 50px; border-left: 1px solid var(--hairline); padding-left: 18px; }
+  .marginalia em { color: var(--brass); font-style: normal; }
+
+  /* ============ TOP TRIPLET CARDS ============ */
+  .ai-triplet { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--hairline); border: 1px solid var(--hairline); }
+  .ai-card { background: var(--bg-base); padding: 24px; position: relative; }
+  .ai-card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; }
+  .ai-card-head .glyph { width: 18px; height: 18px; color: var(--brass); }
+  .ai-card-head .label { font-family: var(--font-mono); font-size: 0.66rem; letter-spacing: 0.24em; color: var(--text-mut); text-transform: uppercase; }
+  .ai-card-head .status {
+    margin-left: auto;
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    border: 1px solid var(--sage);
+    color: var(--sage);
+    background: var(--sage-soft);
+  }
+  .ai-card-value { font-family: var(--font-display); font-size: 2.6rem; line-height: 1; color: var(--text-ivory); letter-spacing: -0.02em; }
+  .ai-card-value.mono { font-family: var(--font-mono); font-size: 2rem; }
+  .ai-card-sub { font-family: var(--font-body); font-style: italic; font-size: 0.78rem; color: var(--text-mut); margin-top: 8px; }
+
+  /* sparkline */
+  .spark { margin-top: 16px; height: 32px; }
+  .spark svg { width: 100%; height: 100%; }
+
+  /* progress bar (RAG) */
+  .ragbar { margin-top: 18px; height: 6px; background: rgba(241,236,221,0.04); position: relative; }
+  .ragbar .fill { position: absolute; inset: 0 auto 0 0; background: linear-gradient(90deg, var(--brass) 0%, var(--brass) 60%, var(--sage) 100%); }
+  .ragbar-foot { display: flex; justify-content: space-between; font-family: var(--font-mono); font-size: 0.65rem; color: var(--text-mut); margin-top: 6px; letter-spacing: 0.06em; }
+
+  /* ============ DECISION STREAM ============ */
+  .stream-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+  .stream-table thead th {
+    text-align: left;
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    letter-spacing: 0.22em;
+    color: var(--text-mut);
+    text-transform: uppercase;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--hairline);
+    font-weight: normal;
+  }
+  .stream-table tbody td {
+    padding: 11px 14px;
+    border-bottom: 1px solid var(--hairline);
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+  .stream-table tr { position: relative; }
+  .stream-table tbody tr td:first-child {
+    position: relative;
+  }
+  .stream-table tbody tr.exec td:first-child::before {
+    content: ""; position: absolute; left: 0; top: 6px; bottom: 6px; width: 2px; background: var(--sage);
+  }
+  .stream-table tbody tr.rej td:first-child::before {
+    content: ""; position: absolute; left: 0; top: 6px; bottom: 6px; width: 2px; background: var(--oxblood);
+  }
+  .stream-table .sym { color: var(--text-ivory); font-size: 0.85rem; }
+  .stream-table .reason { color: var(--text-sec); font-family: var(--font-body); font-style: italic; max-width: 380px; line-height: 1.4; }
+  .stream-table .reason strong { color: var(--brass); font-style: normal; }
+  .stream-table .conf { text-align: right; }
+  .stream-table .verdict { text-align: center; padding: 2px 8px; border: 1px solid; font-size: 0.66rem; letter-spacing: 0.14em; }
+  .verdict.execute { color: var(--sage); border-color: var(--sage); background: var(--sage-soft); }
+  .verdict.reject  { color: var(--oxblood); border-color: var(--oxblood); background: var(--oxblood-soft); }
+  .stream-table tr:hover td { background: rgba(201,161,75,0.04); }
+
+  /* ============ CALIBRATION ============ */
+  .calib-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+  .calib-table thead th { text-align: right; font-family: var(--font-mono); font-size: 0.62rem; letter-spacing: 0.22em; color: var(--text-mut); padding: 10px 14px; border-bottom: 1px solid var(--hairline); text-transform: uppercase; font-weight: normal; }
+  .calib-table thead th:first-child, .calib-table tbody td:first-child { text-align: left; }
+  .calib-table tbody td { padding: 11px 14px; border-bottom: 1px solid var(--hairline); font-family: var(--font-mono); font-variant-numeric: tabular-nums; text-align: right; }
+  .calib-table .bucket { color: var(--text-sec); }
+  .calib-table .drift.ok { color: var(--sage); }
+  .calib-table .drift.warn { color: var(--brass); }
+  .calib-table .drift.bad { color: var(--oxblood); }
+  .calib-table .mult { color: var(--text-ivory); font-weight: 500; }
+  .calib-table tr:hover td { background: rgba(201,161,75,0.04); }
+
+  /* ============ FUNDING HEATMAP ============ */
+  .funding-row {
+    display: grid;
+    grid-template-columns: 100px 110px 80px 1fr 180px 60px;
+    align-items: center;
+    gap: 14px;
+    padding: 7px 0;
+    border-bottom: 1px solid var(--hairline);
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+  }
+  .funding-row:first-child { padding-top: 0; }
+  .funding-row .sym { color: var(--text-ivory); }
+  .funding-row .rate { color: var(--text-sec); text-align: right; }
+  .funding-row .z { color: var(--text-ivory); text-align: right; font-size: 0.85rem; }
+
+  .fbar-track {
+    height: 12px;
+    background: rgba(241,236,221,0.03);
+    position: relative;
+  }
+  .fbar-track .center { position: absolute; left: 50%; top: -2px; bottom: -2px; width: 1px; background: var(--text-mut); }
+  .fbar-track .fill {
+    position: absolute;
+    height: 100%;
+    top: 0;
+  }
+  .fbar-track .fill.pos { left: 50%; background: var(--oxblood-soft); border-right: 1px solid var(--oxblood); }
+  .fbar-track .fill.neg { right: 50%; background: var(--sage-soft); border-left: 1px solid var(--sage); }
+  .fbar-track .fill.extreme { background: var(--brass-soft); }
+
+  .funding-row .label {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.06em;
+    color: var(--text-sec);
+  }
+  .funding-row .label.extreme-short { color: var(--sage); }
+  .funding-row .label.extreme-long  { color: var(--oxblood); }
+  .funding-row .label .star { color: var(--brass); margin: 0 4px; }
+  .funding-row .n { color: var(--text-mut); text-align: right; font-size: 0.7rem; }
+
+  .funding-row.extreme { background: var(--brass-soft); padding-left: 12px; padding-right: 12px; margin-left: -12px; margin-right: -12px; }
+  .funding-row.extreme .sym::before { content: "✦ "; color: var(--brass); margin-right: 2px; }
+
+  @media (max-width: 1100px) {
+    .section { grid-template-columns: 1fr; }
+    .marginalia { padding: 14px 0 0; border-left: none; border-top: 1px solid var(--hairline); }
+    .ai-triplet { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 720px) {
+    .app { grid-template-columns: 1fr; }
+    .sidebar { display: none; }
+    .content { padding: 20px 18px 40px; }
+    .funding-row { grid-template-columns: 80px 100px 70px 1fr; }
+    .funding-row .label, .funding-row .n { grid-column: span 2; }
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <aside class="sidebar">
+    <div class="brand">
+      <svg width="28" height="28" viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="1" style="color: var(--brass);">
+        <circle cx="14" cy="14" r="12.5" /><circle cx="14" cy="14" r="7" /><circle cx="14" cy="14" r="1.5" fill="currentColor" />
+        <line x1="14" y1="0" x2="14" y2="6" /><line x1="14" y1="22" x2="14" y2="28" />
+        <line x1="0" y1="14" x2="6" y2="14" /><line x1="22" y1="14" x2="28" y2="14" />
+      </svg>
+      <div>
+        <div class="brand-name">猎兔者<em>·</em>R</div>
+        <div class="brand-version">v6.0 · FIELD</div>
+      </div>
+    </div>
+    <div class="nav-group">
+      <div class="nav-group-label">交易</div>
+      <a class="nav-item" href="#"><span class="glyph">●</span>实时信号</a>
+      <a class="nav-item" href="#"><span class="glyph">●</span>活仓监控</a>
+      <a class="nav-item" href="#"><span class="glyph">●</span>订单历史</a>
+      <a class="nav-item" href="#"><span class="glyph">●</span>手动开单</a>
+    </div>
+    <div class="nav-group">
+      <div class="nav-group-label">智能</div>
+      <a class="nav-item active" href="#"><span class="glyph">◆</span>AI 状态</a>
+      <a class="nav-item" href="#"><span class="glyph">◆</span>信号历史</a>
+      <a class="nav-item" href="#"><span class="glyph">◆</span>策略配置</a>
+      <a class="nav-item" href="#"><span class="glyph">◆</span>复盘工作台</a>
+    </div>
+    <div class="nav-group">
+      <div class="nav-group-label">系统</div>
+      <a class="nav-item" href="#"><span class="glyph">⊕</span>Dashboard</a>
+      <a class="nav-item" href="#"><span class="glyph">○</span>系统设置</a>
+      <a class="nav-item" href="#"><span class="glyph">○</span>术语词典</a>
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <div class="tb-left">
+        <span class="tb-chip">v6.0.0</span>
+        <span class="tb-badge shadow">◐ SHADOW</span>
+        <span class="tb-badge ai">AI · deepseek-chat</span>
+      </div>
+      <div class="tb-right">
+        <span class="tb-live-row"><span class="tb-dot"></span>WS · 在线 · 1ms</span>
+        <span class="tb-chip">↗ 3 events</span>
+      </div>
+    </header>
+
+    <main class="content">
+
+      <!-- page head -->
+      <div class="page-head">
+        <div class="page-title">
+          <svg class="page-aperture" viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="0.7">
+            <circle cx="20" cy="20" r="18" /><circle cx="20" cy="20" r="12" /><circle cx="20" cy="20" r="6" />
+            <line x1="20" y1="0" x2="20" y2="6" stroke-width="1.2" /><line x1="20" y1="34" x2="20" y2="40" stroke-width="1.2" />
+            <line x1="0" y1="20" x2="6" y2="20" stroke-width="1.2" /><line x1="34" y1="20" x2="40" y2="20" stroke-width="1.2" />
+          </svg>
+          <div>
+            <div class="page-name">AI Status</div>
+            <div class="page-sub">决策头脑 · 校准 · 拥挤侦测</div>
+          </div>
+        </div>
+        <div class="page-meta">
+          <div>last heartbeat</div>
+          <div><strong>14:52:01</strong> · 2s ago</div>
+          <div>latency · <strong>342ms</strong></div>
+        </div>
+      </div>
+
+      <!-- ===== Triplet ===== -->
+      <section class="ai-triplet">
+
+        <div class="ai-card">
+          <div class="ai-card-head">
+            <svg class="glyph" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1">
+              <circle cx="10" cy="10" r="9" /><circle cx="10" cy="10" r="5" /><circle cx="10" cy="10" r="1" fill="currentColor" />
+            </svg>
+            <span class="label">Provider</span>
+            <span class="status">online</span>
+          </div>
+          <div class="ai-card-value">deepseek<span style="color: var(--brass);">·</span>chat</div>
+          <div class="ai-card-sub">primary model · backup: openai/gpt-4o-mini</div>
+          <div class="spark">
+            <!-- latency sparkline -->
+            <svg viewBox="0 0 200 32" preserveAspectRatio="none">
+              <polyline points="0,18 20,22 40,20 60,16 80,14 100,18 120,12 140,15 160,11 180,13 200,10"
+                fill="none" stroke="var(--brass)" stroke-width="1.2"/>
+              <line x1="0" y1="32" x2="200" y2="32" stroke="var(--hairline)" />
+            </svg>
+          </div>
+          <div class="ragbar-foot"><span>latency · 24h</span><span>avg <strong style="color: var(--text-ivory);">389ms</strong></span></div>
+        </div>
+
+        <div class="ai-card">
+          <div class="ai-card-head">
+            <svg class="glyph" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1">
+              <circle cx="10" cy="10" r="9" /><circle cx="10" cy="10" r="5" /><circle cx="10" cy="10" r="1" fill="currentColor" />
+            </svg>
+            <span class="label">RAG Memory</span>
+            <span class="status" style="color: var(--brass); border-color: var(--brass); background: var(--brass-soft);">indexed</span>
+          </div>
+          <div class="ai-card-value mono">372<span style="color: var(--text-mut); font-size: 1.2rem; margin-left: 6px;"> cases</span></div>
+          <div class="ai-card-sub">66% utilized · 196 retrieved this week</div>
+          <div class="ragbar"><div class="fill" style="width: 66%"></div></div>
+          <div class="ragbar-foot"><span>0</span><span>capacity 560</span></div>
+        </div>
+
+        <div class="ai-card">
+          <div class="ai-card-head">
+            <svg class="glyph" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1">
+              <circle cx="10" cy="10" r="9" /><circle cx="10" cy="10" r="5" /><circle cx="10" cy="10" r="1" fill="currentColor" />
+            </svg>
+            <span class="label">Decisions · 24h</span>
+            <span class="status">healthy</span>
+          </div>
+          <div class="ai-card-value">34</div>
+          <div class="ai-card-sub">12 executed · 22 rejected · avg conf 68%</div>
+          <div class="spark">
+            <svg viewBox="0 0 200 32" preserveAspectRatio="none">
+              <polyline points="0,24 12,20 24,22 36,16 48,18 60,12 72,14 84,10 96,12 108,8 120,10 132,6 144,9 156,4 168,8 180,6 200,5"
+                fill="none" stroke="var(--sage)" stroke-width="1.2"/>
+              <line x1="0" y1="32" x2="200" y2="32" stroke="var(--hairline)" />
+            </svg>
+          </div>
+          <div class="ragbar-foot"><span>confidence · 24h</span><span>trend <strong style="color: var(--sage);">+8pt</strong></span></div>
+        </div>
+
+      </section>
+
+      <!-- ===== Decision Stream ===== -->
+      <section class="section">
+        <div>
+          <div class="section-head">
+            <svg class="section-aperture" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1">
+              <circle cx="10" cy="10" r="9" /><circle cx="10" cy="10" r="5" /><circle cx="10" cy="10" r="1" fill="currentColor" />
+            </svg>
+            <div class="section-name">Decision Stream</div>
+            <div class="section-meta">last 8 events · live</div>
+          </div>
+
+          <table class="stream-table">
+            <thead>
+              <tr>
+                <th>time</th>
+                <th>symbol</th>
+                <th>verdict</th>
+                <th style="text-align:right">conf</th>
+                <th style="text-align:right">top·dist</th>
+                <th>reasoning</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="exec">
+                <td>14:51:47</td>
+                <td class="sym">BTCUSDT</td>
+                <td><span class="verdict execute">EXECUTE</span></td>
+                <td class="conf" style="color: var(--sage);">78%</td>
+                <td style="text-align:right">0.18</td>
+                <td class="reason">funding z=+2.4 (<strong>extreme</strong>), longs crowded; RSI 76 + 4h MACD bearish confirms short.</td>
+              </tr>
+              <tr class="rej">
+                <td>14:50:12</td>
+                <td class="sym">XRPUSDT</td>
+                <td><span class="verdict reject">REJECT</span></td>
+                <td class="conf" style="color: var(--oxblood);">34%</td>
+                <td style="text-align:right">0.84</td>
+                <td class="reason">no funding extreme; RSI 52 neutral; closest RAG case (n=3) showed <strong>SIGNAL_REVERSE</strong>.</td>
+              </tr>
+              <tr class="exec">
+                <td>14:48:31</td>
+                <td class="sym">ETHUSDT</td>
+                <td><span class="verdict execute">EXECUTE</span></td>
+                <td class="conf" style="color: var(--sage);">71%</td>
+                <td style="text-align:right">0.22</td>
+                <td class="reason">manual-initiated; AI gate passes — RSI 4h trending up, MACD hist accelerating, funding neutral.</td>
+              </tr>
+              <tr class="rej">
+                <td>14:46:08</td>
+                <td class="sym">SOLUSDT</td>
+                <td><span class="verdict reject">REJECT</span></td>
+                <td class="conf" style="color: var(--oxblood);">41%</td>
+                <td style="text-align:right">0.61</td>
+                <td class="reason">RSI overbought but funding z=+0.6 (mild); insufficient evidence for short.</td>
+              </tr>
+              <tr class="rej">
+                <td>14:42:55</td>
+                <td class="sym">AVAXUSDT</td>
+                <td><span class="verdict reject">REJECT</span></td>
+                <td class="conf" style="color: var(--oxblood);">28%</td>
+                <td style="text-align:right">0.93</td>
+                <td class="reason">failure mode match: <strong>against_4h_trend_no_funding</strong> — long against bearish 4h trend without funding endorsement.</td>
+              </tr>
+              <tr class="exec">
+                <td>14:38:18</td>
+                <td class="sym">DOGEUSDT</td>
+                <td><span class="verdict execute">EXECUTE</span></td>
+                <td class="conf" style="color: var(--sage);">82%</td>
+                <td style="text-align:right">0.14</td>
+                <td class="reason">funding z=−2.6 (<strong>extreme</strong>), shorts crowded; LONG with size ×0.6 (fractional Kelly).</td>
+              </tr>
+              <tr class="rej">
+                <td>14:35:09</td>
+                <td class="sym">LINKUSDT</td>
+                <td><span class="verdict reject">REJECT</span></td>
+                <td class="conf" style="color: var(--oxblood);">38%</td>
+                <td style="text-align:right">0.77</td>
+                <td class="reason">MAX_CONCURRENT reached (2/3 slots LONG); skipping additional long exposure.</td>
+              </tr>
+              <tr class="rej">
+                <td>14:30:44</td>
+                <td class="sym">BNBUSDT</td>
+                <td><span class="verdict reject">REJECT</span></td>
+                <td class="conf" style="color: var(--oxblood);">44%</td>
+                <td style="text-align:right">0.55</td>
+                <td class="reason">ANTI_CHASE_TOP: ΔP15m +3.8% then immediate RSI rejection candle.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <aside class="marginalia">
+          <em>12 of 34</em> decisions executed (35%). Reject reasons cluster around failure-mode matches and concurrent slot limits — both healthy gates.
+        </aside>
+      </section>
+
+      <!-- ===== Calibration ===== -->
+      <section class="section">
+        <div>
+          <div class="section-head">
+            <svg class="section-aperture" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1">
+              <circle cx="10" cy="10" r="9" /><circle cx="10" cy="10" r="5" /><circle cx="10" cy="10" r="1" fill="currentColor" />
+            </svg>
+            <div class="section-name">Confidence Calibration</div>
+            <div class="section-meta">predicted vs actual · 30d</div>
+          </div>
+
+          <table class="calib-table">
+            <thead>
+              <tr>
+                <th>model · bucket</th>
+                <th>n</th>
+                <th>predicted</th>
+                <th>actual</th>
+                <th>drift</th>
+                <th>multiplier</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="bucket">deepseek · 80–100%</td>
+                <td>14</td>
+                <td>87.3%</td>
+                <td style="color: var(--sage);">85.7%</td>
+                <td class="drift ok">−1.6pt</td>
+                <td class="mult">×1.00</td>
+              </tr>
+              <tr>
+                <td class="bucket">deepseek · 60–79%</td>
+                <td>23</td>
+                <td>69.4%</td>
+                <td style="color: var(--brass);">61.0%</td>
+                <td class="drift warn">−8.4pt</td>
+                <td class="mult">×0.92</td>
+              </tr>
+              <tr>
+                <td class="bucket">deepseek · 40–59%</td>
+                <td>11</td>
+                <td>49.8%</td>
+                <td style="color: var(--oxblood);">27.3%</td>
+                <td class="drift bad">−22.5pt</td>
+                <td class="mult">×0.55</td>
+              </tr>
+              <tr>
+                <td class="bucket">openai · 80–100%</td>
+                <td>9</td>
+                <td>89.0%</td>
+                <td style="color: var(--sage);">88.9%</td>
+                <td class="drift ok">−0.1pt</td>
+                <td class="mult">×1.00</td>
+              </tr>
+              <tr>
+                <td class="bucket">openai · 60–79%</td>
+                <td>6</td>
+                <td>72.0%</td>
+                <td style="color: var(--brass);">66.7%</td>
+                <td class="drift warn">−5.3pt</td>
+                <td class="mult">×0.93</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <aside class="marginalia">
+          DeepSeek <em>overconfident in mid-range</em> (60–79% bucket drifts −8pt). Engine compensates via multiplier ×0.92. Low-conf bucket badly miscalibrated — multiplier ×0.55 effectively kills those trades.
+        </aside>
+      </section>
+
+      <!-- ===== Funding Heatmap (V6) ===== -->
+      <section class="section">
+        <div>
+          <div class="section-head">
+            <svg class="section-aperture" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1">
+              <circle cx="10" cy="10" r="9" /><circle cx="10" cy="10" r="5" /><circle cx="10" cy="10" r="1" fill="currentColor" />
+            </svg>
+            <div class="section-name">Funding Rate Map · top 20</div>
+            <div class="section-meta">|z| ≥ 2.0 = extreme · sorted by |z| ↓</div>
+          </div>
+
+          <div>
+            <div class="funding-row extreme">
+              <div class="sym">DOGEUSDT</div>
+              <div class="rate">−0.0001%</div>
+              <div class="z" style="color: var(--sage);">−2.63</div>
+              <div class="fbar-track">
+                <div class="center"></div>
+                <div class="fill neg extreme" style="right: 50%; width: 45%;"></div>
+              </div>
+              <div class="label extreme-short">SHORTS<span class="star">★</span>CROWDED</div>
+              <div class="n">n=93</div>
+            </div>
+            <div class="funding-row extreme">
+              <div class="sym">BTCUSDT</div>
+              <div class="rate">+0.0008%</div>
+              <div class="z" style="color: var(--oxblood);">+2.41</div>
+              <div class="fbar-track">
+                <div class="center"></div>
+                <div class="fill pos extreme" style="left: 50%; width: 41%;"></div>
+              </div>
+              <div class="label extreme-long">LONGS<span class="star">★</span>CROWDED</div>
+              <div class="n">n=90</div>
+            </div>
+            <div class="funding-row">
+              <div class="sym">SOLUSDT</div>
+              <div class="rate">+0.0005%</div>
+              <div class="z" style="color: var(--brass);">+1.78</div>
+              <div class="fbar-track">
+                <div class="center"></div>
+                <div class="fill pos" style="left: 50%; width: 30%;"></div>
+              </div>
+              <div class="label">elevated long</div>
+              <div class="n">n=88</div>
+            </div>
+            <div class="funding-row">
+              <div class="sym">XRPUSDT</div>
+              <div class="rate">+0.0001%</div>
+              <div class="z">+0.42</div>
+              <div class="fbar-track">
+                <div class="center"></div>
+                <div class="fill pos" style="left: 50%; width: 7%;"></div>
+              </div>
+              <div class="label">neutral</div>
+              <div class="n">n=90</div>
+            </div>
+            <div class="funding-row">
+              <div class="sym">ETHUSDT</div>
+              <div class="rate">+0.0000%</div>
+              <div class="z">+0.18</div>
+              <div class="fbar-track">
+                <div class="center"></div>
+                <div class="fill pos" style="left: 50%; width: 3%;"></div>
+              </div>
+              <div class="label">neutral</div>
+              <div class="n">n=90</div>
+            </div>
+            <div class="funding-row">
+              <div class="sym">AVAXUSDT</div>
+              <div class="rate">−0.0002%</div>
+              <div class="z">−0.61</div>
+              <div class="fbar-track">
+                <div class="center"></div>
+                <div class="fill neg" style="right: 50%; width: 10%;"></div>
+              </div>
+              <div class="label">mild short</div>
+              <div class="n">n=87</div>
+            </div>
+            <div class="funding-row">
+              <div class="sym">LINKUSDT</div>
+              <div class="rate">−0.0003%</div>
+              <div class="z" style="color: var(--brass);">−1.42</div>
+              <div class="fbar-track">
+                <div class="center"></div>
+                <div class="fill neg" style="right: 50%; width: 24%;"></div>
+              </div>
+              <div class="label">elevated short</div>
+              <div class="n">n=85</div>
+            </div>
+            <div class="funding-row">
+              <div class="sym">BNBUSDT</div>
+              <div class="rate">−0.0001%</div>
+              <div class="z">−0.34</div>
+              <div class="fbar-track">
+                <div class="center"></div>
+                <div class="fill neg" style="right: 50%; width: 6%;"></div>
+              </div>
+              <div class="label">neutral</div>
+              <div class="n">n=86</div>
+            </div>
+          </div>
+        </div>
+        <aside class="marginalia">
+          Two symbols crossed |z| &ge; 2.0: <em>DOGE</em> (shorts crowded → LONG candidate) and <em>BTC</em> (longs crowded → SHORT candidate). The engine took the BTC short at 14:36 (see Active Positions).
+        </aside>
+      </section>
+
+    </main>
+  </div>
+</div>
+
+</body>
+</html>

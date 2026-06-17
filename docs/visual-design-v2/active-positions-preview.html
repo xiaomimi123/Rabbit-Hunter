@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>猎兔者 V6 · Field Instrument · Active Positions</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Source+Serif+4:ital,opsz,wght@0,8..60,300..700;1,8..60,300..700&family=Fira+Code:wght@300;400;500;600&family=Noto+Serif+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-base:        #0F1115;
+    --bg-surface:     #171A20;
+    --bg-elevated:    #22272F;
+    --bg-deep:        #0A0C0F;
+    --hairline:       rgba(241, 236, 221, 0.10);
+    --hairline-strong: rgba(241, 236, 221, 0.18);
+
+    --text-ivory:     #F1ECDD;
+    --text-sec:       rgba(241, 236, 221, 0.72);
+    --text-mut:       rgba(241, 236, 221, 0.42);
+    --text-dim:       rgba(241, 236, 221, 0.26);
+
+    --sage:    #6B8568;
+    --sage-soft: rgba(107, 133, 104, 0.18);
+    --oxblood: #A53E32;
+    --oxblood-soft: rgba(165, 62, 50, 0.18);
+    --brass:   #C9A14B;
+    --brass-soft: rgba(201, 161, 75, 0.14);
+    --ink:     #5A7691;
+    --ink-soft: rgba(90, 118, 145, 0.18);
+    --ash:     #7B8590;
+    --alarm:   #D03B30;
+
+    --font-display: 'Instrument Serif', 'Source Han Serif SC', 'Noto Serif SC', serif;
+    --font-body:    'Source Serif 4', 'Noto Serif SC', serif;
+    --font-mono:    'Fira Code', ui-monospace, monospace;
+    --font-cn:      'Noto Serif SC', serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { font-size: 14px; }
+  body {
+    background: var(--bg-base);
+    background-image:
+      repeating-linear-gradient(45deg,
+        rgba(241,236,221,0.012) 0,
+        rgba(241,236,221,0.012) 1px,
+        transparent 1px, transparent 6px);
+    color: var(--text-ivory);
+    font-family: var(--font-body);
+    font-feature-settings: "tnum" on, "lnum" on;
+    min-height: 100vh;
+  }
+  .mono, .num {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
+  }
+
+  /* ============ SHELL (same as dashboard) ============ */
+  .app { display: grid; grid-template-columns: 232px 1fr; min-height: 100vh; }
+
+  .sidebar {
+    border-right: 1px solid var(--hairline);
+    background: var(--bg-base);
+    padding: 20px 0 32px;
+    display: flex; flex-direction: column;
+    position: sticky; top: 0; height: 100vh; overflow-y: auto;
+  }
+  .brand { padding: 0 20px 24px; border-bottom: 1px solid var(--hairline); display: flex; align-items: center; gap: 12px; }
+  .brand-name { font-family: var(--font-display); font-size: 1.4rem; letter-spacing: 0.01em; line-height: 1; }
+  .brand-name em { font-style: italic; color: var(--brass); }
+  .brand-version { font-family: var(--font-mono); font-size: 0.65rem; color: var(--text-mut); letter-spacing: 0.1em; margin-top: 4px; }
+  .nav-group { padding: 18px 0 6px; }
+  .nav-group-label { font-family: var(--font-mono); font-size: 0.62rem; letter-spacing: 0.24em; color: var(--text-mut); padding: 0 20px 8px; text-transform: uppercase; }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 7px 20px; color: var(--text-sec); text-decoration: none; font-family: var(--font-cn); font-size: 0.875rem; border-left: 2px solid transparent; transition: all 200ms; }
+  .nav-item:hover { color: var(--text-ivory); background: rgba(241,236,221,0.02); }
+  .nav-item.active { color: var(--brass); border-left-color: var(--brass); background: var(--brass-soft); }
+  .nav-item .glyph { font-family: var(--font-mono); font-size: 0.7rem; width: 16px; opacity: 0.6; }
+
+  .topbar { height: 56px; border-bottom: 1px solid var(--hairline); display: flex; align-items: center; justify-content: space-between; padding: 0 32px; background: var(--bg-base); position: sticky; top: 0; z-index: 5; }
+  .tb-left, .tb-right { display: flex; align-items: center; gap: 18px; }
+  .tb-chip { font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.08em; color: var(--text-sec); }
+  .tb-badge { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.06em; padding: 3px 10px; border: 1px solid var(--hairline); }
+  .tb-badge.shadow { color: var(--brass); border-color: var(--brass-soft); background: var(--brass-soft); }
+  .tb-badge.ai { color: var(--ink); border-color: var(--ink-soft); background: var(--ink-soft); }
+  .tb-dot { width: 6px; height: 6px; background: var(--sage); border-radius: 50%; box-shadow: 0 0 6px rgba(107, 133, 104, 0.6); }
+  .tb-live-row { display: inline-flex; gap: 8px; align-items: center; color: var(--text-sec); font-family: var(--font-mono); font-size: 0.72rem; }
+
+  .main { display: flex; flex-direction: column; background: var(--bg-base); }
+  .content { padding: 28px 32px 64px; display: flex; flex-direction: column; gap: 28px; max-width: 1400px; }
+
+  /* page head */
+  .page-head { display: grid; grid-template-columns: 1fr auto; align-items: end; gap: 24px; padding-bottom: 18px; border-bottom: 1px solid var(--hairline-strong); }
+  .page-title { display: flex; align-items: center; gap: 16px; }
+  .page-aperture { width: 34px; height: 34px; color: var(--brass); animation: aperture-sweep 6s linear infinite; }
+  @keyframes aperture-sweep { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+  .page-name { font-family: var(--font-display); font-size: 2.6rem; line-height: 1; letter-spacing: -0.01em; }
+  .page-sub { font-family: var(--font-cn); color: var(--text-mut); font-size: 0.85rem; margin-top: 6px; }
+  .page-meta { text-align: right; font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-mut); letter-spacing: 0.04em; line-height: 1.5; }
+  .page-meta strong { color: var(--text-ivory); font-weight: 500; }
+
+  /* ============ TOP COUNTER STRIP ============ */
+  .counter-strip {
+    display: flex; align-items: center; gap: 32px;
+    padding: 16px 24px;
+    border: 1px solid var(--hairline);
+    background: linear-gradient(180deg, var(--bg-base) 0%, var(--bg-surface) 100%);
+  }
+  .counter-cell { display: flex; flex-direction: column; gap: 4px; }
+  .counter-cell + .counter-cell { padding-left: 32px; border-left: 1px solid var(--hairline); }
+  .counter-label { font-family: var(--font-mono); font-size: 0.62rem; letter-spacing: 0.22em; color: var(--text-mut); text-transform: uppercase; }
+  .counter-value { font-family: var(--font-mono); font-size: 1.5rem; color: var(--text-ivory); letter-spacing: -0.02em; }
+  .counter-value .frac { color: var(--text-mut); font-size: 0.95rem; }
+  .counter-value .lbl { color: var(--text-mut); font-size: 0.78rem; margin-left: 6px; letter-spacing: 0.04em; }
+
+  .slot-strip { display: inline-flex; gap: 6px; align-items: center; }
+  .slot-strip span { width: 14px; height: 14px; display: inline-block; border: 1px solid var(--hairline-strong); }
+  .slot-strip span.long { background: var(--sage-soft); border-color: var(--sage); }
+  .slot-strip span.short { background: var(--oxblood-soft); border-color: var(--oxblood); }
+  .slot-strip span.empty { background: transparent; }
+
+  /* ============ POSITION CARD ============ */
+  .pos-card {
+    border: 1px solid var(--hairline);
+    background: var(--bg-base);
+    display: grid;
+    grid-template-columns: 1fr 220px;
+    gap: 0;
+    position: relative;
+  }
+  .pos-card.long::before {
+    content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+    background: var(--sage);
+  }
+  .pos-card.short::before {
+    content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+    background: var(--oxblood);
+  }
+
+  .pos-main { padding: 20px 24px 18px 28px; }
+  .pos-side { padding: 16px 20px; border-left: 1px solid var(--hairline); background: rgba(241,236,221,0.015); display: flex; flex-direction: column; gap: 14px; justify-content: space-between; }
+
+  /* header row */
+  .pos-head {
+    display: flex; align-items: baseline; gap: 14px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--hairline);
+    margin-bottom: 18px;
+  }
+  .pos-symbol {
+    font-family: var(--font-display);
+    font-size: 1.9rem;
+    line-height: 1;
+    color: var(--text-ivory);
+    letter-spacing: -0.01em;
+  }
+  .pos-side-badge {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.18em;
+    padding: 3px 10px;
+    border: 1px solid;
+  }
+  .pos-side-badge.long { color: var(--sage); border-color: var(--sage); background: var(--sage-soft); }
+  .pos-side-badge.short { color: var(--oxblood); border-color: var(--oxblood); background: var(--oxblood-soft); }
+  .pos-lev {
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    color: var(--text-sec);
+    letter-spacing: 0.06em;
+  }
+  .pos-strategy {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--text-mut);
+    letter-spacing: 0.12em;
+    padding: 3px 8px;
+    border: 1px dashed var(--hairline-strong);
+  }
+  .pos-aperture {
+    margin-left: auto;
+    color: var(--brass);
+    opacity: 0.6;
+    animation: aperture-sweep 12s linear infinite;
+  }
+
+  /* price grid */
+  .price-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1px;
+    background: var(--hairline);
+    border: 1px solid var(--hairline);
+    margin-bottom: 16px;
+  }
+  .price-cell {
+    padding: 14px 16px;
+    background: var(--bg-base);
+  }
+  .price-cell .label {
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    letter-spacing: 0.22em;
+    color: var(--text-mut);
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .price-cell .val {
+    font-family: var(--font-mono);
+    font-size: 1.25rem;
+    letter-spacing: -0.02em;
+    color: var(--text-ivory);
+  }
+  .price-cell.sl .val { color: var(--oxblood); }
+  .price-cell.tp .val { color: var(--sage); }
+  .price-cell .delta {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--text-mut);
+    margin-top: 4px;
+  }
+  .price-cell .delta.pos { color: var(--sage); }
+  .price-cell .delta.neg { color: var(--oxblood); }
+
+  /* progress line — entry → current → tp/sl */
+  .pos-track {
+    margin-top: 8px;
+    margin-bottom: 18px;
+  }
+  .track-labels { display: flex; justify-content: space-between; font-family: var(--font-mono); font-size: 0.62rem; color: var(--text-mut); letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 6px; }
+  .track-bar {
+    height: 8px;
+    background: rgba(241,236,221,0.04);
+    position: relative;
+    border-left: 1px solid var(--oxblood);
+    border-right: 1px solid var(--sage);
+  }
+  .track-bar .entry-marker {
+    position: absolute;
+    width: 1px; height: 16px;
+    background: var(--text-mut);
+    top: -4px;
+  }
+  .track-bar .now-marker {
+    position: absolute;
+    width: 2px; height: 20px;
+    background: var(--brass);
+    top: -6px;
+    box-shadow: 0 0 6px var(--brass);
+  }
+  .track-bar .progress {
+    position: absolute;
+    top: 0; bottom: 0;
+    background: rgba(107,133,104,0.18);
+  }
+
+  /* pnl row */
+  .pnl-row {
+    display: flex; align-items: baseline; gap: 24px;
+    padding-top: 14px;
+    border-top: 1px solid var(--hairline);
+  }
+  .pnl-big {
+    font-family: var(--font-display);
+    font-size: 2.4rem;
+    line-height: 1;
+    letter-spacing: -0.03em;
+  }
+  .pnl-big.pos { color: var(--sage); }
+  .pnl-big.neg { color: var(--oxblood); }
+  .pnl-usdt {
+    font-family: var(--font-mono);
+    font-size: 1.05rem;
+    color: var(--text-sec);
+  }
+  .pnl-usdt.pos { color: var(--sage); }
+  .pnl-usdt.neg { color: var(--oxblood); }
+  .pnl-meta {
+    margin-left: auto;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--text-mut);
+    text-align: right;
+    line-height: 1.6;
+  }
+  .pnl-meta strong { color: var(--text-ivory); font-weight: 500; }
+
+  /* side column */
+  .side-actions { display: flex; flex-direction: column; gap: 10px; }
+  .btn {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    letter-spacing: 0.1em;
+    padding: 10px 16px;
+    border: 1px solid var(--hairline-strong);
+    background: transparent;
+    color: var(--text-ivory);
+    cursor: pointer;
+    text-transform: uppercase;
+    transition: all 200ms;
+    text-align: left;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .btn:hover { border-color: var(--brass); color: var(--brass); }
+  .btn .glyph { color: var(--brass); }
+  .btn.danger { border-color: var(--oxblood-soft); color: var(--oxblood); }
+  .btn.danger:hover { background: var(--oxblood-soft); border-color: var(--oxblood); }
+
+  .ai-note {
+    font-family: var(--font-body);
+    font-style: italic;
+    font-size: 0.78rem;
+    color: var(--text-mut);
+    line-height: 1.55;
+    padding-top: 12px;
+    border-top: 1px solid var(--hairline);
+  }
+  .ai-note .label {
+    font-family: var(--font-mono);
+    font-style: normal;
+    font-size: 0.62rem;
+    letter-spacing: 0.22em;
+    color: var(--brass);
+    display: block;
+    margin-bottom: 6px;
+    text-transform: uppercase;
+  }
+  .ai-note .ext-row {
+    display: flex; gap: 12px; margin-top: 10px; font-style: normal;
+    font-family: var(--font-mono); font-size: 0.7rem;
+    color: var(--text-sec); letter-spacing: 0.06em;
+  }
+
+  /* empty slot */
+  .pos-empty {
+    border: 1px dashed var(--hairline-strong);
+    padding: 36px;
+    text-align: center;
+    color: var(--text-mut);
+    font-family: var(--font-body);
+    font-style: italic;
+    background: rgba(241,236,221,0.01);
+  }
+  .pos-empty .ap {
+    width: 32px; height: 32px;
+    color: var(--text-dim);
+    margin: 0 auto 12px;
+    display: block;
+    animation: aperture-sweep 12s linear infinite;
+  }
+
+  /* responsive */
+  @media (max-width: 1100px) {
+    .pos-card { grid-template-columns: 1fr; }
+    .pos-side { border-left: none; border-top: 1px solid var(--hairline); }
+    .price-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (max-width: 720px) {
+    .app { grid-template-columns: 1fr; }
+    .sidebar { display: none; }
+    .content { padding: 20px 18px 40px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <aside class="sidebar">
+    <div class="brand">
+      <svg width="28" height="28" viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="1" style="color: var(--brass);">
+        <circle cx="14" cy="14" r="12.5" /><circle cx="14" cy="14" r="7" /><circle cx="14" cy="14" r="1.5" fill="currentColor" />
+        <line x1="14" y1="0" x2="14" y2="6" /><line x1="14" y1="22" x2="14" y2="28" />
+        <line x1="0" y1="14" x2="6" y2="14" /><line x1="22" y1="14" x2="28" y2="14" />
+      </svg>
+      <div>
+        <div class="brand-name">猎兔者<em>·</em>R</div>
+        <div class="brand-version">v6.0 · FIELD</div>
+      </div>
+    </div>
+    <div class="nav-group">
+      <div class="nav-group-label">交易</div>
+      <a class="nav-item" href="#"><span class="glyph">●</span>实时信号</a>
+      <a class="nav-item active" href="#"><span class="glyph">●</span>活仓监控</a>
+      <a class="nav-item" href="#"><span class="glyph">●</span>订单历史</a>
+      <a class="nav-item" href="#"><span class="glyph">●</span>手动开单</a>
+    </div>
+    <div class="nav-group">
+      <div class="nav-group-label">智能</div>
+      <a class="nav-item" href="#"><span class="glyph">◆</span>AI 状态</a>
+      <a class="nav-item" href="#"><span class="glyph">◆</span>信号历史</a>
+      <a class="nav-item" href="#"><span class="glyph">◆</span>策略配置</a>
+      <a class="nav-item" href="#"><span class="glyph">◆</span>复盘工作台</a>
+    </div>
+    <div class="nav-group">
+      <div class="nav-group-label">系统</div>
+      <a class="nav-item" href="#"><span class="glyph">⊕</span>Dashboard</a>
+      <a class="nav-item" href="#"><span class="glyph">○</span>系统设置</a>
+      <a class="nav-item" href="#"><span class="glyph">○</span>术语词典</a>
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <div class="tb-left">
+        <span class="tb-chip">v6.0.0</span>
+        <span class="tb-badge shadow">◐ SHADOW</span>
+        <span class="tb-badge ai">AI · deepseek-chat</span>
+      </div>
+      <div class="tb-right">
+        <span class="tb-live-row"><span class="tb-dot"></span>WS · 在线 · 1ms</span>
+        <span class="tb-chip">↗ 3 events</span>
+      </div>
+    </header>
+
+    <main class="content">
+
+      <!-- page head -->
+      <div class="page-head">
+        <div class="page-title">
+          <svg class="page-aperture" viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="0.7">
+            <circle cx="20" cy="20" r="18" /><circle cx="20" cy="20" r="12" /><circle cx="20" cy="20" r="6" />
+            <line x1="20" y1="0" x2="20" y2="6" stroke-width="1.2" /><line x1="20" y1="34" x2="20" y2="40" stroke-width="1.2" />
+            <line x1="0" y1="20" x2="6" y2="20" stroke-width="1.2" /><line x1="34" y1="20" x2="40" y2="20" stroke-width="1.2" />
+          </svg>
+          <div>
+            <div class="page-name">Active Positions</div>
+            <div class="page-sub">实时持仓监控 · 5s 自动校准 · live</div>
+          </div>
+        </div>
+        <div class="page-meta">
+          <div>OBSERVATION TIME</div>
+          <div><strong>14:47:22</strong> · UTC+8</div>
+          <div>next refresh <strong>3s</strong></div>
+        </div>
+      </div>
+
+      <!-- counter strip -->
+      <div class="counter-strip">
+        <div class="counter-cell">
+          <div class="counter-label">Occupied · slots</div>
+          <div class="counter-value">2<span class="frac"> / 3</span><span class="lbl">slots used</span></div>
+        </div>
+        <div class="counter-cell">
+          <div class="counter-label">Distribution</div>
+          <div class="counter-value">
+            <span class="slot-strip">
+              <span class="long" title="LONG"></span>
+              <span class="short" title="SHORT"></span>
+              <span class="empty" title="empty"></span>
+            </span>
+            <span class="lbl">1 long · 1 short · 1 idle</span>
+          </div>
+        </div>
+        <div class="counter-cell">
+          <div class="counter-label">Unrealized · net</div>
+          <div class="counter-value" style="color: var(--sage);">+0.36<span class="lbl">USDT  (+1.21%)</span></div>
+        </div>
+        <div class="counter-cell">
+          <div class="counter-label">Hold · avg</div>
+          <div class="counter-value">11<span class="lbl">min</span></div>
+        </div>
+      </div>
+
+      <!-- ===== Position #1: BTCUSDT SHORT (winning) ===== -->
+      <article class="pos-card short">
+        <div class="pos-main">
+          <div class="pos-head">
+            <div class="pos-symbol">BTCUSDT</div>
+            <span class="pos-side-badge short">SHORT</span>
+            <span class="pos-lev">×10</span>
+            <span class="pos-strategy">v5_funding</span>
+            <svg class="pos-aperture" width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1">
+              <circle cx="10" cy="10" r="9" /><circle cx="10" cy="10" r="5" /><circle cx="10" cy="10" r="1" fill="currentColor" />
+            </svg>
+          </div>
+
+          <!-- price grid -->
+          <div class="price-grid">
+            <div class="price-cell">
+              <div class="label">Entry</div>
+              <div class="val">94,180.50</div>
+              <div class="delta">@ 14:36:18</div>
+            </div>
+            <div class="price-cell">
+              <div class="label">Current</div>
+              <div class="val">93,242.10</div>
+              <div class="delta pos">−1.00%</div>
+            </div>
+            <div class="price-cell sl">
+              <div class="label">Stop Loss</div>
+              <div class="val">95,089.30</div>
+              <div class="delta">+0.96% from entry</div>
+            </div>
+            <div class="price-cell tp">
+              <div class="label">Take Profit</div>
+              <div class="val">92,316.80</div>
+              <div class="delta">−1.98% from entry</div>
+            </div>
+          </div>
+
+          <!-- track -->
+          <div class="pos-track">
+            <div class="track-labels"><span>SL</span><span>entry</span><span>now</span><span>TP</span></div>
+            <div class="track-bar">
+              <div class="progress" style="left: 32%; width: 18%;"></div>
+              <div class="entry-marker" style="left: 32%;"></div>
+              <div class="now-marker" style="left: 50%;"></div>
+            </div>
+          </div>
+
+          <!-- pnl -->
+          <div class="pnl-row">
+            <div class="pnl-big pos">+1.00<span style="font-size: 1.2rem;">%</span></div>
+            <div class="pnl-usdt pos">+0.94 USDT</div>
+            <div class="pnl-meta">
+              hold · <strong>11 min</strong><br/>
+              extensions · <strong>0 / 3</strong>
+            </div>
+          </div>
+        </div>
+
+        <div class="pos-side">
+          <div class="side-actions">
+            <button class="btn"><span class="glyph">⊕</span>View Chart</button>
+            <button class="btn"><span class="glyph">▶</span>Extend SL</button>
+            <button class="btn danger"><span class="glyph">×</span>Close Now</button>
+          </div>
+          <div class="ai-note">
+            <div class="label">AI Reasoning</div>
+            funding rate hit z=+2.4 (extreme), longs crowded; RSI 15m 76 (overbought) + 4h MACD bearish confirms short bias.
+            <div class="ext-row">
+              <span>confidence <strong style="color:var(--sage);">78%</strong></span>
+              <span>SL ×<strong style="color:var(--text-ivory);">1.0</strong></span>
+              <span>TP ×<strong style="color:var(--text-ivory);">1.2</strong></span>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <!-- ===== Position #2: ETHUSDT LONG (losing slightly) ===== -->
+      <article class="pos-card long">
+        <div class="pos-main">
+          <div class="pos-head">
+            <div class="pos-symbol">ETHUSDT</div>
+            <span class="pos-side-badge long">LONG</span>
+            <span class="pos-lev">×8</span>
+            <span class="pos-strategy">v5_manual</span>
+            <svg class="pos-aperture" width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1">
+              <circle cx="10" cy="10" r="9" /><circle cx="10" cy="10" r="5" /><circle cx="10" cy="10" r="1" fill="currentColor" />
+            </svg>
+          </div>
+
+          <div class="price-grid">
+            <div class="price-cell">
+              <div class="label">Entry</div>
+              <div class="val">3,408.20</div>
+              <div class="delta">@ 14:30:02</div>
+            </div>
+            <div class="price-cell">
+              <div class="label">Current</div>
+              <div class="val">3,392.55</div>
+              <div class="delta neg">−0.46%</div>
+            </div>
+            <div class="price-cell sl">
+              <div class="label">Stop Loss</div>
+              <div class="val">3,374.00</div>
+              <div class="delta">−1.00% from entry</div>
+            </div>
+            <div class="price-cell tp">
+              <div class="label">Take Profit</div>
+              <div class="val">3,476.40</div>
+              <div class="delta">+2.00% from entry</div>
+            </div>
+          </div>
+
+          <div class="pos-track">
+            <div class="track-labels"><span>SL</span><span>entry</span><span>now</span><span>TP</span></div>
+            <div class="track-bar">
+              <div class="progress" style="left: 26%; width: 7%;"></div>
+              <div class="entry-marker" style="left: 33%;"></div>
+              <div class="now-marker" style="left: 26%;"></div>
+            </div>
+          </div>
+
+          <div class="pnl-row">
+            <div class="pnl-big neg">−0.46<span style="font-size: 1.2rem;">%</span></div>
+            <div class="pnl-usdt neg">−0.21 USDT</div>
+            <div class="pnl-meta">
+              hold · <strong>17 min</strong><br/>
+              extensions · <strong>1 / 3</strong>
+            </div>
+          </div>
+        </div>
+
+        <div class="pos-side">
+          <div class="side-actions">
+            <button class="btn"><span class="glyph">⊕</span>View Chart</button>
+            <button class="btn"><span class="glyph">▶</span>Extend SL</button>
+            <button class="btn danger"><span class="glyph">×</span>Close Now</button>
+          </div>
+          <div class="ai-note">
+            <div class="label">Manual Entry</div>
+            operator-initiated via v5_manual workflow. AI gate approved (confidence 71%), funding z=+0.4 (neutral), RSI 4h trending up.
+            <div class="ext-row">
+              <span>confidence <strong style="color:var(--brass);">71%</strong></span>
+              <span>size ×<strong style="color:var(--text-ivory);">0.8</strong></span>
+              <span>by <strong style="color:var(--text-ivory);">operator</strong></span>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <!-- ===== Empty slot ===== -->
+      <div class="pos-empty">
+        <svg class="ap" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="0.6">
+          <circle cx="16" cy="16" r="14" /><circle cx="16" cy="16" r="9" /><circle cx="16" cy="16" r="4" />
+          <line x1="16" y1="0" x2="16" y2="5" /><line x1="16" y1="27" x2="16" y2="32" />
+          <line x1="0" y1="16" x2="5" y2="16" /><line x1="27" y1="16" x2="32" y2="16" />
+        </svg>
+        slot 3 — idle, awaiting next conjunction
+      </div>
+
+    </main>
+  </div>
+</div>
+
+</body>
+</html>
