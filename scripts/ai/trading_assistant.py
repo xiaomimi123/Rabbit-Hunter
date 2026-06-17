@@ -22,6 +22,41 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 
+def _build_funding_context_block(symbol: str, db_path=None) -> str:
+    """读 funding_zscore_cache 构造 prompt 的 funding section.
+
+    空时返回 N/A 提示。
+    """
+    try:
+        from scripts.ai.funding_rate_calculator import get_cached_zscore
+        fz_row = get_cached_zscore(symbol, db_path=db_path)
+    except Exception:
+        fz_row = None
+    if fz_row is None:
+        return "\n[FUNDING] N/A (no cache data for this symbol)\n"
+
+    z = fz_row["zscore_30d"]
+    rate = fz_row["current_funding_rate"]
+    annualized = rate * 365 * 3 * 100   # percent
+    if z >= 2.0:
+        crowding = "extreme long crowding (potential SHORT setup)"
+    elif z <= -2.0:
+        crowding = "extreme short crowding (potential LONG setup)"
+    elif z >= 0.5:
+        crowding = "moderate long bias"
+    elif z <= -0.5:
+        crowding = "moderate short bias"
+    else:
+        crowding = "neutral"
+    return (
+        f"\n[FUNDING RATE CONTEXT]\n"
+        f"Current 8h funding: {rate*100:+.4f}% (annualized {annualized:+.1f}%)\n"
+        f"30-day z-score: {z:+.2f}\n"
+        f"Market positioning: {crowding} ({fz_row['extreme_direction'] or 'neutral'})\n"
+        f"Sample size: {fz_row['sample_size_30d']}\n"
+    )
+
+
 def _fail_open() -> bool:
     """Whether to fall back to execute=True when the AI layer is unavailable.
 
@@ -293,6 +328,11 @@ class TradingAssistant:
                             reasoning="AI 未初始化")
 
         user_msg = build_v5_user_message(enriched, indicators, decision, risk)
+
+        # V6: 注入 funding context
+        funding_block = _build_funding_context_block(enriched.symbol)
+        user_msg = user_msg + funding_block
+
         timeout_s = float(os.getenv("AI_DECISION_TIMEOUT", "20"))
 
         # RAG 注入(仅 chat completions 路径用)
