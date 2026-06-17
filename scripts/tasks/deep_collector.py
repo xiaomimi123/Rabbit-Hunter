@@ -330,8 +330,27 @@ class DeepCollector:
                 now = time.time()
                 if now - last_deep_ts >= self.deep_scan_interval and self._current_movers:
                     last_deep_ts = now
-                    symbols = [m[0] for m in self._current_movers]
-                    print(f"[DeepCollector] 开始深度采集：{symbols}")
+                    mover_syms = [m[0] for m in self._current_movers]
+                    # V5.1: 强制把 top-20 白名单合并进入,即使它们不在 movers 里
+                    # 这保证主流币每个采集周期都被评估,不只是异动小币
+                    try:
+                        from scripts.v5_params import get_param
+                        from scripts.v5_symbol_whitelist import (
+                            parse_whitelist_param,
+                        )
+                        if get_param("v5_use_symbol_whitelist", True,
+                                     lambda v: str(v).lower() not in ("false", "0", "no")):
+                            wl_raw = get_param("v5_symbol_whitelist", "", str)
+                            whitelist = parse_whitelist_param(wl_raw)
+                            existing = set(mover_syms)
+                            extra = [s for s in whitelist if s not in existing]
+                            symbols = mover_syms + extra
+                        else:
+                            symbols = mover_syms
+                    except Exception as e:
+                        print(f"[DeepCollector] whitelist merge 失败,fallback to movers: {e}")
+                        symbols = mover_syms
+                    print(f"[DeepCollector] 开始深度采集：{symbols} (movers={len(mover_syms)}, +top20={len(symbols) - len(mover_syms)})")
 
                     # V5 path:_enrich_symbol 拉 15m+4h K 线,过滤 |ΔP|>3%,
                     # 构造 EnrichedItem 推入 enriched_queue。这条路径推的是
