@@ -176,10 +176,46 @@ def verify_reflection_phase_1_3(db_path: str = "data/rabbit_hunter.db") -> bool:
         conn.close()
 
 
+def verify_v6_funding_phase_1_6(db_path: str = "data/rabbit_hunter.db") -> bool:
+    import os, sqlite3
+    print("\n=== V6 Funding Rate (Phases 1-6) ===")
+    if not os.path.exists(db_path):
+        print(f"db not found: {db_path}")
+        return False
+    conn = sqlite3.connect(db_path)
+    try:
+        # Tables present
+        for table in ("funding_rates", "funding_zscore_cache"):
+            try:
+                n = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+                print(f"  {table}: {n} rows")
+            except sqlite3.OperationalError as e:
+                print(f"  {table}: MISSING ({e})")
+                return False
+
+        # Columns added to existing tables
+        for tbl, col in (
+            ("trade_scores_v5", "funding_z_score"),
+            ("trade_scores_v5", "funding_rate_8h"),
+            ("reflections", "funding_z_score_at_entry"),
+            ("reflections", "funding_rate_at_entry"),
+        ):
+            cols = [r[1] for r in conn.execute(f"PRAGMA table_info({tbl})").fetchall()]
+            if col not in cols:
+                print(f"  {tbl}.{col} MISSING")
+                return False
+        print("  ✓ all funding columns present in trade_scores_v5 + reflections")
+        print("\n✅ V6 Funding Phases 1-6 schema verification passed")
+        return True
+    finally:
+        conn.close()
+
+
 if __name__ == "__main__":
     db = os.environ.get("DB_PATH", "data/rabbit_hunter.db")
     ok_a = verify(db)
     ok_b = verify_plan_b_backend(db)
     ok_c = verify_plan_b_frontend()
     ok_d = verify_reflection_phase_1_3(db)
-    sys.exit(0 if (ok_a and ok_b and ok_c and ok_d) else 1)
+    ok_e = verify_v6_funding_phase_1_6(db)
+    sys.exit(0 if (ok_a and ok_b and ok_c and ok_d and ok_e) else 1)
