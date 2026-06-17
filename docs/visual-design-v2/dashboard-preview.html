@@ -1,0 +1,1067 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>猎兔者 V6 · Field Instrument · Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Source+Serif+4:ital,opsz,wght@0,8..60,300..700;1,8..60,300..700&family=Fira+Code:wght@300;400;500;600&family=Noto+Serif+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    /* Field Instrument palette */
+    --bg-base:        #0F1115;
+    --bg-surface:     #171A20;
+    --bg-elevated:    #22272F;
+    --bg-deep:        #0A0C0F;
+    --hairline:       rgba(241, 236, 221, 0.10);
+    --hairline-strong: rgba(241, 236, 221, 0.18);
+
+    --text-ivory:     #F1ECDD;
+    --text-sec:       rgba(241, 236, 221, 0.72);
+    --text-mut:       rgba(241, 236, 221, 0.42);
+    --text-dim:       rgba(241, 236, 221, 0.26);
+
+    --sage:    #6B8568;      /* LONG / WIN / healthy */
+    --sage-soft: rgba(107, 133, 104, 0.18);
+    --oxblood: #A53E32;      /* SHORT / LOSS */
+    --oxblood-soft: rgba(165, 62, 50, 0.18);
+    --brass:   #C9A14B;      /* highlight / active / brand glyph */
+    --brass-soft: rgba(201, 161, 75, 0.14);
+    --ink:     #5A7691;      /* neutral info */
+    --ink-soft: rgba(90, 118, 145, 0.18);
+    --ash:     #7B8590;      /* neutral data */
+    --alarm:   #D03B30;      /* reserved for LIVE confirm only */
+
+    /* Typography */
+    --font-display: 'Instrument Serif', 'Source Han Serif SC', 'Noto Serif SC', serif;
+    --font-body:    'Source Serif 4', 'Noto Serif SC', serif;
+    --font-mono:    'Fira Code', ui-monospace, monospace;
+    --font-cn:      'Noto Serif SC', serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { font-size: 14px; }
+
+  body {
+    background: var(--bg-base);
+    /* paper grain — subtle */
+    background-image:
+      repeating-linear-gradient(
+        45deg,
+        rgba(241,236,221,0.012) 0,
+        rgba(241,236,221,0.012) 1px,
+        transparent 1px,
+        transparent 6px
+      );
+    color: var(--text-ivory);
+    font-family: var(--font-body);
+    font-feature-settings: "tnum" on, "lnum" on;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* tabular numbers — sacred */
+  .mono, .num {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
+  }
+
+  /* ───────────────── APPLICATION SHELL ───────────────── */
+
+  .app {
+    display: grid;
+    grid-template-columns: 232px 1fr;
+    min-height: 100vh;
+  }
+
+  /* sidebar */
+  .sidebar {
+    border-right: 1px solid var(--hairline);
+    background: var(--bg-base);
+    padding: 20px 0 32px;
+    display: flex; flex-direction: column;
+    position: sticky; top: 0;
+    height: 100vh; overflow-y: auto;
+  }
+
+  .brand {
+    padding: 0 20px 24px;
+    border-bottom: 1px solid var(--hairline);
+    display: flex; align-items: center; gap: 12px;
+  }
+  .brand-mark svg { display: block; }
+  .brand-name {
+    font-family: var(--font-display);
+    font-size: 1.4rem;
+    letter-spacing: 0.01em;
+    line-height: 1;
+  }
+  .brand-name em {
+    font-style: italic;
+    color: var(--brass);
+  }
+  .brand-version {
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    color: var(--text-mut);
+    letter-spacing: 0.1em;
+    margin-top: 4px;
+  }
+
+  .nav-group {
+    padding: 18px 0 6px;
+  }
+  .nav-group-label {
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    letter-spacing: 0.24em;
+    color: var(--text-mut);
+    padding: 0 20px 8px;
+    text-transform: uppercase;
+  }
+  .nav-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 7px 20px;
+    color: var(--text-sec);
+    text-decoration: none;
+    font-family: var(--font-cn);
+    font-size: 0.875rem;
+    border-left: 2px solid transparent;
+    transition: all 200ms;
+  }
+  .nav-item:hover { color: var(--text-ivory); background: rgba(241,236,221,0.02); }
+  .nav-item.active {
+    color: var(--brass);
+    border-left-color: var(--brass);
+    background: var(--brass-soft);
+  }
+  .nav-item .glyph {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    width: 16px;
+    color: inherit;
+    opacity: 0.6;
+  }
+
+  /* topbar */
+  .topbar {
+    height: 56px;
+    border-bottom: 1px solid var(--hairline);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 32px;
+    background: var(--bg-base);
+    position: sticky; top: 0; z-index: 5;
+  }
+  .tb-left, .tb-right {
+    display: flex; align-items: center; gap: 18px;
+  }
+  .tb-chip {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    color: var(--text-sec);
+  }
+  .tb-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.06em;
+    padding: 3px 10px;
+    border: 1px solid var(--hairline);
+  }
+  .tb-badge.shadow { color: var(--brass); border-color: var(--brass-soft); background: var(--brass-soft); }
+  .tb-badge.ai { color: var(--ink); border-color: var(--ink-soft); background: var(--ink-soft); }
+  .tb-dot {
+    width: 6px; height: 6px;
+    background: var(--sage);
+    border-radius: 50%;
+    box-shadow: 0 0 6px rgba(107, 133, 104, 0.6);
+  }
+  .tb-live-row {
+    display: inline-flex; gap: 8px; align-items: center;
+    color: var(--text-sec);
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+  }
+
+  /* ───────────────── MAIN ───────────────── */
+
+  .main {
+    display: flex; flex-direction: column;
+    background: var(--bg-base);
+  }
+  .content {
+    padding: 28px 32px 64px;
+    display: flex; flex-direction: column;
+    gap: 28px;
+    max-width: 1400px;
+  }
+
+  /* page header */
+  .page-head {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: end;
+    gap: 24px;
+    padding-bottom: 18px;
+    border-bottom: 1px solid var(--hairline-strong);
+  }
+  .page-title {
+    display: flex; align-items: center; gap: 16px;
+  }
+  .page-aperture {
+    width: 34px; height: 34px;
+    color: var(--brass);
+    animation: aperture-sweep 6s linear infinite;
+  }
+  @keyframes aperture-sweep {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+  }
+  .page-name {
+    font-family: var(--font-display);
+    font-size: 2.6rem;
+    line-height: 1;
+    letter-spacing: -0.01em;
+  }
+  .page-sub {
+    font-family: var(--font-cn);
+    color: var(--text-mut);
+    font-size: 0.85rem;
+    margin-top: 6px;
+  }
+  .page-meta {
+    text-align: right;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    color: var(--text-mut);
+    letter-spacing: 0.04em;
+    line-height: 1.5;
+  }
+  .page-meta strong {
+    color: var(--text-ivory);
+    font-weight: 500;
+  }
+
+  /* ───────────────── KPI ROW — asymmetric 2:1:1:1 ───────────────── */
+
+  .kpi-row {
+    display: grid;
+    grid-template-columns: 1.7fr 1fr 1fr 1fr;
+    gap: 1px;
+    background: var(--hairline);
+    border: 1px solid var(--hairline);
+  }
+  .kpi {
+    background: var(--bg-base);
+    padding: 22px 24px 20px;
+    position: relative;
+  }
+  .kpi-label {
+    font-family: var(--font-mono);
+    font-size: 0.66rem;
+    letter-spacing: 0.22em;
+    color: var(--text-mut);
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+  .kpi-value {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    font-size: 3.1rem;
+    line-height: 0.92;
+    letter-spacing: -0.04em;
+    color: var(--text-ivory);
+  }
+  .kpi-value.big {
+    font-size: 4rem;
+    font-family: var(--font-display);
+    font-feature-settings: "ss01" on;
+    letter-spacing: -0.03em;
+  }
+  .kpi-unit {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--text-mut);
+    margin-left: 8px;
+    letter-spacing: 0.06em;
+  }
+  .kpi-delta {
+    margin-top: 12px;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    color: var(--sage);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .kpi-delta.flat { color: var(--text-mut); }
+  .kpi-delta.down { color: var(--oxblood); }
+  .kpi-foot {
+    margin-top: 6px;
+    font-family: var(--font-cn);
+    font-size: 0.7rem;
+    color: var(--text-mut);
+  }
+  /* tiny dots for active count */
+  .kpi-dots {
+    display: inline-flex; gap: 4px; margin-top: 12px;
+  }
+  .kpi-dots span {
+    width: 9px; height: 9px;
+    background: var(--sage);
+    display: inline-block;
+  }
+  .kpi-dots span.empty {
+    background: transparent;
+    border: 1px solid var(--text-dim);
+  }
+
+  /* ───────────────── SECTION HEADER ───────────────── */
+
+  .section {
+    display: grid;
+    grid-template-columns: 1fr 200px;     /* main content + marginalia */
+    gap: 28px;
+    align-items: start;
+  }
+  .section-head {
+    display: flex; align-items: center; gap: 14px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--hairline);
+    margin-bottom: 20px;
+  }
+  .section-aperture {
+    width: 18px; height: 18px;
+    color: var(--brass);
+  }
+  .section-name {
+    font-family: var(--font-display);
+    font-size: 1.4rem;
+    letter-spacing: -0.01em;
+  }
+  .section-meta {
+    margin-left: auto;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--text-mut);
+    letter-spacing: 0.06em;
+  }
+  .marginalia {
+    font-family: var(--font-body);
+    font-style: italic;
+    font-size: 0.78rem;
+    color: var(--text-mut);
+    line-height: 1.55;
+    padding-top: 50px;          /* align with section content start */
+    border-left: 1px solid var(--hairline);
+    padding-left: 18px;
+  }
+  .marginalia em { color: var(--brass); font-style: normal; }
+
+  /* ───────────────── SIGNAL FUNNEL ───────────────── */
+
+  .funnel { display: flex; flex-direction: column; gap: 10px; }
+  .funnel-row {
+    display: grid;
+    grid-template-columns: 170px 1fr 70px;
+    align-items: center;
+    gap: 14px;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--hairline);
+    cursor: pointer;
+    transition: background 200ms;
+  }
+  .funnel-row:hover {
+    background: rgba(201, 161, 75, 0.04);
+    border-bottom-color: var(--brass);
+  }
+  .funnel-row:last-child { border-bottom: none; }
+  .funnel-label {
+    font-family: var(--font-cn);
+    font-size: 0.85rem;
+    color: var(--text-sec);
+  }
+  .funnel-bar {
+    height: 14px;
+    background: rgba(241,236,221,0.04);
+    position: relative;
+  }
+  .funnel-bar > .fill {
+    position: absolute; inset: 0 auto 0 0;
+    background: var(--ink);
+  }
+  .funnel-bar.h1 > .fill { background: var(--ink); }
+  .funnel-bar.h2 > .fill { background: var(--ink-soft); border-right: 2px solid var(--ink); }
+  .funnel-bar.h3 > .fill { background: var(--brass-soft); border-right: 2px solid var(--brass); }
+  .funnel-bar.h4 > .fill { background: var(--sage-soft); border-right: 2px solid var(--sage); }
+  .funnel-count {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+    color: var(--text-ivory);
+  }
+
+  /* ───────────────── WIN RATE BREAKDOWN ───────────────── */
+
+  .breakdown {
+    display: grid;
+    grid-template-columns: 1.6fr 1fr;
+    gap: 36px;
+  }
+  .bd-col h4 {
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.2em;
+    color: var(--text-mut);
+    text-transform: uppercase;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--hairline);
+  }
+  .bd-row {
+    display: grid;
+    grid-template-columns: 110px 1fr 80px;
+    align-items: center;
+    padding: 9px 0;
+    gap: 14px;
+    font-size: 0.8rem;
+    border-bottom: 1px solid var(--hairline);
+  }
+  .bd-row .bd-label { color: var(--text-sec); font-family: var(--font-cn); }
+  .bd-row .bd-bar {
+    height: 10px;
+    background: rgba(241,236,221,0.04);
+    position: relative;
+  }
+  .bd-row .bd-bar .win {
+    background: var(--sage-soft);
+    border-right: 1px solid var(--sage);
+    position: absolute; inset: 0 auto 0 0;
+  }
+  .bd-row .bd-meta {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    color: var(--text-sec);
+    text-align: right;
+  }
+  .bd-row .bd-meta .pos { color: var(--sage); }
+  .bd-row .bd-meta .neg { color: var(--oxblood); }
+
+  .stats {
+    display: flex; flex-direction: column; gap: 20px;
+  }
+  .stat-row {
+    border-top: 1px solid var(--hairline);
+    padding-top: 12px;
+  }
+  .stat-row:first-child { border-top: none; padding-top: 0; }
+  .stat-key {
+    font-family: var(--font-mono);
+    font-size: 0.66rem;
+    color: var(--text-mut);
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+  .stat-val {
+    font-family: var(--font-mono);
+    font-size: 1.5rem;
+    color: var(--text-ivory);
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+  }
+  .stat-val .lo {
+    color: var(--text-mut);
+    font-size: 0.8rem;
+    letter-spacing: 0.04em;
+    margin-left: 8px;
+  }
+  .stat-sub {
+    font-family: var(--font-body);
+    font-style: italic;
+    font-size: 0.72rem;
+    color: var(--text-mut);
+    margin-top: 3px;
+  }
+
+  /* ───────────────── PNL CURVE ───────────────── */
+
+  .pnl-curve {
+    height: 220px;
+    width: 100%;
+    background: var(--bg-base);
+    position: relative;
+    padding: 8px 0 0;
+  }
+  .pnl-svg {
+    width: 100%;
+    height: 100%;
+  }
+  .pnl-axis {
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    fill: var(--text-mut);
+    letter-spacing: 0.06em;
+  }
+
+  /* ───────────────── SETUP BREAKDOWN TABLE ───────────────── */
+
+  .setup-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.78rem;
+  }
+  .setup-table thead th {
+    text-align: left;
+    font-family: var(--font-mono);
+    font-size: 0.66rem;
+    letter-spacing: 0.2em;
+    color: var(--text-mut);
+    text-transform: uppercase;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--hairline);
+    font-weight: normal;
+  }
+  .setup-table tbody td {
+    padding: 11px 14px;
+    border-bottom: 1px solid var(--hairline);
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+  .setup-table .setup-name {
+    color: var(--text-sec);
+    letter-spacing: 0;
+    font-size: 0.8rem;
+  }
+  .setup-table tr.funding {
+    background: var(--brass-soft);
+  }
+  .setup-table tr.funding .setup-name {
+    color: var(--brass);
+  }
+  .setup-table tr.funding .setup-name::before {
+    content: "✦ ";
+    color: var(--brass);
+    margin-right: 4px;
+  }
+  .setup-table td.num-r { text-align: right; }
+  .setup-table td.num-r.pos { color: var(--sage); }
+  .setup-table td.num-r.neg { color: var(--oxblood); }
+  .setup-table tr:hover td {
+    background: rgba(201,161,75,0.04);
+  }
+
+  /* ───────────────── BLOCK REASON BARS ───────────────── */
+
+  .blocks {
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .block-row {
+    display: grid;
+    grid-template-columns: 200px 1fr 50px;
+    align-items: center;
+    gap: 12px;
+    font-size: 0.75rem;
+    padding: 4px 0;
+  }
+  .block-row .lbl {
+    color: var(--text-sec);
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.04em;
+  }
+  .block-row .bar {
+    height: 4px;
+    background: rgba(241,236,221,0.04);
+    position: relative;
+  }
+  .block-row .bar > .fill {
+    position: absolute; inset: 0 auto 0 0;
+    background: var(--oxblood-soft);
+    border-right: 1px solid var(--oxblood);
+  }
+  .block-row .cnt {
+    text-align: right;
+    color: var(--text-ivory);
+    font-family: var(--font-mono);
+  }
+
+  /* ───────────────── UTIL ───────────────── */
+
+  .delta-up::before { content: "▲ "; color: var(--sage); }
+  .delta-down::before { content: "▼ "; color: var(--oxblood); }
+  .delta-flat::before { content: "─ "; color: var(--text-mut); }
+
+  /* legend mid-bottom */
+  .legend {
+    margin-top: 12px;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--text-mut);
+    letter-spacing: 0.04em;
+    line-height: 1.6;
+  }
+  .legend em { color: var(--brass); font-style: normal; }
+
+  /* responsive */
+  @media (max-width: 1100px) {
+    .section { grid-template-columns: 1fr; }
+    .marginalia { padding: 0; border-left: none; border-top: 1px solid var(--hairline); padding-top: 14px; }
+    .kpi-row { grid-template-columns: 1.6fr 1fr; }
+    .breakdown { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 720px) {
+    .app { grid-template-columns: 1fr; }
+    .sidebar { display: none; }
+    .kpi-row { grid-template-columns: 1fr 1fr; }
+    .content { padding: 20px 18px 40px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ============== SIDEBAR ============== -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">
+        <!-- The Aperture — brand glyph -->
+        <svg width="28" height="28" viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="1" style="color: var(--brass);">
+          <circle cx="14" cy="14" r="12.5" />
+          <circle cx="14" cy="14" r="7" />
+          <circle cx="14" cy="14" r="1.5" fill="currentColor" />
+          <line x1="14" y1="0" x2="14" y2="6" />
+          <line x1="14" y1="22" x2="14" y2="28" />
+          <line x1="0" y1="14" x2="6" y2="14" />
+          <line x1="22" y1="14" x2="28" y2="14" />
+        </svg>
+      </div>
+      <div>
+        <div class="brand-name">猎兔者<em>·</em>R</div>
+        <div class="brand-version">v6.0 · FIELD</div>
+      </div>
+    </div>
+
+    <div class="nav-group">
+      <div class="nav-group-label">交易</div>
+      <a class="nav-item" href="#"><span class="glyph">●</span>实时信号</a>
+      <a class="nav-item" href="#"><span class="glyph">●</span>活仓监控</a>
+      <a class="nav-item" href="#"><span class="glyph">●</span>订单历史</a>
+      <a class="nav-item" href="#"><span class="glyph">●</span>手动开单</a>
+    </div>
+
+    <div class="nav-group">
+      <div class="nav-group-label">智能</div>
+      <a class="nav-item" href="#"><span class="glyph">◆</span>AI 状态</a>
+      <a class="nav-item" href="#"><span class="glyph">◆</span>信号历史</a>
+      <a class="nav-item" href="#"><span class="glyph">◆</span>策略配置</a>
+      <a class="nav-item" href="#"><span class="glyph">◆</span>复盘工作台</a>
+    </div>
+
+    <div class="nav-group">
+      <div class="nav-group-label">系统</div>
+      <a class="nav-item active" href="#"><span class="glyph">⊕</span>Dashboard</a>
+      <a class="nav-item" href="#"><span class="glyph">○</span>系统设置</a>
+      <a class="nav-item" href="#"><span class="glyph">○</span>术语词典</a>
+    </div>
+  </aside>
+
+  <!-- ============== MAIN ============== -->
+  <div class="main">
+
+    <!-- TopBar -->
+    <header class="topbar">
+      <div class="tb-left">
+        <span class="tb-chip">v6.0.0</span>
+        <span class="tb-badge shadow">◐ SHADOW</span>
+        <span class="tb-badge ai">AI · deepseek-chat</span>
+      </div>
+      <div class="tb-right">
+        <span class="tb-live-row"><span class="tb-dot"></span>WS · 在线 · 1ms</span>
+        <span class="tb-chip">↗ 3 events</span>
+      </div>
+    </header>
+
+    <main class="content">
+
+      <!-- Page Header -->
+      <div class="page-head">
+        <div class="page-title">
+          <svg class="page-aperture" viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="0.7">
+            <circle cx="20" cy="20" r="18" />
+            <circle cx="20" cy="20" r="12" />
+            <circle cx="20" cy="20" r="6" />
+            <line x1="20" y1="0" x2="20" y2="6" stroke-width="1.2" />
+            <line x1="20" y1="34" x2="20" y2="40" stroke-width="1.2" />
+            <line x1="0" y1="20" x2="6" y2="20" stroke-width="1.2" />
+            <line x1="34" y1="20" x2="40" y2="20" stroke-width="1.2" />
+          </svg>
+          <div>
+            <div class="page-name">Dashboard</div>
+            <div class="page-sub">24 小时观测日志 · field journal</div>
+          </div>
+        </div>
+        <div class="page-meta">
+          <div>OBSERVATION TIME</div>
+          <div><strong>14:32:08</strong> · UTC+8</div>
+          <div>data refresh in <strong>22s</strong></div>
+        </div>
+      </div>
+
+      <!-- KPI Row — asymmetric 1.7:1:1:1 -->
+      <section class="kpi-row">
+        <div class="kpi">
+          <div class="kpi-label">Win Rate · 7d</div>
+          <div class="kpi-value big">63<span class="kpi-unit">%</span></div>
+          <div class="kpi-delta delta-up">+5pt vs yesterday</div>
+          <div class="kpi-foot">29 trades observed</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label">Net PnL</div>
+          <div class="kpi-value">+18.40<span class="kpi-unit">USDT</span></div>
+          <div class="kpi-delta delta-up">+1.84%</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label">Hold · avg</div>
+          <div class="kpi-value">17<span class="kpi-unit">min</span></div>
+          <div class="kpi-delta delta-flat">─ unchanged</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label">Active · slots</div>
+          <div class="kpi-value">2<span class="kpi-unit">/ 3</span></div>
+          <div class="kpi-dots">
+            <span></span><span></span><span class="empty"></span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Signal Funnel -->
+      <section class="section">
+        <div class="section-main">
+          <div class="section-head">
+            <svg class="section-aperture" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1">
+              <circle cx="10" cy="10" r="9" />
+              <circle cx="10" cy="10" r="5" />
+              <circle cx="10" cy="10" r="1" fill="currentColor" />
+            </svg>
+            <div class="section-name">Signal Funnel</div>
+            <div class="section-meta">24h · click to drill</div>
+          </div>
+
+          <div class="funnel">
+            <div class="funnel-row">
+              <div class="funnel-label">Scanner detected</div>
+              <div class="funnel-bar h1"><div class="fill" style="width: 100%"></div></div>
+              <div class="funnel-count num">872</div>
+            </div>
+            <div class="funnel-row">
+              <div class="funnel-label">Conjunction passed</div>
+              <div class="funnel-bar h2"><div class="fill" style="width: 24.4%"></div></div>
+              <div class="funnel-count num">213</div>
+            </div>
+            <div class="funnel-row">
+              <div class="funnel-label">AI approved</div>
+              <div class="funnel-bar h3"><div class="fill" style="width: 3.9%"></div></div>
+              <div class="funnel-count num">34</div>
+            </div>
+            <div class="funnel-row">
+              <div class="funnel-label">Position opened</div>
+              <div class="funnel-bar h4"><div class="fill" style="width: 1.3%"></div></div>
+              <div class="funnel-count num">11</div>
+            </div>
+          </div>
+        </div>
+        <aside class="marginalia">
+          78% washed at conjunction. RSI ∩ MACD remains the dominant filter; <em>funding extreme</em> setups now passing at higher rate (n=4 over 7d).
+        </aside>
+      </section>
+
+      <!-- Win Rate Breakdown -->
+      <section class="section">
+        <div class="section-main">
+          <div class="section-head">
+            <svg class="section-aperture" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1">
+              <circle cx="10" cy="10" r="9" />
+              <circle cx="10" cy="10" r="5" />
+              <circle cx="10" cy="10" r="1" fill="currentColor" />
+            </svg>
+            <div class="section-name">Outcome Breakdown</div>
+            <div class="section-meta">7d window · n=29</div>
+          </div>
+
+          <div class="breakdown">
+            <div class="bd-col">
+              <h4>By side</h4>
+              <div class="bd-row">
+                <div class="bd-label">LONG · 做多</div>
+                <div class="bd-bar"><div class="win" style="width: 58%"></div></div>
+                <div class="bd-meta">58% · <span class="pos">+2.1</span></div>
+              </div>
+              <div class="bd-row">
+                <div class="bd-label">SHORT · 做空</div>
+                <div class="bd-bar"><div class="win" style="width: 71%"></div></div>
+                <div class="bd-meta">71% · <span class="pos">+4.8</span></div>
+              </div>
+
+              <h4 style="margin-top: 28px;">By strategy</h4>
+              <div class="bd-row">
+                <div class="bd-label">Auto · 自动</div>
+                <div class="bd-bar"><div class="win" style="width: 41%"></div></div>
+                <div class="bd-meta">41% · <span class="neg">-4.9</span></div>
+              </div>
+              <div class="bd-row">
+                <div class="bd-label">Manual · 手动</div>
+                <div class="bd-bar"><div class="win" style="width: 75%"></div></div>
+                <div class="bd-meta">75% · <span class="pos">+0.4</span></div>
+              </div>
+
+              <h4 style="margin-top: 28px;">By exit reason</h4>
+              <div class="bd-row">
+                <div class="bd-label">TP_HIT</div>
+                <div class="bd-bar"><div class="win" style="width: 100%"></div></div>
+                <div class="bd-meta">100% · <span class="pos">+5.2</span></div>
+              </div>
+              <div class="bd-row">
+                <div class="bd-label">SIGNAL_REVERSE</div>
+                <div class="bd-bar"><div class="win" style="width: 35%"></div></div>
+                <div class="bd-meta">35% · <span class="neg">-1.8</span></div>
+              </div>
+              <div class="bd-row">
+                <div class="bd-label">SOFT_TARGET</div>
+                <div class="bd-bar"><div class="win" style="width: 50%"></div></div>
+                <div class="bd-meta">50% · <span class="pos">+0.2</span></div>
+              </div>
+              <div class="bd-row">
+                <div class="bd-label">SL_HIT</div>
+                <div class="bd-bar"><div class="win" style="width: 0%"></div></div>
+                <div class="bd-meta">0% · <span class="neg">-2.4</span></div>
+              </div>
+            </div>
+
+            <div class="bd-col">
+              <h4>Aggregate</h4>
+              <div class="stats">
+                <div class="stat-row">
+                  <div class="stat-key">Sample</div>
+                  <div class="stat-val">18<span class="lo">W</span> / 11<span class="lo">L</span></div>
+                  <div class="stat-sub">62% across all setups</div>
+                </div>
+                <div class="stat-row">
+                  <div class="stat-key">Profit Factor</div>
+                  <div class="stat-val">1.84</div>
+                  <div class="stat-sub">gross win / gross loss</div>
+                </div>
+                <div class="stat-row">
+                  <div class="stat-key">Best trade</div>
+                  <div class="stat-val" style="color: var(--sage);">BTCUSDT <span class="lo" style="color: var(--sage);">+2.8%</span></div>
+                  <div class="stat-sub">funding_extreme_short · 23min hold</div>
+                </div>
+                <div class="stat-row">
+                  <div class="stat-key">Worst trade</div>
+                  <div class="stat-val" style="color: var(--oxblood);">DOGEUSDT <span class="lo" style="color: var(--oxblood);">−1.9%</span></div>
+                  <div class="stat-sub">rsi_neutral · SIGNAL_REVERSE</div>
+                </div>
+                <div class="stat-row">
+                  <div class="stat-key">Streak · cur / max</div>
+                  <div class="stat-val"><span style="color: var(--sage);">3W</span><span class="lo">cur</span> / 5W<span class="lo">max</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <aside class="marginalia">
+          Auto strategy underperforms manual by <em>34pt</em>. AI gate works — but only when the rule engine concedes the trade beforehand. Manual entries through <em>v5_manual</em> survive longer (avg 22 min).
+        </aside>
+      </section>
+
+      <!-- PnL Curve -->
+      <section class="section">
+        <div class="section-main">
+          <div class="section-head">
+            <svg class="section-aperture" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1">
+              <circle cx="10" cy="10" r="9" />
+              <circle cx="10" cy="10" r="5" />
+              <circle cx="10" cy="10" r="1" fill="currentColor" />
+            </svg>
+            <div class="section-name">PnL Trajectory</div>
+            <div class="section-meta">cumulative · 24h</div>
+          </div>
+
+          <div class="pnl-curve">
+            <svg class="pnl-svg" viewBox="0 0 800 220" preserveAspectRatio="none">
+              <!-- gridlines -->
+              <line x1="0" y1="110" x2="800" y2="110" stroke="rgba(241,236,221,0.06)" stroke-dasharray="2 4"/>
+              <line x1="0" y1="55"  x2="800" y2="55" stroke="rgba(241,236,221,0.04)"/>
+              <line x1="0" y1="165" x2="800" y2="165" stroke="rgba(241,236,221,0.04)"/>
+
+              <!-- axis labels -->
+              <text class="pnl-axis" x="4" y="50">+25</text>
+              <text class="pnl-axis" x="4" y="115">  0</text>
+              <text class="pnl-axis" x="4" y="170">−25</text>
+
+              <!-- area fill -->
+              <path d="M 30 130 L 80 122 L 140 138 L 200 118 L 260 142 L 320 102 L 380 92 L 440 76 L 500 88 L 560 70 L 620 58 L 680 48 L 740 56 L 770 60 L 770 110 L 30 110 Z"
+                    fill="rgba(107,133,104,0.10)"/>
+
+              <!-- baseline -->
+              <line x1="30" y1="110" x2="770" y2="110" stroke="rgba(241,236,221,0.16)"/>
+
+              <!-- pnl line -->
+              <polyline points="30,130 80,122 140,138 200,118 260,142 320,102 380,92 440,76 500,88 560,70 620,58 680,48 740,56 770,60"
+                fill="none" stroke="var(--sage)" stroke-width="1.5"/>
+
+              <!-- end point -->
+              <circle cx="770" cy="60" r="3" fill="var(--brass)"/>
+              <text class="pnl-axis" x="780" y="64" style="text-anchor: start; fill: var(--brass);">+18.40 USDT</text>
+
+              <!-- time axis -->
+              <text class="pnl-axis" x="30" y="210">00:00</text>
+              <text class="pnl-axis" x="200" y="210">06:00</text>
+              <text class="pnl-axis" x="380" y="210">12:00</text>
+              <text class="pnl-axis" x="560" y="210">18:00</text>
+              <text class="pnl-axis" x="730" y="210">now</text>
+            </svg>
+          </div>
+        </div>
+        <aside class="marginalia">
+          Major rally between 16:00–18:00 driven by SHORT entries on overheated funding. <em>2 of 4 funding-extreme</em> setups hit TP.
+        </aside>
+      </section>
+
+      <!-- Setup Type Breakdown WITH FUNDING -->
+      <section class="section">
+        <div class="section-main">
+          <div class="section-head">
+            <svg class="section-aperture" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1">
+              <circle cx="10" cy="10" r="9" />
+              <circle cx="10" cy="10" r="5" />
+              <circle cx="10" cy="10" r="1" fill="currentColor" />
+            </svg>
+            <div class="section-name">Setup Type · 7d Performance</div>
+            <div class="section-meta">funding dimension highlighted</div>
+          </div>
+
+          <table class="setup-table">
+            <thead>
+              <tr>
+                <th>setup_type</th>
+                <th style="text-align:right">n</th>
+                <th style="text-align:right">win rate</th>
+                <th style="text-align:right">avg R</th>
+                <th style="text-align:right">share</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="funding">
+                <td class="setup-name">funding_extreme_short_rsi_overbought</td>
+                <td class="num-r">4</td>
+                <td class="num-r pos">75%</td>
+                <td class="num-r pos">+1.32</td>
+                <td class="num-r">14%</td>
+              </tr>
+              <tr class="funding">
+                <td class="setup-name">funding_extreme_long_rsi_oversold</td>
+                <td class="num-r">2</td>
+                <td class="num-r pos">100%</td>
+                <td class="num-r pos">+1.05</td>
+                <td class="num-r">7%</td>
+              </tr>
+              <tr>
+                <td class="setup-name">rsi_overbought_macd_bearish_short</td>
+                <td class="num-r">8</td>
+                <td class="num-r neg">38%</td>
+                <td class="num-r neg">−0.12</td>
+                <td class="num-r">28%</td>
+              </tr>
+              <tr>
+                <td class="setup-name">rsi_oversold_macd_bullish_long</td>
+                <td class="num-r">5</td>
+                <td class="num-r pos">60%</td>
+                <td class="num-r pos">+0.41</td>
+                <td class="num-r">17%</td>
+              </tr>
+              <tr>
+                <td class="setup-name">rsi_neutral_macd_extending_long</td>
+                <td class="num-r">7</td>
+                <td class="num-r neg">29%</td>
+                <td class="num-r neg">−0.18</td>
+                <td class="num-r">24%</td>
+              </tr>
+              <tr>
+                <td class="setup-name">rsi_neutral_macd_extending_short</td>
+                <td class="num-r">3</td>
+                <td class="num-r neg">33%</td>
+                <td class="num-r neg">−0.05</td>
+                <td class="num-r">10%</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div class="legend">
+            <em>✦</em> funding_extreme rows: 6 trades, 83% win — preliminary edge confirmed but n &lt; 10 per bucket; Kelly engine will not propose sizing yet (requires 30d cumulative).
+          </div>
+        </div>
+        <aside class="marginalia">
+          The funding dimension is the only setup family with positive avg R over 7d. <em>RSI×MACD</em> alone (3 buckets) sums to −0.35 R — confirming the operator's hypothesis that price-history indicators have washed out.
+        </aside>
+      </section>
+
+      <!-- Block Reason Distribution -->
+      <section class="section">
+        <div class="section-main">
+          <div class="section-head">
+            <svg class="section-aperture" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1">
+              <circle cx="10" cy="10" r="9" />
+              <circle cx="10" cy="10" r="5" />
+              <circle cx="10" cy="10" r="1" fill="currentColor" />
+            </svg>
+            <div class="section-name">Block Reason Distribution</div>
+            <div class="section-meta">why scans didn't trade</div>
+          </div>
+          <div class="blocks">
+            <div class="block-row">
+              <div class="lbl">NOT_TREND_ALIGNED</div>
+              <div class="bar"><div class="fill" style="width: 96%"></div></div>
+              <div class="cnt">659</div>
+            </div>
+            <div class="block-row">
+              <div class="lbl">ANTI_CHASE_BOTTOM</div>
+              <div class="bar"><div class="fill" style="width: 18%"></div></div>
+              <div class="cnt">122</div>
+            </div>
+            <div class="block-row">
+              <div class="lbl">ANTI_CHASE_TOP</div>
+              <div class="bar"><div class="fill" style="width: 9%"></div></div>
+              <div class="cnt">62</div>
+            </div>
+            <div class="block-row">
+              <div class="lbl">FAILURE_MODE_MATCH</div>
+              <div class="bar"><div class="fill" style="width: 7%"></div></div>
+              <div class="cnt">48</div>
+            </div>
+            <div class="block-row">
+              <div class="lbl">AI_REJECTED</div>
+              <div class="bar"><div class="fill" style="width: 5%"></div></div>
+              <div class="cnt">34</div>
+            </div>
+            <div class="block-row">
+              <div class="lbl">MAX_CONCURRENT</div>
+              <div class="bar"><div class="fill" style="width: 3%"></div></div>
+              <div class="cnt">22</div>
+            </div>
+          </div>
+        </div>
+        <aside class="marginalia">
+          96% of scans rejected pre-AI. The funnel is doing its job — engine is only spending LLM cycles on candidates worth scoring.
+        </aside>
+      </section>
+
+    </main>
+  </div>
+</div>
+
+</body>
+</html>
