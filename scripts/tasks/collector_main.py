@@ -317,6 +317,15 @@ async def main() -> None:
     writer.start()
     print("[collector_main] DatabaseWriter 已启动")
 
+    # Funding rate collector (V6)
+    from scripts.tasks.v5_funding_collector import V5FundingCollector
+    from scripts.v5_symbol_whitelist import V5_TOP20_WHITELIST
+
+    funding_collector = V5FundingCollector(
+        db_path=db_path,
+        symbols=sorted(V5_TOP20_WHITELIST),
+    )
+
     coroutines = [
         scanner.run(),
         deep_collector.run(),
@@ -324,6 +333,7 @@ async def main() -> None:
         monitor.run(),
         _healthcheck_loop(db_path),
         reflection_worker.run(),
+        funding_collector.run(),
     ]
     if memory_uploader is not None:
         coroutines.append(memory_uploader.run())
