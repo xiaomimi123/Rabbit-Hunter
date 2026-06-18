@@ -82,5 +82,9 @@ Constraints:
 - Each text field: 10-500 chars.
 - Anchor to evidence; do NOT invent indicators not shown above.
 - If realized_r > 0.5: this was a WIN — failure_mode_key should be null; correction_idea may still suggest improvements.
+- **Output language: 用中文回答所有文本字段** (why_entered / what_was_expected /
+  what_actually_happened / correction_idea). 技术指标名称 (RSI, MACD, ATR, funding z)
+  保留英文,但分析、推理和建议用中文,这样操作员能直接读懂。
+- failure_mode_key MUST stay as snake_case English (it's an identifier).
 - Prompt version: {PROMPT_VERSION}
 """

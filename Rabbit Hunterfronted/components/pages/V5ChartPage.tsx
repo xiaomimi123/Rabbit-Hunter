@@ -41,7 +41,7 @@ export function V5ChartPage() {
           </div>
         </div>
         <div className="text-right font-mono text-[0.72rem] text-ivory-40 leading-relaxed">
-          <div className="tracking-wider2 uppercase">Current Price</div>
+          <div className="tracking-wider2 uppercase">当前价</div>
           <div className="font-mono text-[1.4rem] text-ivory tabular-nums">
             {lastClose != null ? lastClose.toFixed(Math.abs(lastClose) >= 1 ? 4 : 6) : '—'}
           </div>

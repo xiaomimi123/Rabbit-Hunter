@@ -38,15 +38,15 @@ export function V5OrderHistoryPage() {
         <table className="w-full text-[0.78rem] border-collapse">
           <thead>
             <tr>
-              <Th>exit time</Th>
-              <Th>symbol</Th>
-              <Th>side</Th>
-              <Th align="right">entry</Th>
-              <Th align="right">exit</Th>
-              <Th>reason</Th>
-              <Th align="right"><Term k="PnL">PnL $</Term></Th>
-              <Th align="right">PnL %</Th>
-              <Th align="right">hold</Th>
+              <Th>平仓时间</Th>
+              <Th>币种</Th>
+              <Th>方向</Th>
+              <Th align="right">入场</Th>
+              <Th align="right">出场</Th>
+              <Th>原因</Th>
+              <Th align="right"><Term k="PnL">盈亏 $</Term></Th>
+              <Th align="right">盈亏%</Th>
+              <Th align="right">持仓</Th>
               <Th></Th>
             </tr>
           </thead>
@@ -72,12 +72,12 @@ function PageHead({ now, count }: { now: Date; count: number }) {
       <div className="flex items-center gap-4">
         <Aperture size={34} rotate className="text-brass" />
         <div>
-          <h1 className="font-display text-[2.6rem] leading-none tracking-tight">Order History</h1>
+          <h1 className="font-display text-[2.6rem] leading-none tracking-tight">订单历史</h1>
           <p className="font-cn text-ivory-40 text-[0.85rem] mt-1.5">已平仓订单 · {count} 条记录</p>
         </div>
       </div>
       <div className="text-right font-mono text-[0.72rem] text-ivory-40 leading-relaxed">
-        <div className="tracking-wider2 uppercase">Observation Time</div>
+        <div className="tracking-wider2 uppercase">观测时间</div>
         <div><strong className="text-ivory font-medium">{t}</strong> · UTC+8</div>
         <div>refresh · <strong className="text-ivory font-medium">30s</strong></div>
       </div>

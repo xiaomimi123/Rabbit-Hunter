@@ -57,15 +57,15 @@ export function ActivePositionCard({ position, onClose, onChart }: Props) {
 
         {/* price 4-col grid */}
         <div className="grid grid-cols-4 max-[640px]:grid-cols-2 gap-px bg-hairline border border-hairline mb-4">
-          <Cell label="Entry" value={fmtPrice(position.entry_price)} sub={position.entry_time?.slice(11, 19)} />
+          <Cell label="入场" value={fmtPrice(position.entry_price)} sub={position.entry_time?.slice(11, 19)} />
           <Cell
-            label="Current"
+            label="当前"
             value={fmtPrice(cur)}
             sub={pctChange(position.entry_price, cur)}
             subClass={isProfit ? 'text-sage' : pnlPct < 0 ? 'text-oxblood' : ''}
           />
-          <Cell label="Stop Loss" value={fmtPrice(position.sl_price)} valueClass="text-oxblood" sub={pctChange(position.entry_price, position.sl_price)} />
-          <Cell label="Take Profit" value={fmtPrice(position.tp_price)} valueClass="text-sage" sub={pctChange(position.entry_price, position.tp_price)} />
+          <Cell label="止损" value={fmtPrice(position.sl_price)} valueClass="text-oxblood" sub={pctChange(position.entry_price, position.sl_price)} />
+          <Cell label="止盈" value={fmtPrice(position.tp_price)} valueClass="text-sage" sub={pctChange(position.entry_price, position.tp_price)} />
         </div>
 
         {/* PnL row */}
@@ -86,7 +86,7 @@ export function ActivePositionCard({ position, onClose, onChart }: Props) {
       {/* side panel */}
       <div className="p-5 border-l max-[1100px]:border-l-0 max-[1100px]:border-t border-hairline bg-white/[0.015] flex flex-col gap-3.5 justify-between">
         <div className="flex flex-col gap-2.5">
-          <ActionButton onClick={() => onChart(position)} glyph="⊕" label="View Chart" />
+          <ActionButton onClick={() => onChart(position)} glyph="⊕" label="查看图表" />
           <ActionButton onClick={() => onClose(position)} glyph="×" label="立即平仓" danger />
         </div>
       </div>

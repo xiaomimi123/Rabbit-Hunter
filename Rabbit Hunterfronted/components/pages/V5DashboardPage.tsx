@@ -52,23 +52,23 @@ export function V5DashboardPage() {
     <PageWrap>
       <PageHead now={now} />
 
-      {/* KPI row 1.7:1:1:1 */}
+      {/* KPI 行 1.7:1:1:1 */}
       <section className="grid grid-cols-[1.7fr_1fr_1fr_1fr] max-[1100px]:grid-cols-[1.6fr_1fr] gap-px bg-hairline border border-hairline">
         <KpiCard
           hero
-          title="胜率"
-          value={`${winRatePct}%`}
-          foot={`${closed.length} trades observed`}
+          title="胜率 · 7d"
+          value={closed.length === 0 ? '—' : `${winRatePct}%`}
+          foot={closed.length === 0 ? <NextCandleHint now={now} /> : `${closed.length} 笔已观测`}
         />
         <KpiCard
-          title="累计 PnL"
-          value={`${d.pnl_total_usdt >= 0 ? '+' : ''}${d.pnl_total_usdt.toFixed(2)}`}
-          unit="USDT"
+          title="累计盈亏"
+          value={closed.length === 0 ? '—' : `${d.pnl_total_usdt >= 0 ? '+' : ''}${d.pnl_total_usdt.toFixed(2)}`}
+          unit={closed.length === 0 ? '' : 'USDT'}
         />
         <KpiCard
           title="平均持仓"
-          value={Math.round(d.avg_holding_minutes)}
-          unit="min"
+          value={closed.length === 0 ? '—' : Math.round(d.avg_holding_minutes)}
+          unit={closed.length === 0 ? '' : '分钟'}
         />
         <KpiCard
           title="活仓数"
@@ -80,7 +80,7 @@ export function V5DashboardPage() {
 
       <Section
         title="Signal Funnel"
-        meta="24h · click to drill"
+        meta="24h · 点击展开"
         marginalia={
           <>
             漏斗每层都可点。<em>{d.signals_24h > 0 ? Math.round((1 - d.signals_passed_and / d.signals_24h) * 100) : 0}%</em> 在合谋判断处被丢弃 — 这是引擎不浪费 LLM 算力的关键阀门。
@@ -89,17 +89,17 @@ export function V5DashboardPage() {
       >
         <Funnel
           steps={[
-            { name: 'Scanner detected', count: d.signals_24h, scale: 1 },
-            { name: 'Conjunction passed', count: d.signals_passed_and, scale: d.signals_24h > 0 ? d.signals_passed_and / d.signals_24h : 0 },
-            { name: 'Position opened', count: d.signals_executed, scale: d.signals_24h > 0 ? d.signals_executed / d.signals_24h : 0 },
+            { name: '扫描检测', count: d.signals_24h, scale: 1 },
+            { name: '合谋通过', count: d.signals_passed_and, scale: d.signals_24h > 0 ? d.signals_passed_and / d.signals_24h : 0 },
+            { name: '实际开仓', count: d.signals_executed, scale: d.signals_24h > 0 ? d.signals_executed / d.signals_24h : 0 },
           ]}
-          onLayerClick={(name) => navigate(name === 'Position opened' ? '/v5/history?block_reason=EXECUTED' : '/v5/history')}
+          onLayerClick={(name) => navigate(name === '实际开仓' ? '/v5/history?block_reason=EXECUTED' : '/v5/history')}
         />
       </Section>
 
       <Section
         title="PnL Trajectory"
-        meta="cumulative · 24h"
+        meta="累计 · 24h"
         marginalia={
           pnlSeries.length === 0
             ? <>当前 24h 内无平仓 — 一切静止,等待信号。</>
@@ -115,7 +115,7 @@ export function V5DashboardPage() {
 
       <Section
         title={`Outcome Breakdown · 24h (n=${closed.length})`}
-        meta="by side / strategy / exit"
+        meta="按方向 / 策略 / 平仓"
         marginalia={
           closed.length > 0 && stratStats.auto && stratStats.manual && stratStats.auto.win_rate < stratStats.manual.win_rate
             ? <>自动比手动低 <em>{Math.round((stratStats.manual.win_rate - stratStats.auto.win_rate) * 100)}pt</em>。AI 卫门在做功 — 但还是手动入场的更耐看。</>
@@ -144,28 +144,28 @@ export function V5DashboardPage() {
               </BdGroup>
             </div>
             <div>
-              <BdGroup label="Aggregate">
-                <Stat label="Sample">
+              <BdGroup label="总览">
+                <Stat label="样本">
                   <span className="text-sage">{overall.wins}W</span>
                   <span className="text-ivory-40 mx-1.5">/</span>
                   <span className="text-oxblood">{overall.losses}L</span>
                   <span className="text-ivory-40 text-[0.78rem] ml-2">{Math.round(overall.win_rate * 100)}% across all setups</span>
                 </Stat>
-                <Stat label={<><Term k="Profit Factor">Profit Factor</Term></>}>
+                <Stat label={<><Term k="盈亏比">盈亏比</Term></>}>
                   {pf === null ? '∞' : pf.toFixed(2)}
                   <span className="text-ivory-40 text-[0.78rem] ml-2">gross win / gross loss</span>
                 </Stat>
-                <Stat label="Best trade">
+                <Stat label="最佳交易">
                   {bw.best && (bw.best.pnl_pct ?? 0) > 0
                     ? <span className="text-sage">{bw.best.symbol} <span className="text-[0.85rem]">+{(bw.best.pnl_pct ?? 0).toFixed(2)}%</span></span>
                     : <span className="text-ivory-40">—</span>}
                 </Stat>
-                <Stat label="Worst trade">
+                <Stat label="最差交易">
                   {bw.worst && (bw.worst.pnl_pct ?? 0) < 0
                     ? <span className="text-oxblood">{bw.worst.symbol} <span className="text-[0.85rem]">{(bw.worst.pnl_pct ?? 0).toFixed(2)}%</span></span>
                     : <span className="text-ivory-40">—</span>}
                 </Stat>
-                <Stat label="Streak · cur / max">
+                <Stat label="连续胜负 · 当前 / 最大">
                   <span className="text-sage">{sk.maxWin}W</span>
                   <span className="text-ivory-40 mx-1.5">/</span>
                   <span className="text-oxblood">{sk.maxLoss}L</span>
@@ -183,7 +183,7 @@ export function V5DashboardPage() {
 
       <Section
         title="Setup Type · 7d"
-        meta="funding dimension highlighted"
+        meta="funding 维度高亮"
         marginalia={<><em>funding_extreme_*</em> 是 V6 新接入的 alpha 维度 — 紫色 ✦ 标记,优先 watch。</>}
       >
         <SetupBreakdownTable />
@@ -191,7 +191,7 @@ export function V5DashboardPage() {
 
       <Section
         title="Block Reason Distribution"
-        meta="why scans didn't trade"
+        meta="扫描未触发原因"
         marginalia={<>每个拒绝都是省下来的 GPT 调用。理想情况下 <em>≥90%</em> 的扫描在 AI 之前已经被规则拒绝。</>}
       >
         <BlockRows reasons={d.signals_block_counts} />
@@ -215,17 +215,28 @@ function PageHead({ now }: { now: Date }) {
       <div className="flex items-center gap-4">
         <Aperture size={34} rotate className="text-brass" />
         <div>
-          <h1 className="font-display text-[2.6rem] leading-none tracking-tight">Dashboard</h1>
-          <p className="font-cn text-ivory-40 text-[0.85rem] mt-1.5">24 小时观测日志 · field journal</p>
+          <h1 className="font-display text-[2.6rem] leading-none tracking-tight">概览</h1>
+          <p className="font-cn text-ivory-40 text-[0.85rem] mt-1.5">24 小时观测日志</p>
         </div>
       </div>
       <div className="text-right font-mono text-[0.72rem] text-ivory-40 leading-relaxed">
-        <div className="tracking-wider2 uppercase">Observation Time</div>
+        <div className="tracking-wider2">观测时间</div>
         <div><strong className="text-ivory font-medium">{t}</strong> · UTC+8</div>
-        <div>auto refresh · <strong className="text-ivory font-medium">15s</strong></div>
+        <div>自动刷新 · <strong className="text-ivory font-medium">15s</strong></div>
       </div>
     </header>
   );
+}
+
+function nextCandleMinutes(now: Date): number {
+  const mins = now.getMinutes();
+  const nextBoundary = Math.ceil((mins + 1) / 15) * 15;
+  return nextBoundary - mins;
+}
+
+function NextCandleHint({ now, prefix = '下一根 15m K 线' }: { now: Date; prefix?: string }) {
+  const m = nextCandleMinutes(now);
+  return <>{prefix} <em className="not-italic text-brass">{m}</em> 分钟后</>;
 }
 
 function Section({ title, meta, marginalia, children }: { title: ReactNode; meta?: ReactNode; marginalia?: ReactNode; children: ReactNode }) {

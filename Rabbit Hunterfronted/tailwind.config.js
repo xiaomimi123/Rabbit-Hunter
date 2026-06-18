@@ -63,12 +63,11 @@ export default {
         },
       },
       fontFamily: {
-        display: ['"Instrument Serif"', '"Source Han Serif SC"', '"Noto Serif SC"', 'serif'],
-        body: ['"Source Serif 4"', '"Noto Serif SC"', 'serif'],
-        mono: ['"Fira Code"', 'ui-monospace', 'monospace'],
-        cn: ['"Noto Serif SC"', 'serif'],
-        // legacy alias for any unmigrated component
-        sans: ['"Source Serif 4"', '"Noto Serif SC"', 'serif'],
+        display: ['system-ui', '-apple-system', 'BlinkMacSystemFont', '"PingFang SC"', '"Helvetica Neue"', '"Microsoft YaHei"', '"Noto Sans SC"', 'sans-serif'],
+        body: ['system-ui', '-apple-system', 'BlinkMacSystemFont', '"PingFang SC"', '"Helvetica Neue"', '"Microsoft YaHei"', '"Noto Sans SC"', 'sans-serif'],
+        mono: ['"Fira Code"', '"JetBrains Mono"', 'ui-monospace', 'monospace'],
+        cn: ['"PingFang SC"', '"Microsoft YaHei"', '"Noto Sans SC"', 'system-ui', 'sans-serif'],
+        sans: ['system-ui', '-apple-system', '"PingFang SC"', '"Noto Sans SC"', 'sans-serif'],
       },
       letterSpacing: {
         wider2: '0.18em',

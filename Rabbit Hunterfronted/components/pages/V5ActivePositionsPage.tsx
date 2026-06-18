@@ -114,12 +114,12 @@ function PageHead({ now }: { now: Date }) {
       <div className="flex items-center gap-4">
         <Aperture size={34} rotate className="text-brass" />
         <div>
-          <h1 className="font-display text-[2.6rem] leading-none tracking-tight">Active Positions</h1>
+          <h1 className="font-display text-[2.6rem] leading-none tracking-tight">活仓监控</h1>
           <p className="font-cn text-ivory-40 text-[0.85rem] mt-1.5">实时持仓监控 · 5s 自动校准 · live</p>
         </div>
       </div>
       <div className="text-right font-mono text-[0.72rem] text-ivory-40 leading-relaxed">
-        <div className="tracking-wider2 uppercase">Observation Time</div>
+        <div className="tracking-wider2 uppercase">观测时间</div>
         <div><strong className="text-ivory font-medium">{t}</strong> · UTC+8</div>
         <div>next refresh · <strong className="text-ivory font-medium">5s</strong></div>
       </div>
@@ -133,12 +133,12 @@ function CounterStrip({ total, longCount, shortCount, unrealized, unrealizedPct,
 }) {
   return (
     <div className="flex items-center gap-8 px-6 py-4 border border-hairline bg-gradient-to-b from-bg-base to-bg-surface">
-      <Counter label="Occupied · slots">
+      <Counter label="已占用 · 槽位">
         <span className="font-mono text-[1.5rem] text-ivory tabular-nums">{total}</span>
         <span className="font-mono text-[0.95rem] text-ivory-40"> / {MAX_SLOTS}</span>
         <span className="font-mono text-[0.78rem] text-ivory-40 ml-1.5 tracking-wide">slots used</span>
       </Counter>
-      <Counter label="Distribution">
+      <Counter label="分布">
         <span className="inline-flex gap-1.5 items-center mr-3">
           {Array.from({ length: MAX_SLOTS }).map((_, i) => {
             let cls = 'bg-transparent';
@@ -150,7 +150,7 @@ function CounterStrip({ total, longCount, shortCount, unrealized, unrealizedPct,
         </span>
         <span className="font-mono text-[0.78rem] text-ivory-40">{longCount} long · {shortCount} short · {MAX_SLOTS - total} idle</span>
       </Counter>
-      <Counter label="Unrealized · net">
+      <Counter label="未实现 · 净">
         <span className={`font-mono text-[1.5rem] tabular-nums ${unrealized >= 0 ? 'text-sage' : 'text-oxblood'}`}>
           {unrealized >= 0 ? '+' : ''}{unrealized.toFixed(2)}
         </span>
@@ -158,7 +158,7 @@ function CounterStrip({ total, longCount, shortCount, unrealized, unrealizedPct,
           USDT ({unrealizedPct >= 0 ? '+' : ''}{unrealizedPct.toFixed(2)}%)
         </span>
       </Counter>
-      <Counter label="Hold · avg">
+      <Counter label="平均持仓">
         <span className="font-mono text-[1.5rem] text-ivory tabular-nums">{Math.round(avgHold)}</span>
         <span className="font-mono text-[0.78rem] text-ivory-40 ml-1.5">min</span>
       </Counter>

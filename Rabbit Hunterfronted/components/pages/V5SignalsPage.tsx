@@ -77,12 +77,12 @@ function PageHead({ now }: { now: Date }) {
       <div className="flex items-center gap-4">
         <Aperture size={34} rotate className="text-brass" />
         <div>
-          <h1 className="font-display text-[2.6rem] leading-none tracking-tight">Signals</h1>
+          <h1 className="font-display text-[2.6rem] leading-none tracking-tight">实时信号</h1>
           <p className="font-cn text-ivory-40 text-[0.85rem] mt-1.5">实时扫描流 · scanning at 10s cadence</p>
         </div>
       </div>
       <div className="text-right font-mono text-[0.72rem] text-ivory-40 leading-relaxed">
-        <div className="tracking-wider2 uppercase">Observation Time</div>
+        <div className="tracking-wider2 uppercase">观测时间</div>
         <div><strong className="text-ivory font-medium">{t}</strong> · UTC+8</div>
         <div>next scan · <strong className="text-ivory font-medium">10s</strong></div>
       </div>
@@ -102,10 +102,10 @@ function FilterStrip({ side, onSideChange, executedOnly, onExecutedOnlyChange, s
 }) {
   return (
     <div className="flex flex-wrap items-center gap-x-8 gap-y-3 px-6 py-4 border border-hairline bg-gradient-to-b from-bg-base to-bg-surface">
-      <FilterCell label="Side">
+      <FilterCell label="方向">
         <SidePicker value={side} onChange={onSideChange} />
       </FilterCell>
-      <FilterCell label="Executed">
+      <FilterCell label="已开仓">
         <label className="inline-flex items-center gap-2 font-mono text-[0.78rem] text-ivory-70 cursor-pointer select-none">
           <input
             type="checkbox"
@@ -116,7 +116,7 @@ function FilterStrip({ side, onSideChange, executedOnly, onExecutedOnlyChange, s
           仅已入场
         </label>
       </FilterCell>
-      <FilterCell label="Funnel · current window">
+      <FilterCell label="漏斗 · 当前窗口">
         <span className="font-mono text-[0.85rem] text-ivory-70 tabular-nums">
           {scanned} 扫到
           <span className="text-ivory-40 mx-2">→</span>
@@ -248,7 +248,7 @@ function SignalRow({ signal, isOpen, onToggle, onChart, onManual }: {
             </div>
           )}
           <div className="flex gap-3 pt-2 border-t border-hairline">
-            <ActionBtn onClick={onChart} glyph="⊕" label="View Chart" />
+            <ActionBtn onClick={onChart} glyph="⊕" label="查看图表" />
             <ActionBtn onClick={onManual} glyph="▶" label="此参数模拟开单" tone="brass" />
           </div>
         </div>
@@ -257,7 +257,7 @@ function SignalRow({ signal, isOpen, onToggle, onChart, onManual }: {
   );
 }
 
-function ActionBtn({ onClick, glyph, label, tone = 'neutral' }: { onClick: () => void; glyph: string; label: string; tone?: 'neutral' | 'brass' }) {
+function ActionBtn({ onClick, glyph, label, tone = '中性' }: { onClick: () => void; glyph: string; label: string; tone?: '中性' | 'brass' }) {
   const cls = tone === 'brass'
     ? 'border-brass-soft text-brass hover:border-brass hover:bg-brass-soft'
     : 'border-hairline-strong text-ivory-70 hover:border-brass hover:text-brass';

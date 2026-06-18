@@ -42,13 +42,13 @@ export function V5SignalHistoryPage() {
         <table className="w-full text-[0.78rem] border-collapse">
           <thead>
             <tr>
-              <Th>time</Th>
-              <Th>symbol</Th>
-              <Th>side</Th>
+              <Th>时间</Th>
+              <Th>币种</Th>
+              <Th>方向</Th>
               <Th align="right">ΔP15m</Th>
               <Th align="right">RSI</Th>
               <Th align="right">MACD hist</Th>
-              <Th>result</Th>
+              <Th>结果</Th>
             </tr>
           </thead>
           <tbody>
@@ -67,12 +67,12 @@ function PageHead({ now, count }: { now: Date; count: number }) {
       <div className="flex items-center gap-4">
         <Aperture size={34} rotate className="text-brass" />
         <div>
-          <h1 className="font-display text-[2.6rem] leading-none tracking-tight">Signal History</h1>
+          <h1 className="font-display text-[2.6rem] leading-none tracking-tight">信号历史</h1>
           <p className="font-cn text-ivory-40 text-[0.85rem] mt-1.5">扫描历史 · {count} 条记录</p>
         </div>
       </div>
       <div className="text-right font-mono text-[0.72rem] text-ivory-40 leading-relaxed">
-        <div className="tracking-wider2 uppercase">Observation Time</div>
+        <div className="tracking-wider2 uppercase">观测时间</div>
         <div><strong className="text-ivory font-medium">{t}</strong> · UTC+8</div>
       </div>
     </header>
@@ -83,7 +83,7 @@ function FilterRow({ block, onBlockChange }: { block: string; onBlockChange: (b:
   return (
     <div className="flex flex-wrap items-center gap-x-6 gap-y-3 px-6 py-4 border border-hairline bg-gradient-to-b from-bg-base to-bg-surface">
       <div className="flex flex-col gap-1">
-        <div className="font-mono text-[0.62rem] tracking-wider3 text-ivory-40 uppercase">Result Filter</div>
+        <div className="font-mono text-[0.62rem] tracking-wider3 text-ivory-40 uppercase">结果筛选</div>
         <div className="inline-flex flex-wrap border border-hairline-strong">
           {BLOCK_OPTIONS.map(o => (
             <button

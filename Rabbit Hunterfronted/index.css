@@ -9,7 +9,7 @@
 html, body {
   background-color: #0F1115;
   color: #F1ECDD;
-  font-family: "Source Serif 4", "Noto Serif SC", serif;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", "Microsoft YaHei", "Noto Sans SC", sans-serif;
   font-feature-settings: "tnum" on, "lnum" on;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;

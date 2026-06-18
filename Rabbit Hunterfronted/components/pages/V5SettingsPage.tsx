@@ -20,7 +20,7 @@ export function V5SettingsPage() {
       <PageHead mode={s.system_mode} />
 
       <SettingsSection title="交易所" meta="exchange">
-        <Field label="Current">
+        <Field label="当前">
           <span className="inline-block font-mono text-[0.8rem] tracking-wider2 px-2.5 py-0.5 border border-ink text-ink bg-ink-soft uppercase">
             {s.exchange}
           </span>
@@ -165,12 +165,12 @@ function PageHead({ mode }: { mode: string }) {
       <div className="flex items-center gap-4">
         <Aperture size={34} rotate className="text-brass" />
         <div>
-          <h1 className="font-display text-[2.6rem] leading-none tracking-tight">Settings</h1>
+          <h1 className="font-display text-[2.6rem] leading-none tracking-tight">系统设置</h1>
           <p className="font-cn text-ivory-40 text-[0.85rem] mt-1.5">系统配置 · field calibration</p>
         </div>
       </div>
       <div className="text-right font-mono text-[0.72rem] text-ivory-40 leading-relaxed">
-        <div className="tracking-wider2 uppercase">Current Mode</div>
+        <div className="tracking-wider2 uppercase">当前模式</div>
         <div className={`font-mono text-[1.4rem] tabular-nums ${mode === 'LIVE' ? 'text-alarm' : 'text-brass'}`}>
           {mode}
         </div>

@@ -45,7 +45,7 @@ export function V5AIStatusPage() {
 
       {/* Triplet */}
       <section className="grid grid-cols-3 max-[1100px]:grid-cols-1 gap-px bg-hairline border border-hairline">
-        <Triplet label="Provider" status={healthy ? 'online' : 'offline'}>
+        <Triplet label="模型" status={healthy ? '在线' : '离线'}>
           <div className="font-display text-[2.6rem] leading-none tracking-tight">
             {provider.toLowerCase()}<span className="text-brass">·</span>{(s?.chat_model ?? 'chat').replace(/^[^-]+-/, '')}
           </div>
@@ -67,7 +67,7 @@ export function V5AIStatusPage() {
           </div>
         </Triplet>
 
-        <Triplet label="RAG Memory" status="indexed" tone="brass">
+        <Triplet label="RAG 记忆" status="已索引" tone="brass">
           <div className="font-display text-[2.6rem] leading-none tracking-tight">
             {s?.rag_cases_in_db ?? 0}
             <span className="font-mono text-ivory-40 text-[1.2rem] ml-2"> cases</span>
@@ -87,7 +87,7 @@ export function V5AIStatusPage() {
           </div>
         </Triplet>
 
-        <Triplet label="Decisions · 24h" status={healthy ? 'healthy' : 'silent'}>
+        <Triplet label="24h 决策数" status={healthy ? '健康' : '静默'}>
           <div className="font-display text-[2.6rem] leading-none tracking-tight">
             {s?.decisions_24h ?? 0}
           </div>
@@ -112,22 +112,22 @@ export function V5AIStatusPage() {
         </div>
       )}
 
-      <Section title="Decision Stream" meta={`last ${decisions.length} events · live`}>
+      <Section title="决策流" meta={`last ${decisions.length} events · live`}>
         {dec.isLoading ? (
           <LoadingSkeleton message="拉取决策流中…" />
         ) : decisions.length === 0 ? (
-          <EmptyState message="awaiting next decision…" />
+          <EmptyState message="等待下一条决策…" />
         ) : (
           <table className="w-full text-[0.78rem] border-collapse">
             <thead>
               <tr>
-                <Th>time</Th>
-                <Th>symbol</Th>
-                <Th>verdict</Th>
-                <Th align="right">conf</Th>
-                <Th align="right">top·dist</Th>
+                <Th>时间</Th>
+                <Th>币种</Th>
+                <Th>结果</Th>
+                <Th align="right">置信</Th>
+                <Th align="right">顶 1 距</Th>
                 <Th align="right">RAG</Th>
-                <Th>reasoning</Th>
+                <Th>分析</Th>
               </tr>
             </thead>
             <tbody>
@@ -158,11 +158,11 @@ export function V5AIStatusPage() {
         )}
       </Section>
 
-      <Section title="Confidence Calibration" meta="predicted vs actual · 30d">
+      <Section title="置信度校准" meta="预测对比实际 · 30d">
         <CalibrationTable />
       </Section>
 
-      <Section title="Funding Rate Map · top 20" meta="|z| ≥ 2.0 = extreme · sorted by |z| ↓">
+      <Section title="Funding 拥挤度 · top 20" meta="|z| ≥ 2.0 为极端 · 按 |z| 降序">
         <FundingHeatmap />
       </Section>
     </div>
@@ -178,12 +178,12 @@ function PageHead({ now, latencyMs }: { now: Date; latencyMs: number | null }) {
       <div className="flex items-center gap-4">
         <Aperture size={34} rotate className="text-brass" />
         <div>
-          <h1 className="font-display text-[2.6rem] leading-none tracking-tight">AI Status</h1>
+          <h1 className="font-display text-[2.6rem] leading-none tracking-tight">AI 状态</h1>
           <p className="font-cn text-ivory-40 text-[0.85rem] mt-1.5">决策头脑 · 校准 · 拥挤侦测</p>
         </div>
       </div>
       <div className="text-right font-mono text-[0.72rem] text-ivory-40 leading-relaxed">
-        <div className="tracking-wider2 uppercase">last heartbeat</div>
+        <div className="tracking-wider2 uppercase">上次心跳</div>
         <div><strong className="text-ivory font-medium">{t}</strong></div>
         <div>latency · <strong className="text-ivory font-medium">{latencyMs ?? '—'}{latencyMs != null && 'ms'}</strong></div>
       </div>
@@ -259,7 +259,7 @@ function VerdictBadge({ execute }: { execute: boolean }) {
     : 'text-oxblood border-oxblood bg-oxblood-soft';
   return (
     <span className={`inline-block px-2 py-0.5 border font-mono text-[0.66rem] tracking-wider2 uppercase ${cls}`}>
-      {execute ? 'execute' : 'reject'}
+      {execute ? '通过' : '拒绝'}
     </span>
   );
 }
@@ -267,18 +267,18 @@ function VerdictBadge({ execute }: { execute: boolean }) {
 function CalibrationTable() {
   const q = useV5Calibration();
   const points = q.data?.data ?? [];
-  if (points.length === 0) return <EmptyState message="awaiting first 10 reflections per bucket…" />;
+  if (points.length === 0) return <EmptyState message="等待每桶至少 10 条 reflection…" />;
 
   return (
     <table className="w-full text-[0.78rem] border-collapse">
       <thead>
         <tr>
-          <Th>model · bucket</Th>
+          <Th>模型 · 区间</Th>
           <Th align="right">n</Th>
-          <Th align="right">predicted</Th>
-          <Th align="right">actual</Th>
-          <Th align="right">drift</Th>
-          <Th align="right">multiplier</Th>
+          <Th align="right">预测</Th>
+          <Th align="right">实际</Th>
+          <Th align="right">偏差</Th>
+          <Th align="right">校准倍数</Th>
         </tr>
       </thead>
       <tbody>
@@ -311,7 +311,7 @@ function CalibrationTable() {
 function FundingHeatmap() {
   const q = useV5FundingStatus();
   const rows = q.data?.data ?? [];
-  if (rows.length === 0) return <EmptyState message="awaiting funding cache refresh…" />;
+  if (rows.length === 0) return <EmptyState message="等待 funding 缓存刷新…" />;
 
   // sort by |z| desc (the preview shows extremes at top)
   const sorted = rows.slice().sort((a, b) => Math.abs(b.zscore_30d ?? 0) - Math.abs(a.zscore_30d ?? 0));
@@ -330,8 +330,8 @@ function FundingHeatmap() {
           ? 'LONGS✦CROWDED'
           : r.extreme_direction === 'short_crowded'
           ? 'SHORTS✦CROWDED'
-          : absZ >= 1 ? (z > 0 ? 'elevated long' : 'elevated short')
-          : 'neutral';
+          : absZ >= 1 ? (z > 0 ? '多头偏强' : '空头偏强')
+          : '中性';
         const labelCls = r.extreme_direction === 'long_crowded'
           ? 'text-oxblood'
           : r.extreme_direction === 'short_crowded'

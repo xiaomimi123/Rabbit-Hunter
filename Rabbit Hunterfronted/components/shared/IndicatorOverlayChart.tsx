@@ -138,12 +138,12 @@ export function IndicatorOverlayChart({ klines, events, interval, onIntervalChan
     candle.setData(klineToSeriesData(klines));
 
     const sideToShape = (e: SymbolEvent) => {
-      if (e.event_type === 'entry') return e.side === 'SHORT' ? 'arrowDown' : 'arrowUp';
-      if (e.event_type === 'exit') return 'circle';
+      if (e.event_type === '入场') return e.side === 'SHORT' ? 'arrowDown' : 'arrowUp';
+      if (e.event_type === '出场') return 'circle';
       return 'square';
     };
     const sideToColor = (e: SymbolEvent) => {
-      if (e.event_type === 'exit') {
+      if (e.event_type === '出场') {
         if (e.exit_reason === 'TP_HIT') return '#6B8568';
         if (e.exit_reason === 'SL_HIT') return '#A53E32';
         return '#C9A14B';
@@ -152,12 +152,12 @@ export function IndicatorOverlayChart({ klines, events, interval, onIntervalChan
     };
     const markers = events.map(e => ({
       time: Math.floor(new Date(e.timestamp).getTime() / 1000) as any,
-      position: e.event_type === 'entry'
+      position: e.event_type === '入场'
         ? (e.side === 'SHORT' ? 'aboveBar' : 'belowBar')
         : 'inBar',
       color: sideToColor(e),
       shape: sideToShape(e) as any,
-      text: e.event_type === 'entry' ? `${e.side} ${e.price.toFixed(4)}` : (e.exit_reason || 'exit'),
+      text: e.event_type === '入场' ? `${e.side} ${e.price.toFixed(4)}` : (e.exit_reason || '出场'),
     }));
     candle.setMarkers(markers as any);
 

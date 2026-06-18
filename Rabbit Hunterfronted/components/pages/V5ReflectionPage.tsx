@@ -43,12 +43,12 @@ function PageHead({ now }: { now: Date }) {
       <div className="flex items-center gap-4">
         <Aperture size={34} rotate className="text-brass" />
         <div>
-          <h1 className="font-display text-[2.6rem] leading-none tracking-tight">Reflection</h1>
+          <h1 className="font-display text-[2.6rem] leading-none tracking-tight">复盘</h1>
           <p className="font-cn text-ivory-40 text-[0.85rem] mt-1.5">复盘工作台 · field debrief</p>
         </div>
       </div>
       <div className="text-right font-mono text-[0.72rem] text-ivory-40 leading-relaxed">
-        <div className="tracking-wider2 uppercase">Observation Time</div>
+        <div className="tracking-wider2 uppercase">观测时间</div>
         <div><strong className="text-ivory font-medium">{t}</strong> · UTC+8</div>
       </div>
     </header>
@@ -259,7 +259,7 @@ function SizingCard({ r, onDecide }: { r: any; onDecide: (args: any) => void }) 
 
       <div className="grid grid-cols-3 max-[640px]:grid-cols-1 gap-px bg-hairline border border-hairline">
         <div className="bg-bg-base p-3.5">
-          <div className="font-mono text-[0.62rem] tracking-wider3 text-ivory-40 uppercase mb-1.5">Current</div>
+          <div className="font-mono text-[0.62rem] tracking-wider3 text-ivory-40 uppercase mb-1.5">当前</div>
           <div className="font-mono text-[1.5rem] text-ivory tabular-nums">{r.current_size_multiplier.toFixed(3)}</div>
         </div>
         <div className="bg-bg-base p-3.5">
@@ -281,7 +281,7 @@ function SizingCard({ r, onDecide }: { r: any; onDecide: (args: any) => void }) 
 
       <div className="flex items-center gap-3 pt-3 border-t border-hairline flex-wrap">
         <SizingBtn variant="approve" onClick={() => onDecide({ id: r.id, decision: 'approve' })}>批准 ✓</SizingBtn>
-        <SizingBtn variant="reject" onClick={() => onDecide({ id: r.id, decision: 'reject' })}>拒绝 ✗</SizingBtn>
+        <SizingBtn variant="拒绝" onClick={() => onDecide({ id: r.id, decision: '拒绝' })}>拒绝 ✗</SizingBtn>
         <div className="flex items-center gap-2 ml-auto">
           <input
             type="number"
@@ -304,7 +304,7 @@ function SizingCard({ r, onDecide }: { r: any; onDecide: (args: any) => void }) 
   );
 }
 
-function SizingBtn({ variant, onClick, children, disabled }: { variant: 'approve' | 'reject' | 'modify'; onClick: () => void; children: ReactNode; disabled?: boolean }) {
+function SizingBtn({ variant, onClick, children, disabled }: { variant: 'approve' | '拒绝' | 'modify'; onClick: () => void; children: ReactNode; disabled?: boolean }) {
   const cls = {
     approve: 'border-sage text-sage bg-sage-soft hover:bg-sage hover:text-bg-base',
     reject:  'border-oxblood text-oxblood bg-oxblood-soft hover:bg-oxblood hover:text-ivory',

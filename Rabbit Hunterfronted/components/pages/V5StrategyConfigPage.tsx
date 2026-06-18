@@ -81,12 +81,12 @@ function PageHead({ dirtyCount }: { dirtyCount: number }) {
       <div className="flex items-center gap-4">
         <Aperture size={34} rotate className="text-brass" />
         <div>
-          <h1 className="font-display text-[2.6rem] leading-none tracking-tight">Strategy Config</h1>
+          <h1 className="font-display text-[2.6rem] leading-none tracking-tight">策略配置</h1>
           <p className="font-cn text-ivory-40 text-[0.85rem] mt-1.5">参数调校 · field calibration</p>
         </div>
       </div>
       <div className="text-right font-mono text-[0.72rem] text-ivory-40 leading-relaxed">
-        <div className="tracking-wider2 uppercase">Dirty Changes</div>
+        <div className="tracking-wider2 uppercase">待保存修改</div>
         <div className={`font-mono text-[1.4rem] tabular-nums ${dirtyCount > 0 ? 'text-brass' : 'text-ivory-40'}`}>
           {dirtyCount}
         </div>
@@ -105,7 +105,7 @@ function ActionBar({ dirty, onUndo, onPreview, previewBusy, onSave, saveBusy }: 
 }) {
   return (
     <div className="flex items-center gap-3 py-3 px-4 border border-hairline bg-bg-base">
-      <ActionBtn variant="neutral" onClick={onUndo} disabled={!dirty}>撤销修改</ActionBtn>
+      <ActionBtn variant="中性" onClick={onUndo} disabled={!dirty}>撤销修改</ActionBtn>
       <ActionBtn variant="info" onClick={onPreview} disabled={!dirty || previewBusy}>
         {previewBusy ? '预测中…' : '预览效果'}
       </ActionBtn>
@@ -116,7 +116,7 @@ function ActionBar({ dirty, onUndo, onPreview, previewBusy, onSave, saveBusy }: 
   );
 }
 
-function ActionBtn({ variant, onClick, disabled, children }: { variant: 'neutral' | 'info' | 'primary'; onClick: () => void; disabled?: boolean; children: React.ReactNode }) {
+function ActionBtn({ variant, onClick, disabled, children }: { variant: '中性' | 'info' | 'primary'; onClick: () => void; disabled?: boolean; children: React.ReactNode }) {
   const cls = {
     neutral: 'border-hairline-strong text-ivory-70 hover:border-ivory hover:text-ivory',
     info:    'border-ink text-ink bg-ink-soft hover:bg-ink hover:text-ivory',

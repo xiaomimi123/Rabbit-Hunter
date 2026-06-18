@@ -17,8 +17,8 @@ export function V5ManualOrderPage() {
   const { preview, execute } = useV5ManualOrder();
 
   const [step, setStep] = useState<Step>(1);
-  const [symbol, setSymbol] = useState(params.get('symbol') ?? 'BTC/USDT');
-  const [side, setSide] = useState<Side>((params.get('side') as Side) || 'SHORT');
+  const [symbol, setSymbol] = useState(params.get('币种') ?? 'BTC/USDT');
+  const [side, setSide] = useState<Side>((params.get('方向') as Side) || 'SHORT');
   const [size, setSize] = useState(15);
   const [previewData, setPreviewData] = useState<ManualOrderPreviewResponse | null>(null);
   const [slMult, setSlMult] = useState(1);
@@ -94,7 +94,7 @@ function PageHead({ step }: { step: Step }) {
       <div className="flex items-center gap-4">
         <Aperture size={34} rotate className="text-brass" />
         <div>
-          <h1 className="font-display text-[2.6rem] leading-none tracking-tight">Manual Order</h1>
+          <h1 className="font-display text-[2.6rem] leading-none tracking-tight">手动开单</h1>
           <p className="font-cn text-ivory-40 text-[0.85rem] mt-1.5">手动开单 · paper-trade · Step {step}/3</p>
         </div>
       </div>
@@ -158,7 +158,7 @@ function Step1({ symbol, onSymbolChange, side, onSideChange, size, onSizeChange,
             className="w-full font-mono text-[0.95rem] bg-bg-base border border-hairline-strong px-3 py-2 text-ivory focus:border-brass focus:outline-none"
           />
         </Field>
-        <Field label="Side">
+        <Field label="方向">
           <div className="inline-flex border border-hairline-strong">
             {(['LONG', 'SHORT'] as Side[]).map(opt => (
               <button
@@ -219,7 +219,7 @@ function Step2({ data, slMult, setSlMult, tpMult, setTpMult, sizeMult, setSizeMu
         </header>
 
         <div className="grid grid-cols-3 max-[1100px]:grid-cols-1 gap-px bg-hairline border border-hairline">
-          <SubCard title="Indicators">
+          <SubCard title="指标">
             <IndicatorGauges
               rsi_15m={data.indicators.rsi_15m}
               rsi_4h={data.indicators.rsi_4h ?? null}
@@ -229,7 +229,7 @@ function Step2({ data, slMult, setSlMult, tpMult, setTpMult, sizeMult, setSizeMu
             />
           </SubCard>
 
-          <SubCard title="Rule Decision">
+          <SubCard title="规则决策">
             <div className="flex flex-col gap-2 font-mono text-[0.85rem]">
               <div>
                 {data.decision.should_trade
@@ -246,7 +246,7 @@ function Step2({ data, slMult, setSlMult, tpMult, setTpMult, sizeMult, setSizeMu
             </div>
           </SubCard>
 
-          <SubCard title="AI Review">
+          <SubCard title="AI 二审">
             <div className="flex flex-col gap-3">
               <div>
                 {data.ai_result.execute

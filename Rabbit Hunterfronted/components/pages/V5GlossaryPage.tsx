@@ -17,7 +17,7 @@ export function V5GlossaryPage() {
         <div className="flex items-center gap-4">
           <Aperture size={34} rotate className="text-brass" />
           <div>
-            <h1 className="font-display text-[2.6rem] leading-none tracking-tight">Glossary</h1>
+            <h1 className="font-display text-[2.6rem] leading-none tracking-tight">术语词典</h1>
             <p className="font-cn text-ivory-40 text-[0.85rem] mt-1.5">术语词典 · field manual</p>
           </div>
         </div>
