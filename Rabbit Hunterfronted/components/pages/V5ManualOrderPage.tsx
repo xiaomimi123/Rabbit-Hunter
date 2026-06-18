@@ -17,8 +17,8 @@ export function V5ManualOrderPage() {
   const { preview, execute } = useV5ManualOrder();
 
   const [step, setStep] = useState<Step>(1);
-  const [symbol, setSymbol] = useState(params.get('币种') ?? 'BTC/USDT');
-  const [side, setSide] = useState<Side>((params.get('方向') as Side) || 'SHORT');
+  const [symbol, setSymbol] = useState(params.get('symbol') ?? 'BTC/USDT');
+  const [side, setSide] = useState<Side>((params.get('side') as Side) || 'SHORT');
   const [size, setSize] = useState(15);
   const [previewData, setPreviewData] = useState<ManualOrderPreviewResponse | null>(null);
   const [slMult, setSlMult] = useState(1);
