@@ -18,7 +18,10 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Dict, Iterator, List, Optional
 
-from scripts.backtest.kline_fetcher import fetch_klines_with_cache
+from scripts.backtest.kline_fetcher import (
+    OKXInstrumentNotFound,
+    fetch_klines_with_cache,
+)
 from scripts.backtest.position_sim import simulate_exit
 from scripts.backtest.schemas import BacktestEntry
 from scripts.ai.funding_rate_calculator import compute_zscore_as_of
@@ -78,21 +81,36 @@ class BacktestRunner:
     # ── data loading ────────────────────────────────────────────────────────
 
     def load(self) -> None:
-        """Fetch 15m + 4h klines for every symbol in the config."""
+        """Fetch 15m + 4h klines for every symbol in the config.
+
+        Symbols missing from OKX (e.g. delisted, renamed) are logged and skipped
+        — their entry in self._kl15 / _kl4h becomes empty list so downstream
+        timestamp iteration just produces no signals for them.
+        """
+        skipped: List[str] = []
         for sym in self.cfg.symbols:
-            self._kl15[sym] = fetch_klines_with_cache(
-                self.cfg.cache_root, sym, "15m",
-                self.cfg.start_iso, self.cfg.end_iso,
-            )
-            self._kl4h[sym] = fetch_klines_with_cache(
-                self.cfg.cache_root, sym, "4h",
-                self.cfg.start_iso, self.cfg.end_iso,
-            )
+            try:
+                self._kl15[sym] = fetch_klines_with_cache(
+                    self.cfg.cache_root, sym, "15m",
+                    self.cfg.start_iso, self.cfg.end_iso,
+                )
+                self._kl4h[sym] = fetch_klines_with_cache(
+                    self.cfg.cache_root, sym, "4h",
+                    self.cfg.start_iso, self.cfg.end_iso,
+                )
+            except OKXInstrumentNotFound as e:
+                log.warning("skip %s: %s", sym, e)
+                skipped.append(sym)
+                self._kl15[sym] = []
+                self._kl4h[sym] = []
+                continue
             if not self.cfg.quiet:
                 log.info(
                     "loaded %s: 15m=%d 4h=%d",
                     sym, len(self._kl15[sym]), len(self._kl4h[sym]),
                 )
+        if skipped and not self.cfg.quiet:
+            print(f"  ! skipped {len(skipped)} symbols not on OKX: {', '.join(skipped)}")
 
     # ── timestamp iteration ─────────────────────────────────────────────────
 

@@ -4,19 +4,45 @@ Pulls 15m / 4h klines from OKX `/api/v5/market/history-candles`, paginated
 in 300-bar chunks. Caches per (symbol, interval, from_iso, to_iso) so that
 repeat backtest runs over the same window hit local disk, not the API.
 
-Reuses `symbol_to_okx_instid` from funding_okx_client to stay consistent
-with V6 collector conventions.
+Reuses `symbol_to_okx_instid` from funding_okx_client. Docker Desktop on macOS
+hits intermittent SSL EOF against www.okx.com — manual retry loop handles it.
 """
 from __future__ import annotations
 
 import json
+import socket
+import ssl
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
+from urllib.error import URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from scripts.funding_okx_client import symbol_to_okx_instid
+
+
+_MAX_RETRIES = 5
+_BACKOFFS = (0.5, 1.0, 2.0, 4.0, 8.0)
+
+
+def _http_get_json_with_retry(url: str, *, timeout: int = 20) -> dict:
+    """GET URL, return JSON. Retries on SSL EOF / timeout / URLError."""
+    last_exc: Optional[Exception] = None
+    for attempt in range(_MAX_RETRIES):
+        try:
+            req = Request(url, headers={"User-Agent": "rabbit-hunter-backtest/0.1"})
+            with urlopen(req, timeout=timeout) as resp:
+                return json.loads(resp.read())
+        except (URLError, ssl.SSLError, socket.timeout, TimeoutError) as e:
+            last_exc = e
+            time.sleep(_BACKOFFS[attempt])
+            continue
+        except Exception as e:
+            last_exc = e
+            break
+    raise RuntimeError(f"OKX GET failed after {_MAX_RETRIES} retries: {last_exc}") from last_exc
 
 
 OKX_HOST = "https://www.okx.com"
@@ -75,12 +101,19 @@ def save_klines_to_cache(root: str, symbol: str, interval: str,
     p.write_text(json.dumps(payload))
 
 
+class OKXInstrumentNotFound(Exception):
+    """Raised when OKX returns code=51001 (instrument doesn't exist)."""
+
+
 def _fetch_okx_history(symbol: str, interval: str,
                         from_ms: int, to_ms: int) -> List[List[float]]:
     """Fetch klines from OKX `history-candles` paginated. Returns ascending by ts.
 
     The OKX history endpoint returns DESCENDING. Paginate via `after=<oldest ts>`
     to walk backwards from `to_ms` until <= `from_ms`.
+
+    Raises OKXInstrumentNotFound when the symbol has no OKX swap contract
+    (caller can decide to skip the symbol).
     """
     inst_id = symbol_to_okx_instid(symbol)
     bar = _interval_to_okx_bar(interval)
@@ -89,9 +122,9 @@ def _fetch_okx_history(symbol: str, interval: str,
     while cursor > from_ms:
         params = {"instId": inst_id, "bar": bar, "after": str(cursor), "limit": str(PAGE_SIZE)}
         url = f"{OKX_HOST}/api/v5/market/history-candles?{urlencode(params)}"
-        req = Request(url, headers={"User-Agent": "rabbit-hunter-backtest/0.1"})
-        with urlopen(req, timeout=15) as resp:
-            payload = json.loads(resp.read())
+        payload = _http_get_json_with_retry(url, timeout=20)
+        if payload.get("code") == "51001":
+            raise OKXInstrumentNotFound(f"{symbol} ({inst_id}) not found on OKX")
         if payload.get("code") != "0":
             raise RuntimeError(f"OKX error: {payload}")
         rows = payload.get("data", [])
