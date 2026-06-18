@@ -88,11 +88,20 @@ def test_custom_thresholds_from_env(monkeypatch):
 # ── Funding anti-pile filter (trend_aligned mode) ─────────────────────────
 
 
+def _setup_trend_aligned_env(monkeypatch):
+    """Force trend_aligned mode AND a known LONG/SHORT threshold so tests are
+    isolated from DB / cache state (CI or prod DB may have non-default values)."""
+    monkeypatch.setenv("V5_STRATEGY_MODE", "trend_aligned")
+    monkeypatch.setenv("V5_TREND_RSI_LONG_THRESHOLD", "40.0")
+    monkeypatch.setenv("V5_TREND_RSI_SHORT_THRESHOLD", "60.0")
+    from scripts.v5_params import _CACHE
+    _CACHE.clear()   # nuke any stale DB-derived values
+
+
 def test_funding_anti_pile_blocks_long_when_longs_crowded(monkeypatch):
     """trend_aligned + LONG signal + funding_z >= threshold → blocked."""
-    monkeypatch.setenv("V5_STRATEGY_MODE", "trend_aligned")
+    _setup_trend_aligned_env(monkeypatch)
     monkeypatch.setenv("V5_FUNDING_ANTI_PILE_THRESHOLD", "1.5")
-    # rsi 35 < 40 (long threshold), macd_hist_4h > 0 → long_ok True
     ind = _indicators(rsi_15m=35.0, hist_4h=0.001)
     d = decide(_enriched(), ind, funding_z=2.0)
     assert d.should_trade is False
@@ -100,10 +109,8 @@ def test_funding_anti_pile_blocks_long_when_longs_crowded(monkeypatch):
 
 
 def test_funding_anti_pile_blocks_short_when_shorts_crowded(monkeypatch):
-    """trend_aligned + SHORT signal + funding_z <= -threshold → blocked."""
-    monkeypatch.setenv("V5_STRATEGY_MODE", "trend_aligned")
+    _setup_trend_aligned_env(monkeypatch)
     monkeypatch.setenv("V5_FUNDING_ANTI_PILE_THRESHOLD", "1.5")
-    # rsi 65 > 60 (short threshold), macd_hist_4h < 0 → short_ok True
     ind = _indicators(rsi_15m=65.0, hist_4h=-0.001)
     d = decide(_enriched(), ind, funding_z=-2.0)
     assert d.should_trade is False
@@ -111,19 +118,16 @@ def test_funding_anti_pile_blocks_short_when_shorts_crowded(monkeypatch):
 
 
 def test_funding_anti_pile_allows_when_threshold_zero(monkeypatch):
-    """Default v5_funding_anti_pile_threshold=0 means filter is off."""
-    monkeypatch.setenv("V5_STRATEGY_MODE", "trend_aligned")
+    _setup_trend_aligned_env(monkeypatch)
     monkeypatch.delenv("V5_FUNDING_ANTI_PILE_THRESHOLD", raising=False)
     ind = _indicators(rsi_15m=35.0, hist_4h=0.001)
-    # Extreme funding but filter is off
     d = decide(_enriched(), ind, funding_z=5.0)
     assert d.should_trade is True
     assert d.side == "LONG"
 
 
 def test_funding_anti_pile_allows_below_threshold(monkeypatch):
-    """funding_z below threshold magnitude does not block."""
-    monkeypatch.setenv("V5_STRATEGY_MODE", "trend_aligned")
+    _setup_trend_aligned_env(monkeypatch)
     monkeypatch.setenv("V5_FUNDING_ANTI_PILE_THRESHOLD", "1.5")
     ind = _indicators(rsi_15m=35.0, hist_4h=0.001)
     d = decide(_enriched(), ind, funding_z=0.5)
@@ -132,8 +136,7 @@ def test_funding_anti_pile_allows_below_threshold(monkeypatch):
 
 
 def test_funding_anti_pile_allows_when_funding_z_none(monkeypatch):
-    """No funding data → filter cannot fire, decision proceeds."""
-    monkeypatch.setenv("V5_STRATEGY_MODE", "trend_aligned")
+    _setup_trend_aligned_env(monkeypatch)
     monkeypatch.setenv("V5_FUNDING_ANTI_PILE_THRESHOLD", "1.5")
     ind = _indicators(rsi_15m=35.0, hist_4h=0.001)
     d = decide(_enriched(), ind, funding_z=None)

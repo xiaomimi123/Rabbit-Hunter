@@ -61,13 +61,19 @@ def _get_live_trader():
         return None
 
 
+_PAPER_BALANCE = float(os.environ.get("PAPER_INITIAL_BALANCE_USDT", "1000"))
+
+
 def _fetch_balance() -> float:
-    """先尝试从交易所拉余额,失败回退 env PAPER_INITIAL_BALANCE_USDT。"""
+    """SHADOW 模式直接返回 PAPER_INITIAL_BALANCE_USDT — 不 init exchange trader
+    (避免每次 scoring 都打一堆 fetch_balance / load_markets 失败的日志)。
+    LIVE 模式才真正去拉真实余额。"""
+    if _system_mode() != "LIVE":
+        return _PAPER_BALANCE
     try:
         trader = _get_live_trader()
         if trader is not None:
             bal = trader.fetch_balance()
-            # ccxt 风格 / 自定义 trader 风格兼容
             usdt = None
             if isinstance(bal, dict):
                 if "USDT" in bal and isinstance(bal["USDT"], dict):
@@ -79,8 +85,8 @@ def _fetch_balance() -> float:
             if usdt is not None and float(usdt) > 0:
                 return float(usdt)
     except Exception as e:
-        print(f"[collector_main] 余额拉取失败,用 PAPER_INITIAL_BALANCE_USDT: {e}")
-    return float(os.environ.get("PAPER_INITIAL_BALANCE_USDT", "1000"))
+        print(f"[collector_main] LIVE 余额拉取失败,用 PAPER_INITIAL_BALANCE_USDT: {e}")
+    return _PAPER_BALANCE
 
 
 async def _build_indicator_fetcher():

@@ -30,6 +30,9 @@ services:
       API_ALLOW_REMOTE_NO_AUTH: "true"   # docker 网络隔离 + ports 仅 127.0.0.1
       AI_TRADE_LOG_PATH: /app/data/ai_trade_log.jsonl
       EXCHANGE: ${EXCHANGE:-okx}
+      # SHADOW trial exp3b (started 2026-06-18 — see docs/superpowers/notes/2026-06-18-shadow-trial-exp3b.md)
+      V5_TREND_RSI_LONG_THRESHOLD: "35.0"
+      V5_FUNDING_ANTI_PILE_THRESHOLD: "1.5"
     ports:
       - "127.0.0.1:8000:8000"
     volumes:
@@ -50,6 +53,9 @@ services:
       AI_TRADE_LOG_PATH: /app/data/ai_trade_log.jsonl
       # v0.5.2: 信号源默认 OKX；要切回 Binance 改 .env 里 EXCHANGE=binance
       EXCHANGE: ${EXCHANGE:-okx}
+      # SHADOW trial exp3b — must match api service
+      V5_TREND_RSI_LONG_THRESHOLD: "35.0"
+      V5_FUNDING_ANTI_PILE_THRESHOLD: "1.5"
     # 入口换成 collector_main（共享 api 的镜像，省一次构建）
     command: ["python", "-m", "scripts.tasks.collector_main"]
     # 禁用从 Dockerfile 继承的 HTTP healthcheck — collector 没有 HTTP 端口
