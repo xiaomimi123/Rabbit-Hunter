@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import { useEffect } from 'react';
 
 export type ToastTone = 'info' | 'success' | 'warn' | 'error';
 
@@ -10,10 +10,10 @@ interface Props {
 }
 
 const TONE: Record<ToastTone, string> = {
-  info: 'border-accent-info/40 bg-accent-info/10 text-accent-info',
-  success: 'border-accent-long/40 bg-accent-long/10 text-accent-long',
-  warn: 'border-accent-warn/40 bg-accent-warn/10 text-accent-warn',
-  error: 'border-accent-short/40 bg-accent-short/10 text-accent-short',
+  info:    'border-ink text-ink bg-ink-soft',
+  success: 'border-sage text-sage bg-sage-soft',
+  warn:    'border-brass text-brass bg-brass-soft',
+  error:   'border-oxblood text-oxblood bg-oxblood-soft',
 };
 
 export function Toast({ message, tone = 'info', durationMs = 4000, onDismiss }: Props) {
@@ -22,8 +22,8 @@ export function Toast({ message, tone = 'info', durationMs = 4000, onDismiss }: 
     return () => clearTimeout(t);
   }, [durationMs, onDismiss]);
   return (
-    <div className={`rounded-md border px-3 py-2 text-sm shadow-md ${TONE[tone]}`}>
-      {message}
+    <div className={`border px-4 py-2.5 font-mono text-[0.85rem] ${TONE[tone]}`}>
+      <span className="mr-2 opacity-60">▌</span>{message}
     </div>
   );
 }

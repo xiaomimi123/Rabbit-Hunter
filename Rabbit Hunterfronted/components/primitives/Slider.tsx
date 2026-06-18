@@ -1,5 +1,3 @@
-import React from 'react';
-
 interface Props {
   value: number;
   min: number;
@@ -18,7 +16,7 @@ export function Slider({ value, min, max, step = 1, onChange, className = '' }: 
       max={max}
       step={step}
       onChange={(e) => onChange(Number(e.target.value))}
-      className={`h-2 w-full appearance-none rounded-sm bg-white/10 outline-none accent-accent-info ${className}`}
+      className={`h-1.5 w-full appearance-none bg-white/[0.06] outline-none accent-brass ${className}`}
     />
   );
 }

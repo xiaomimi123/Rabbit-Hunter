@@ -18,8 +18,8 @@ export class ErrorBoundary extends React.Component<Props, State> {
     if (error) {
       if (this.props.fallback) return this.props.fallback(error);
       return (
-        <div className="rounded-md border border-accent-short/30 bg-accent-short/10 p-4 text-sm text-accent-short">
-          本页加载失败:{error.message}
+        <div className="border border-oxblood-soft bg-oxblood-soft px-4 py-3 font-mono text-[0.85rem] text-oxblood">
+          <span className="mr-2 opacity-60">▌</span>本页加载失败:{error.message}
           <button onClick={this.reset} className="ml-3 underline">重试</button>
         </div>
       );

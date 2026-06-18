@@ -1,10 +1,10 @@
-import React from 'react';
+import { ReactNode } from 'react';
 import { Tooltip } from '../primitives/Tooltip';
 import { GLOSSARY } from '../../services/glossary';
 
 interface Props {
   k: string;
-  children?: React.ReactNode;
+  children?: ReactNode;
   className?: string;
 }
 
@@ -14,22 +14,22 @@ export function Term({ k, children, className = '' }: Props) {
     return <span className={className}>{children ?? k}</span>;
   }
   const content = (
-    <div className="space-y-1">
-      <div className="font-medium text-white">
+    <div className="flex flex-col gap-1">
+      <div className="font-display text-[1rem] text-ivory">
         {entry.zh}
-        {entry.en && <span className="ml-2 text-white/50 text-[10px] font-mono">{entry.en}</span>}
+        {entry.en && <span className="ml-2 text-ivory-40 text-[0.7rem] font-mono">{entry.en}</span>}
       </div>
-      <div className="text-white/70">{entry.desc}</div>
+      <div className="text-ivory-70 font-body italic">{entry.desc}</div>
       {entry.example && (
-        <div className="text-cyan-300/70 text-[10px] border-t border-white/10 pt-1 mt-1 font-mono">
-          ▶ {entry.example}
+        <div className="text-brass text-[0.7rem] border-t border-hairline pt-1 mt-1 font-mono not-italic">
+          <span className="mr-1">▶</span>{entry.example}
         </div>
       )}
     </div>
   );
   return (
     <Tooltip content={content} className={className}>
-      <span className="cursor-help border-b border-dotted border-white/30 hover:border-cyan-400/70 hover:text-cyan-300 transition-colors">
+      <span className="cursor-help border-b border-dotted border-ivory-25 hover:border-brass hover:text-brass transition-colors">
         {children ?? k}
       </span>
     </Tooltip>

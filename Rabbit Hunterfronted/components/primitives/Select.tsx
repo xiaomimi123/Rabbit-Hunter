@@ -15,7 +15,7 @@ export function Select({ value, options, onChange, className = '', disabled }: P
       value={value ?? ''}
       onChange={(e) => onChange(e.target.value)}
       disabled={disabled}
-      className={`rounded-sm border border-white/10 bg-bg-base px-2 py-1 text-sm text-white outline-none focus:border-accent-info ${className}`}
+      className={`font-mono text-[0.85rem] bg-bg-base border border-hairline-strong px-3 py-1.5 text-ivory outline-none focus:border-brass ${className}`}
     >
       {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
     </select>

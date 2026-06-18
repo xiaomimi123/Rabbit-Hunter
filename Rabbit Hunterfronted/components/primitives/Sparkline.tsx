@@ -8,7 +8,7 @@ interface Props {
   fill?: string;
 }
 
-export function Sparkline({ values, width = 120, height = 24, stroke = '#22D3EE', fill = 'none' }: Props) {
+export function Sparkline({ values, width = 120, height = 24, stroke = '#C9A14B', fill = 'none' }: Props) {
   if (values.length < 2) {
     return <svg width={width} height={height} />;
   }

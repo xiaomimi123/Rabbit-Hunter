@@ -50,7 +50,7 @@ export function NumberInput({ value, min, max, step = 0.01, onChange, className 
       step={step}
       onChange={handleChange}
       onBlur={handleBlur}
-      className={`w-24 rounded-sm border border-white/10 bg-bg-base px-2 py-1 text-right font-mono text-sm text-white outline-none focus:border-accent-info ${className}`}
+      className={`w-24 font-mono text-[0.85rem] bg-bg-base border border-hairline-strong px-2.5 py-1.5 text-right tabular-nums text-ivory outline-none focus:border-brass ${className}`}
     />
   );
 }
