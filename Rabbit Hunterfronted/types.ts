@@ -130,6 +130,20 @@ export interface SettingsPatchRequest {
   ai_fail_open?: boolean;
   sl_tp_fail_open?: boolean;
 }
+export interface TestAIRequest {
+  provider?: AIProvider;
+  deepseek_api_key?: string;
+  openai_api_key?: string;
+}
+export interface TestAIResponse {
+  ok: boolean;
+  provider?: AIProvider | null;
+  model?: string | null;
+  latency_ms?: number | null;
+  response_text?: string | null;
+  error_type?: 'insufficient_balance' | 'auth_failed' | 'rate_limit' | 'network' | 'no_key_configured' | 'unknown' | null;
+  message: string;
+}
 
 // ── AI Status ──
 export interface AIStatusResponse {

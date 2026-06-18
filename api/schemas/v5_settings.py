@@ -34,3 +34,23 @@ class SettingsPatchRequest(BaseModel):
     enable_auto_trading: Optional[bool] = None
     ai_fail_open: Optional[bool] = None
     sl_tp_fail_open: Optional[bool] = None
+
+
+class TestAIRequest(BaseModel):
+    """测试 AI 连接。可选传入候选 key — 传了就用候选,不传就用 DB 里现有的。"""
+    provider: Optional[Literal["openai", "deepseek"]] = None
+    deepseek_api_key: Optional[str] = None
+    openai_api_key: Optional[str] = None
+
+
+class TestAIResponse(BaseModel):
+    ok: bool
+    provider: Optional[Literal["openai", "deepseek"]] = None
+    model: Optional[str] = None
+    latency_ms: Optional[int] = None
+    response_text: Optional[str] = None       # AI 实际返回的内容(测试时一般是 "ok")
+    error_type: Optional[Literal[
+        "insufficient_balance", "auth_failed", "rate_limit",
+        "network", "no_key_configured", "unknown",
+    ]] = None
+    message: str                              # 给用户看的中文描述

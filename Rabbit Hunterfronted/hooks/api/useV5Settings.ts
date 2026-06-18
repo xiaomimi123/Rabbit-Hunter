@@ -1,6 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { apiGet, apiPatch } from '../../services/api';
-import type { SettingsResponse, SettingsPatchRequest } from '../../types';
+import { apiGet, apiPatch, apiPost } from '../../services/api';
+import type {
+  SettingsResponse,
+  SettingsPatchRequest,
+  TestAIRequest,
+  TestAIResponse,
+} from '../../types';
 
 export function useV5Settings() {
   const qc = useQueryClient();
@@ -13,5 +18,9 @@ export function useV5Settings() {
       apiPatch<SettingsResponse>('/api/v5/settings', body),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['v5', 'settings'] }),
   });
-  return { query, patch };
+  const testAi = useMutation({
+    mutationFn: (body: TestAIRequest) =>
+      apiPost<TestAIResponse>('/api/v5/settings/test-ai', body),
+  });
+  return { query, patch, testAi };
 }

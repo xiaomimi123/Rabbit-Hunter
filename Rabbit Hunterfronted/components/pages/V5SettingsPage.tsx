@@ -5,11 +5,13 @@ import { Modal } from '../primitives/Modal';
 import { Aperture } from '../primitives/Aperture';
 
 export function V5SettingsPage() {
-  const { query, patch } = useV5Settings();
+  const { query, patch, testAi } = useV5Settings();
   const [confirmLive, setConfirmLive] = useState(false);
   const [deepseekKey, setDeepseekKey] = useState('');
   const [openaiKey, setOpenaiKey] = useState('');
   const [savedAt, setSavedAt] = useState<number | null>(null);
+  const [testResult, setTestResult] = useState<import('../../types').TestAIResponse | null>(null);
+  const [testedAt, setTestedAt] = useState<number | null>(null);
 
   if (query.isLoading) return <LoadingSkeleton message="拉取系统设置…" />;
   const s = query.data;
@@ -56,6 +58,23 @@ export function V5SettingsPage() {
           </span>
           <button
             type="button"
+            disabled={testAi.isPending}
+            onClick={() => testAi.mutate(
+              {
+                ...(deepseekKey ? { deepseek_api_key: deepseekKey } : {}),
+                ...(openaiKey ? { openai_api_key: openaiKey } : {}),
+              },
+              {
+                onSuccess: (r) => { setTestResult(r); setTestedAt(Date.now()); },
+                onError: () => { setTestResult(null); setTestedAt(Date.now()); },
+              },
+            )}
+            className="ml-auto font-mono text-[0.78rem] tracking-wider px-4 py-1.5 border border-ink text-ink bg-ink-soft uppercase disabled:opacity-40 hover:bg-ink hover:text-ivory"
+          >
+            {testAi.isPending ? '测试中…' : '测试连接'}
+          </button>
+          <button
+            type="button"
             disabled={patch.isPending || (!deepseekKey && !openaiKey)}
             onClick={() => patch.mutate(
               {
@@ -70,7 +89,7 @@ export function V5SettingsPage() {
                 },
               },
             )}
-            className="ml-auto font-mono text-[0.78rem] tracking-wider px-4 py-1.5 border border-brass text-brass bg-brass-soft uppercase disabled:opacity-40 hover:bg-brass hover:text-bg-base"
+            className="font-mono text-[0.78rem] tracking-wider px-4 py-1.5 border border-brass text-brass bg-brass-soft uppercase disabled:opacity-40 hover:bg-brass hover:text-bg-base"
           >
             {patch.isPending ? '保存中…' : '保存 AI 配置'}
           </button>
@@ -83,6 +102,31 @@ export function V5SettingsPage() {
         {patch.isError && (
           <div className="border border-oxblood-soft bg-oxblood-soft px-4 py-2 font-mono text-[0.78rem] text-oxblood">
             <span className="mr-2">▌</span>保存失败:{(patch.error as any)?.detail ?? (patch.error as any)?.message ?? 'unknown'}
+          </div>
+        )}
+        {testedAt && Date.now() - testedAt < 8000 && testResult && (
+          <div className={`border px-4 py-2 font-mono text-[0.78rem] ${
+            testResult.ok
+              ? 'border-sage-soft bg-sage-soft text-sage'
+              : 'border-oxblood-soft bg-oxblood-soft text-oxblood'
+          }`}>
+            <span className="mr-2">▌</span>
+            {testResult.ok ? '✓' : '✗'} {testResult.message}
+            {testResult.provider && (
+              <span className="ml-2 text-ivory-40">
+                · {testResult.provider}/{testResult.model}
+              </span>
+            )}
+            {testResult.response_text && (
+              <span className="ml-2 text-ivory-40">
+                · 回应:<span className="text-ivory">"{testResult.response_text}"</span>
+              </span>
+            )}
+          </div>
+        )}
+        {testAi.isError && testedAt && Date.now() - testedAt < 8000 && (
+          <div className="border border-oxblood-soft bg-oxblood-soft px-4 py-2 font-mono text-[0.78rem] text-oxblood">
+            <span className="mr-2">▌</span>测试请求失败:{(testAi.error as any)?.detail ?? (testAi.error as any)?.message ?? 'unknown'}
           </div>
         )}
       </SettingsSection>
