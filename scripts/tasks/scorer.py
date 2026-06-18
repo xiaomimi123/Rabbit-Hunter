@@ -144,7 +144,7 @@ async def process_enriched_v5(*, enriched: EnrichedItem, ai, paper_pm, live_pm,
     except Exception as e:
         print(f"[V5Scorer] funding lookup 失败 ({enriched.symbol}): {e}")
 
-    decision = decide(enriched, indicators)
+    decision = decide(enriched, indicators, funding_z=funding_z_score)
     if not decision.should_trade:
         _write_trade_score(db_path, enriched, indicators, decision,
                           funding_z_score=funding_z_score,
