@@ -52,13 +52,16 @@ def simulate_exit(
             sl_hit = high >= sl_price
             tp_hit = low <= tp_price
             if sl_hit:
-                return int(ts), sl_price, "SL_HIT", (entry_price - sl_price) / risk
+                return int(ts), sl_price, "SL_HIT", (sl_price - entry_price) / risk * -1.0
             if tp_hit:
                 return int(ts), tp_price, "TP_HIT", (entry_price - tp_price) / risk
 
-    # Horizon timeout — exit at close of last evaluated candle
-    idx = min(max_bars - 1, len(klines_after) - 1)
-    last = klines_after[idx]
+    # Only declare HORIZON_TIMEOUT when we've actually walked max_bars candles.
+    # Otherwise the position is still open — caller should re-check on next tick.
+    if len(klines_after) < max_bars:
+        return None, None, None, None
+
+    last = klines_after[max_bars - 1]
     exit_ts = int(last[0])
     exit_p = float(last[4])
     if side == "LONG":

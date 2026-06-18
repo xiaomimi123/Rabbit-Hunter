@@ -1,30 +1,30 @@
 === Backtest: 2026-05-19T04:00:00+00:00 → 2026-06-18T04:00:00+00:00 ===
-Total scans: 31521   AND-passed: 459   Entered: 335   Closed: 335
+Total scans: 32300   AND-passed: 439   Entered: 325   Closed: 325
 
 Aggregate:
-  Profit Factor: 1.32    Max DD: -16.73R   Max concurrent: 3
-  Overall: n=335  win 45%  total +57.63R   avg +0.17R
+  Profit Factor: 1.44    Max DD: -16.73R   Max concurrent: 3
+  Overall: n=325  win 47%  total +73.18R   avg +0.23R
 
 By setup_type:
   setup_type                                          n   win%   avg R  total R
   ────────────────────────────────────────────────────────────────────────────
-  rsi_neutral_macd_extending_short                  100     59%  +0.49  +48.51
+  rsi_neutral_macd_extending_short                  102     61%  +0.54  +54.73
   rsi_oversold_macd_extending_long                   37     54%  +0.44  +16.41
+  rsi_overbought_macd_extending_short                11     45%  +0.21   +2.33
   rsi_neutral_macd_bearish_long                       6     50%  +0.33   +2.00
-  rsi_overbought_macd_extending_short                 9     44%  +0.19   +1.67
   funding_extreme_long_rsi_oversold                   1    100%  +1.67   +1.67 ★
-  rsi_neutral_macd_extending_long                   161     38%  -0.01   -2.29
+  rsi_neutral_macd_extending_long                   161     39%  +0.00   +0.38
+  funding_extreme_long_rsi_neutral                    4     25%  -0.33   -1.33 ★
   rsi_neutral_macd_bullish_short                      3      0%  -1.00   -3.00
-  funding_extreme_long_rsi_neutral                   18     22%  -0.41   -7.33 ★
 
 By side:
-  LONG    n=209  win  41%  total +16.45R
-  SHORT   n=126  win  52%  total +41.18R
+  LONG    n=209  win  42%  total +19.12R
+  SHORT   n=116  win  58%  total +54.07R
 
 Top 3 / Bottom 3 symbols:
-  + NEARUSDT   n= 52  +29.72R
+  + NEARUSDT   n= 51  +33.38R
   + BCHUSDT    n= 51  +16.00R
-  + DOTUSDT    n=  9  +9.67R
-  - LTCUSDT    n=  3  -3.00R
-  - ATOMUSDT   n= 23  -5.73R
-  - UNIUSDT    n= 22  -7.67R
+  + APTUSDT    n= 41  +8.64R
+  - ATOMUSDT   n= 21  -3.73R
+  - XRPUSDT    n= 10  -4.08R
+  - UNIUSDT    n= 20  -7.28R

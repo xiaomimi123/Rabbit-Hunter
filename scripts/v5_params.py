@@ -35,6 +35,7 @@ _ENV_MAP = {
     "v5_anti_chase_window_bars":    "V5_ANTI_CHASE_WINDOW_BARS",
     "v5_use_symbol_whitelist":      "V5_USE_SYMBOL_WHITELIST",
     "v5_symbol_whitelist":          "V5_SYMBOL_WHITELIST",
+    "v5_funding_anti_pile_threshold": "V5_FUNDING_ANTI_PILE_THRESHOLD",
 }
 
 

@@ -87,3 +87,21 @@ def test_zero_risk_returns_all_none():
     klines_after = [[2000, 100, 105, 95, 100, 10]]
     out = simulate_exit(1000, 100, 100, 110, "LONG", klines_after, 480, 15)
     assert out == (None, None, None, None)
+
+
+def test_few_klines_no_touch_returns_none_NOT_horizon_timeout():
+    """Regression: walking one candle at a time, neither SL nor TP hit, the sim
+    must return (None,None,None,None) to mean 'still open, check next tick'.
+    Earlier bug returned HORIZON_TIMEOUT after just 1 candle."""
+    klines_after = [[2000, 100, 100.5, 99.5, 100.0, 10]]   # 1 calm candle
+    out = simulate_exit(1000, 100, 95, 110, "LONG", klines_after,
+                        max_hold_minutes=480, interval_min=15)
+    assert out == (None, None, None, None)
+
+
+def test_short_sl_realized_r_sign():
+    """SHORT SL hit: entry 100, sl 105 (price rose). Realized R should be -1.0."""
+    klines_after = [[2000, 100, 108, 99, 102, 50]]
+    _, _, reason, r = simulate_exit(1000, 100, 105, 90, "SHORT", klines_after, 480, 15)
+    assert reason == "SL_HIT"
+    assert r == -1.0   # loss for SHORT

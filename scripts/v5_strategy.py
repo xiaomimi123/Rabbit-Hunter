@@ -72,15 +72,21 @@ def _is_at_bottom(current_close: float, klines, bars: int, buffer_pct: float) ->
 # Public entry point
 # ──────────────────────────────────────────────────────────────────────────────
 
-def decide(enriched: EnrichedItem, indicators: Indicators) -> Decision:
-    """V5 决策。两种模式:and_strict (legacy) 或 trend_aligned (default)。"""
+def decide(enriched: EnrichedItem, indicators: Indicators,
+           funding_z: Optional[float] = None) -> Decision:
+    """V5 决策。两种模式:and_strict (legacy) 或 trend_aligned (default)。
+
+    funding_z(可选):当前 symbol 的 30d funding z-score。若 v5_params 里
+    v5_funding_anti_pile_threshold > 0,trend_aligned 模式会在最终通过前
+    检查 funding 拥挤度,反向加仓被阻塞。
+    """
     from scripts.v5_params import get_param
 
     mode = get_param("v5_strategy_mode", "trend_aligned", str)
 
     if mode == "and_strict":
         return _decide_and_strict(enriched, indicators)
-    return _decide_trend_aligned(enriched, indicators)
+    return _decide_trend_aligned(enriched, indicators, funding_z=funding_z)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -129,13 +135,16 @@ def _decide_and_strict(enriched: EnrichedItem, indicators: Indicators) -> Decisi
 # V5.1 trend_aligned mode
 # ──────────────────────────────────────────────────────────────────────────────
 
-def _decide_trend_aligned(enriched: EnrichedItem, indicators: Indicators) -> Decision:
-    """V5.1 trend_aligned 模式:4h MACD 锁方向 + 15m RSI 触发 + anti-chase."""
+def _decide_trend_aligned(enriched: EnrichedItem, indicators: Indicators,
+                            *, funding_z: Optional[float] = None) -> Decision:
+    """V5.1 trend_aligned 模式:4h MACD 锁方向 + 15m RSI 触发 + anti-chase
+    + (可选)funding-anti-pile:拒绝同方向已经拥挤的开仓。"""
     from scripts.v5_params import get_param
     rsi_short_th = get_param("v5_trend_rsi_short_threshold", 60.0, float)
     rsi_long_th = get_param("v5_trend_rsi_long_threshold", 40.0, float)
     anti_chase_pct = get_param("v5_anti_chase_pct", 0.005, float)
     anti_chase_bars = get_param("v5_anti_chase_window_bars", 5, int)
+    funding_anti_pile_th = get_param("v5_funding_anti_pile_threshold", 0.0, float)
 
     rsi_15m = indicators.rsi_15m
     macd_4h = indicators.macd_hist_4h
@@ -161,6 +170,16 @@ def _decide_trend_aligned(enriched: EnrichedItem, indicators: Indicators) -> Dec
                 ),
                 block_reason="ANTI_CHASE_TOP",
             )
+        if (funding_anti_pile_th > 0 and funding_z is not None
+                and funding_z <= -funding_anti_pile_th):
+            return Decision(
+                should_trade=False, side=None,
+                reasoning=(
+                    f"[trend_aligned] SHORT 候选 但 funding-anti-pile 触发 — "
+                    f"z={funding_z:+.2f} (空头已拥挤,加仓低 EV)"
+                ),
+                block_reason="FUNDING_SHORTS_CROWDED",
+            )
         return Decision(
             should_trade=True, side="SHORT",
             reasoning=(
@@ -180,6 +199,16 @@ def _decide_trend_aligned(enriched: EnrichedItem, indicators: Indicators) -> Dec
                     f"current {current_close:.4f} 距 {anti_chase_bars} 根低点 < {anti_chase_pct*100:.1f}%"
                 ),
                 block_reason="ANTI_CHASE_BOTTOM",
+            )
+        if (funding_anti_pile_th > 0 and funding_z is not None
+                and funding_z >= funding_anti_pile_th):
+            return Decision(
+                should_trade=False, side=None,
+                reasoning=(
+                    f"[trend_aligned] LONG 候选 但 funding-anti-pile 触发 — "
+                    f"z={funding_z:+.2f} (多头已拥挤,加仓低 EV)"
+                ),
+                block_reason="FUNDING_LONGS_CROWDED",
             )
         return Decision(
             should_trade=True, side="LONG",

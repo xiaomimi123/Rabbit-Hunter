@@ -183,7 +183,7 @@ def test_runner_smoke_with_mocked_strategy_opens_and_closes(monkeypatch):
     def fake_indicators(_kl15, _kl4h):
         return _fake_indicators(rsi=35.0, atr=1.0)
 
-    def fake_decide(_enriched, _indicators):
+    def fake_decide(_enriched, _indicators, funding_z=None):
         return long_decision
 
     def fake_plan(*, side, entry, atr, balance, risk_pct, leverage):
@@ -248,7 +248,7 @@ def test_runner_respects_slot_limit_with_5_qualifying_symbols(monkeypatch):
     )
     monkeypatch.setattr(
         "scripts.backtest.runner.v5_strategy.decide",
-        lambda e, i: Decision(should_trade=True, side="LONG",
+        lambda e, i, funding_z=None: Decision(should_trade=True, side="LONG",
                                reasoning="forced", block_reason=None),
     )
     monkeypatch.setattr(
@@ -328,7 +328,7 @@ def test_runner_force_closes_still_open_at_end(monkeypatch):
     )
     monkeypatch.setattr(
         "scripts.backtest.runner.v5_strategy.decide",
-        lambda e, i: Decision(should_trade=True, side="LONG",
+        lambda e, i, funding_z=None: Decision(should_trade=True, side="LONG",
                                reasoning="forced", block_reason=None),
     )
     monkeypatch.setattr(
@@ -373,7 +373,7 @@ def test_runner_funding_extreme_flows_into_setup_type(monkeypatch):
     )
     monkeypatch.setattr(
         "scripts.backtest.runner.v5_strategy.decide",
-        lambda e, i: Decision(should_trade=True, side="SHORT",
+        lambda e, i, funding_z=None: Decision(should_trade=True, side="SHORT",
                                reasoning="x", block_reason=None),
     )
     monkeypatch.setattr(

@@ -234,13 +234,8 @@ class BacktestRunner:
                 klines_4h=kl4h,
             )
 
-            decision = v5_strategy.decide(enriched, indicators)
-            self.total_signals += 1
-            if not decision.should_trade:
-                continue
-            self.total_passed += 1
-
-            # Funding z-score AS-OF this historical moment (drives setup_type).
+            # Funding z-score AS-OF this historical moment — drives setup_type
+            # AND (when v5_funding_anti_pile_threshold > 0) gates the decision.
             funding_z_val: Optional[float] = None
             try:
                 fz = compute_zscore_as_of(sym, t_iso, db_path=self.cfg.db_path)
@@ -249,6 +244,12 @@ class BacktestRunner:
             except Exception as e:
                 if self.cfg.verbose:
                     log.debug("funding_z_as_of failed for %s @ %s: %s", sym, t_iso, e)
+
+            decision = v5_strategy.decide(enriched, indicators, funding_z=funding_z_val)
+            self.total_signals += 1
+            if not decision.should_trade:
+                continue
+            self.total_passed += 1
 
             try:
                 risk = v5_risk_calculator.plan(
