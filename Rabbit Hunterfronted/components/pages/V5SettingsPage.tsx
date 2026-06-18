@@ -9,6 +9,7 @@ export function V5SettingsPage() {
   const [confirmLive, setConfirmLive] = useState(false);
   const [deepseekKey, setDeepseekKey] = useState('');
   const [openaiKey, setOpenaiKey] = useState('');
+  const [savedAt, setSavedAt] = useState<number | null>(null);
 
   if (query.isLoading) return <LoadingSkeleton message="拉取系统设置…" />;
   const s = query.data;
@@ -56,15 +57,34 @@ export function V5SettingsPage() {
           <button
             type="button"
             disabled={patch.isPending || (!deepseekKey && !openaiKey)}
-            onClick={() => patch.mutate({
-              ...(deepseekKey ? { deepseek_api_key: deepseekKey } : {}),
-              ...(openaiKey ? { openai_api_key: openaiKey } : {}),
-            })}
+            onClick={() => patch.mutate(
+              {
+                ...(deepseekKey ? { deepseek_api_key: deepseekKey } : {}),
+                ...(openaiKey ? { openai_api_key: openaiKey } : {}),
+              },
+              {
+                onSuccess: () => {
+                  setDeepseekKey('');
+                  setOpenaiKey('');
+                  setSavedAt(Date.now());
+                },
+              },
+            )}
             className="ml-auto font-mono text-[0.78rem] tracking-wider px-4 py-1.5 border border-brass text-brass bg-brass-soft uppercase disabled:opacity-40 hover:bg-brass hover:text-bg-base"
           >
-            保存 AI 配置
+            {patch.isPending ? '保存中…' : '保存 AI 配置'}
           </button>
         </div>
+        {savedAt && Date.now() - savedAt < 4000 && (
+          <div className="border border-sage-soft bg-sage-soft px-4 py-2 font-mono text-[0.78rem] text-sage">
+            <span className="mr-2">▌</span>✓ 已保存,新 key 已写入数据库
+          </div>
+        )}
+        {patch.isError && (
+          <div className="border border-oxblood-soft bg-oxblood-soft px-4 py-2 font-mono text-[0.78rem] text-oxblood">
+            <span className="mr-2">▌</span>保存失败:{(patch.error as any)?.detail ?? (patch.error as any)?.message ?? 'unknown'}
+          </div>
+        )}
       </SettingsSection>
 
       <SettingsSection title="系统模式" meta={s.system_mode === 'LIVE' ? '⚠ live trading' : 'paper trading'}>

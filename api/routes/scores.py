@@ -15,7 +15,7 @@ def _signal_manager() -> V5SignalManager:
 
 @router.get("/signals", response_model=V5SignalsResponse)
 async def get_signals(
-    limit: int = Query(50, ge=1, le=200),
+    limit: int = Query(50, ge=1, le=5000),
     only_executed: bool = Query(False),
     only_should_trade: bool = Query(False),
     funnel_hours: int = Query(1, ge=1, le=24),
