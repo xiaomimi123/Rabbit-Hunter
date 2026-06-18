@@ -70,6 +70,62 @@ def compute_zscore_30d(symbol: str, *, db_path: Optional[str] = None) -> Optiona
     }
 
 
+def compute_zscore_as_of(symbol: str, as_of_iso: str, *,
+                          db_path: Optional[str] = None) -> Optional[dict]:
+    """Backtest replay variant: compute z-score using only funding events
+    strictly BEFORE `as_of_iso`. Window: 30 days prior to as_of, exclusive
+    of as_of itself.
+
+    'current_funding_rate' = the most recent rate strictly before as_of
+    (treated as the 'now' point for that historical moment).
+
+    Returns dict with same shape as compute_zscore_30d, or None if < MIN_SAMPLE.
+    """
+    db = db_path or _db()
+    conn = sqlite3.connect(db)
+    try:
+        rows = conn.execute("""
+            SELECT funding_rate FROM funding_rates
+             WHERE symbol = ? AND source = 'okx'
+               AND funding_time < ?
+               AND funding_time >= datetime(?, '-30 days')
+             ORDER BY funding_time DESC
+        """, (symbol, as_of_iso, as_of_iso)).fetchall()
+    finally:
+        conn.close()
+
+    rates = [r[0] for r in rows]
+    if len(rates) < MIN_SAMPLE_FOR_ZSCORE:
+        return None
+
+    current = rates[0]
+    historical = rates[1:]
+    mean = statistics.mean(historical)
+    std = statistics.stdev(historical) if len(historical) >= 2 else 0.0
+
+    if std == 0:
+        zscore = 0.0
+    else:
+        zscore = (current - mean) / std
+
+    is_extreme = abs(zscore) >= EXTREME_THRESHOLD
+    extreme_direction = (
+        "long_crowded" if zscore >= EXTREME_THRESHOLD
+        else "short_crowded" if zscore <= -EXTREME_THRESHOLD
+        else None
+    )
+
+    return {
+        "current_funding_rate": current,
+        "mean_30d": mean,
+        "std_30d": std,
+        "zscore_30d": zscore,
+        "sample_size_30d": len(rates),
+        "is_extreme": is_extreme,
+        "extreme_direction": extreme_direction,
+    }
+
+
 def refresh_zscore_cache(symbols: List[str], *,
                           db_path: Optional[str] = None) -> int:
     """对每个 symbol 算 z-score 并写 cache。返回写入条数(跳过 None)。"""

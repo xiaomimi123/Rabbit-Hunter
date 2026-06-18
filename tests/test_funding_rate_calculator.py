@@ -117,3 +117,82 @@ def test_get_cached_zscore_returns_after_refresh(db):
     out = get_cached_zscore("BTCUSDT", db_path=db)
     assert out is not None
     assert out["current_funding_rate"] == 0.0005
+
+
+# ─── compute_zscore_as_of (backtest replay) ─────────────────────────────
+
+def _seed_at(conn, symbol: str, rates: list, anchor: datetime):
+    """Insert rates anchored at `anchor` ISO time, with rates[0] being the
+    most recent (closest to anchor), descending in time by 8h per step."""
+    for i, rate in enumerate(rates):
+        ft = (anchor - timedelta(hours=8 * i)).isoformat()
+        conn.execute("""
+            INSERT INTO funding_rates (symbol, instrument_id, funding_time,
+                funding_rate, annualized_rate, source)
+            VALUES (?, ?, ?, ?, ?, 'okx')
+        """, (symbol, f"{symbol[:-4]}-USDT-SWAP", ft, rate, rate * 365 * 3))
+
+
+def test_zscore_as_of_excludes_future_rates(db):
+    """Rates with funding_time >= as_of must not appear in baseline."""
+    from scripts.ai.funding_rate_calculator import compute_zscore_as_of
+    conn = sqlite3.connect(db)
+    # Anchor: a known historical moment, all baseline data BEFORE this.
+    anchor = datetime(2026, 5, 15, 12, 0, 0, tzinfo=timezone.utc)
+    # 25 normal historical rates (anchor, anchor-8h, ..., back ~8 days)
+    _seed_at(conn, "BTCUSDT", [0.0001] * 25, anchor - timedelta(hours=8))
+    # Add 1 "future" rate that would be wild if included
+    future_time = (anchor + timedelta(hours=24)).isoformat()
+    conn.execute("""
+        INSERT INTO funding_rates (symbol, instrument_id, funding_time,
+            funding_rate, annualized_rate, source)
+        VALUES (?, ?, ?, ?, ?, 'okx')
+    """, ("BTCUSDT", "BTC-USDT-SWAP", future_time, 99.0, 99.0 * 365 * 3))
+    conn.commit()
+    conn.close()
+    out = compute_zscore_as_of("BTCUSDT", anchor.isoformat(), db_path=db)
+    assert out is not None
+    # If 99.0 was in baseline, mean would be far from 0.0001
+    assert abs(out["mean_30d"]) < 0.01
+    # sample_size doesn't include the future row
+    assert out["sample_size_30d"] <= 25
+
+
+def test_zscore_as_of_returns_none_below_min_sample(db):
+    from scripts.ai.funding_rate_calculator import compute_zscore_as_of
+    conn = sqlite3.connect(db)
+    anchor = datetime(2026, 5, 15, 12, 0, 0, tzinfo=timezone.utc)
+    _seed_at(conn, "BTCUSDT", [0.0001] * 5, anchor - timedelta(hours=8))
+    conn.commit()
+    conn.close()
+    out = compute_zscore_as_of("BTCUSDT", anchor.isoformat(), db_path=db)
+    assert out is None
+
+
+def test_zscore_as_of_detects_extreme(db):
+    """At a specific historical moment, baseline is calm and 'current' (most
+    recent prior to anchor) is extreme → z > threshold."""
+    from scripts.ai.funding_rate_calculator import compute_zscore_as_of
+    conn = sqlite3.connect(db)
+    anchor = datetime(2026, 5, 15, 12, 0, 0, tzinfo=timezone.utc)
+    # Insert 29 calm baseline rates further back, then ONE extreme rate just
+    # before anchor (most recent prior to as_of).
+    extreme_time = (anchor - timedelta(hours=4)).isoformat()  # just before anchor
+    conn.execute("""
+        INSERT INTO funding_rates (symbol, instrument_id, funding_time,
+            funding_rate, annualized_rate, source)
+        VALUES (?, ?, ?, ?, ?, 'okx')
+    """, ("BTCUSDT", "BTC-USDT-SWAP", extreme_time, 0.001, 0.001 * 365 * 3))
+    # 29 calm rates further back
+    calm_anchor = anchor - timedelta(hours=12)
+    _seed_at(conn, "BTCUSDT",
+             [0.0001 + 0.00001 * (i % 3 - 1) for i in range(29)],
+             calm_anchor)
+    conn.commit()
+    conn.close()
+    out = compute_zscore_as_of("BTCUSDT", anchor.isoformat(), db_path=db)
+    assert out is not None
+    assert out["current_funding_rate"] == 0.001
+    assert out["zscore_30d"] > 5.0
+    assert out["is_extreme"] is True
+    assert out["extreme_direction"] == "long_crowded"
