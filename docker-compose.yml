@@ -56,6 +56,8 @@ services:
       # SHADOW trial exp3b — must match api service
       V5_TREND_RSI_LONG_THRESHOLD: "35.0"
       V5_FUNDING_ANTI_PILE_THRESHOLD: "1.5"
+      # 异动 mover 最低 24h 成交额 — 默认 30M,提高到 100M USDT 排除中小盘
+      MIN_VOLUME_24H_USDT: "100000000"
     # 入口换成 collector_main（共享 api 的镜像，省一次构建）
     command: ["python", "-m", "scripts.tasks.collector_main"]
     # 禁用从 Dockerfile 继承的 HTTP healthcheck — collector 没有 HTTP 端口

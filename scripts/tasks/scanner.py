@@ -34,8 +34,13 @@ _DEFAULT_SCAN_INTERVAL: float = 1.0
 # 评分公式 USDT 归一化分母 —— 50M USDT 算 1 分,与 1% 涨跌幅等权
 _VOLUME_SCORE_NORMALIZER_USDT: float = 50_000_000.0
 
-# Symbols always excluded from mover detection
-_EXCLUDED_SYMBOLS: frozenset[str] = frozenset({"BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT"})
+# Symbols always excluded from mover detection.
+# BTC/ETH/BNB/SOL — 已经在 V5 whitelist 里,不需要 mover 通道重复入场。
+# XAUUSDT — 黄金永续,日波动 < 1%,几乎不会触发 RSI/MACD 信号但占名额。
+_EXCLUDED_SYMBOLS: frozenset[str] = frozenset({
+    "BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT",
+    "XAUUSDT",
+})
 
 
 # ---------------------------------------------------------------------------

@@ -18,8 +18,13 @@ from scripts.v5_symbol_whitelist import (
 # Unit tests — whitelist module
 # ---------------------------------------------------------------------------
 
-def test_whitelist_size_is_20():
-    assert len(V5_TOP20_WHITELIST) == 20
+def test_whitelist_size_is_19():
+    # 2026-06: MATIC removed (delisted from OKX as Polygon rebranded to POL)
+    assert len(V5_TOP20_WHITELIST) == 19
+
+
+def test_matic_no_longer_in_whitelist():
+    assert "MATICUSDT" not in V5_TOP20_WHITELIST
 
 
 def test_whitelist_includes_majors():

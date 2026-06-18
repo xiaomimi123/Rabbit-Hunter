@@ -6,11 +6,12 @@ V5 默认开启。可通过 v5_use_symbol_whitelist=false 关闭(SHADOW 实验�
 from typing import Set
 
 
-# 20 个最高流动性 USDT 永续(主流 + 一线 alt)
+# 19 个最高流动性 USDT 永续(主流 + 一线 alt)
+# 2026-06: MATICUSDT 移除 — Polygon 已改名 POL,OKX 上 MATIC-USDT-SWAP 不存在
 V5_TOP20_WHITELIST: Set[str] = {
     "BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT",
     "DOGEUSDT", "ADAUSDT", "AVAXUSDT", "DOTUSDT", "LINKUSDT",
-    "MATICUSDT", "UNIUSDT", "LTCUSDT", "TRXUSDT", "BCHUSDT",
+    "UNIUSDT", "LTCUSDT", "TRXUSDT", "BCHUSDT",
     "NEARUSDT", "ATOMUSDT", "APTUSDT", "FILUSDT", "ARBUSDT",
 }
 
