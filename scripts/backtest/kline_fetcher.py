@@ -23,26 +23,69 @@ from urllib.request import Request, urlopen
 from scripts.funding_okx_client import symbol_to_okx_instid
 
 
-_MAX_RETRIES = 5
-_BACKOFFS = (0.5, 1.0, 2.0, 4.0, 8.0)
+_MAX_RETRIES = 10
+_BACKOFFS = (0.5, 1.0, 2.0, 3.0, 5.0, 8.0, 13.0, 21.0, 30.0, 45.0)
 
 
-def _http_get_json_with_retry(url: str, *, timeout: int = 20) -> dict:
-    """GET URL, return JSON. Retries on SSL EOF / timeout / URLError."""
-    last_exc: Optional[Exception] = None
-    for attempt in range(_MAX_RETRIES):
-        try:
-            req = Request(url, headers={"User-Agent": "rabbit-hunter-backtest/0.1"})
-            with urlopen(req, timeout=timeout) as resp:
-                return json.loads(resp.read())
-        except (URLError, ssl.SSLError, socket.timeout, TimeoutError) as e:
-            last_exc = e
-            time.sleep(_BACKOFFS[attempt])
-            continue
-        except Exception as e:
-            last_exc = e
-            break
-    raise RuntimeError(f"OKX GET failed after {_MAX_RETRIES} retries: {last_exc}") from last_exc
+# Prefer `requests` (has better SSL retry + connection pooling). Falls back
+# to urllib when requests isn't installed (e.g. running tests on a bare host).
+try:
+    import requests
+    from requests.adapters import HTTPAdapter
+    from urllib3.util.retry import Retry
+
+    def _build_session() -> "requests.Session":
+        s = requests.Session()
+        retry = Retry(
+            total=_MAX_RETRIES, backoff_factor=1.0,
+            status_forcelist=(429, 502, 503, 504),
+            allowed_methods=frozenset(["GET"]),
+            raise_on_status=False,
+        )
+        adapter = HTTPAdapter(max_retries=retry, pool_connections=4, pool_maxsize=4)
+        s.mount("https://", adapter)
+        return s
+
+    _SESSION = _build_session()
+
+    def _http_get_json_with_retry(url: str, *, timeout: int = 20) -> dict:
+        """GET URL via requests Session with built-in HTTPAdapter retries +
+        an outer loop for SSL EOF (which urllib3 doesn't always retry on)."""
+        last_exc: Optional[Exception] = None
+        for attempt in range(_MAX_RETRIES):
+            try:
+                r = _SESSION.get(
+                    url,
+                    headers={"User-Agent": "rabbit-hunter-backtest/0.1"},
+                    timeout=timeout,
+                )
+                return r.json()
+            except Exception as e:
+                last_exc = e
+                time.sleep(_BACKOFFS[attempt])
+                continue
+        raise RuntimeError(
+            f"OKX GET failed after {_MAX_RETRIES} retries: {last_exc}"
+        ) from last_exc
+
+except ImportError:                                       # urllib fallback
+    def _http_get_json_with_retry(url: str, *, timeout: int = 20) -> dict:
+        last_exc: Optional[Exception] = None
+        for attempt in range(_MAX_RETRIES):
+            try:
+                req = Request(url, headers={"User-Agent": "rabbit-hunter-backtest/0.1"})
+                with urlopen(req, timeout=timeout) as resp:
+                    return json.loads(resp.read())
+            except (URLError, ssl.SSLError, socket.timeout, TimeoutError) as e:
+                last_exc = e
+                time.sleep(_BACKOFFS[attempt])
+                continue
+            except Exception as e:
+                last_exc = e
+                break
+        raise RuntimeError(
+            f"OKX GET failed after {_MAX_RETRIES} retries: {last_exc}"
+        ) from last_exc
 
 
 OKX_HOST = "https://www.okx.com"

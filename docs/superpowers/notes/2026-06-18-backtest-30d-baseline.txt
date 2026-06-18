@@ -1,0 +1,32 @@
+=== Backtest: 2026-05-19T03:45:00+00:00 → 2026-06-18T03:45:00+00:00 ===
+Total scans: 44346   AND-passed: 1142   Entered: 850   Closed: 850
+
+Aggregate:
+  Profit Factor: 1.75    Max DD: -12.57R   Max concurrent: 3
+  Overall: n=850  win 58%  total +106.06R   avg +0.12R
+
+By setup_type:
+  setup_type                                          n   win%   avg R  total R
+  ────────────────────────────────────────────────────────────────────────────
+  rsi_neutral_macd_extending_long                   466     55%  +0.10  +47.27
+  rsi_neutral_macd_extending_short                  216     61%  +0.18  +39.73
+  rsi_oversold_macd_extending_long                   78     60%  +0.11   +8.77
+  rsi_overbought_macd_extending_short                18     72%  +0.26   +4.61
+  rsi_neutral_macd_bullish_long                      17     71%  +0.24   +4.14
+  funding_extreme_long_rsi_neutral                   42     50%  +0.03   +1.28 ★
+  rsi_neutral_macd_bearish_short                      1    100%  +0.75   +0.75
+  funding_extreme_long_rsi_oversold                   2     50%  +0.06   +0.13 ★
+  rsi_neutral_macd_bearish_long                       6     67%  -0.02   -0.10
+  rsi_neutral_macd_bullish_short                      4     75%  -0.13   -0.52
+
+By side:
+  LONG    n=583  win  57%  total +64.65R
+  SHORT   n=267  win  59%  total +41.40R
+
+Top 3 / Bottom 3 symbols:
+  + NEARUSDT   n=106  +28.43R
+  + APTUSDT    n= 96  +21.52R
+  + ARBUSDT    n=107  +11.43R
+  - ETHUSDT    n= 10  -0.53R
+  - LTCUSDT    n=  4  -1.00R
+  - XRPUSDT    n= 20  -1.66R
