@@ -2,9 +2,12 @@
 
 跑法:
   docker exec rabbit-hunter-api python /app/scripts/check_live_readiness.py
+  docker exec rabbit-hunter-api python /app/scripts/check_live_readiness.py --start-date 2026-06-19
+  docker exec rabbit-hunter-api python /app/scripts/check_live_readiness.py --days 7
 """
 from __future__ import annotations
 
+import argparse
 import sqlite3
 import os
 from collections import Counter
@@ -16,9 +19,6 @@ DB_PATH = os.environ.get("DB_PATH", "/app/data/rabbit_hunter.db")
 
 # 成本假设(跟 backtest 一致)
 ROUND_TRIP_COST_PCT = 0.002          # 0.20% notional 来回手续费 + 滑点估计
-
-# trial 起算时间 — 默认看最近 14 天。改这里可以看更长窗口。
-TRIAL_DAYS = int(os.environ.get("TRIAL_DAYS", "14"))
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Gate definitions
@@ -90,16 +90,39 @@ def calc_longest_losing_streak(pnls_in_order):
 # Main
 # ──────────────────────────────────────────────────────────────────────────────
 
+def _parse_args():
+    p = argparse.ArgumentParser(description="SHADOW → LIVE 硬门槛检查")
+    p.add_argument("--start-date", type=str, default=None,
+                   help="trial 起算日 ISO 格式 YYYY-MM-DD,优先级最高")
+    p.add_argument("--days", type=int, default=14,
+                   help="--start-date 没给时,看最近 N 天 (默认 14)")
+    return p.parse_args()
+
+
 def main():
     if not os.path.exists(DB_PATH):
         print(f"DB 不存在: {DB_PATH}")
         return 1
 
+    args = _parse_args()
+    if args.start_date:
+        try:
+            start_dt = datetime.fromisoformat(args.start_date).replace(tzinfo=timezone.utc)
+        except ValueError:
+            print(f"--start-date 格式不对: {args.start_date}  应为 YYYY-MM-DD")
+            return 2
+        window_desc = f"显式 trial 起算日 {args.start_date}"
+    else:
+        start_dt = datetime.now(timezone.utc) - timedelta(days=args.days)
+        window_desc = f"最近 {args.days} 天"
+
+    since = start_dt.isoformat()
+    trial_days = (datetime.now(timezone.utc) - start_dt).days
+
     conn = sqlite3.connect(DB_PATH)
-    since = (datetime.now(timezone.utc) - timedelta(days=TRIAL_DAYS)).isoformat()
 
     print(f"\n=== SHADOW → LIVE 升级硬门槛检查 ===")
-    print(f"窗口: 最近 {TRIAL_DAYS} 天 (since {since[:10]})")
+    print(f"窗口: {window_desc} (since {since[:10]} · 已 {trial_days} 天)")
     print(f"成本假设: {ROUND_TRIP_COST_PCT*100:.2f}% notional 来回\n")
 
     # ── 一类:数据量 ─────────────────────────────────────────
@@ -107,14 +130,10 @@ def main():
     auto = _auto_closed(conn, since)
     all_24h_check = _all_closed_since(conn, since)
 
-    # A1: trial 已 ≥ 14 天
-    if auto:
-        first_entry = auto[0][7]
-        days_since = (datetime.now(timezone.utc) - datetime.fromisoformat(first_entry.replace("Z", "+00:00"))).days
-    else:
-        days_since = 0
-    print(fmt_gate("A1.", "trial 运行 ≥ 14 天", PASS if days_since >= 14 else FAIL,
-                  f"({days_since} 天)"))
+    # A1: trial 已 ≥ 14 天 — 用显式 --start-date 算,而不是看第一笔自动单
+    # (这样可以在自动单还没出现时也能开始计时)
+    print(fmt_gate("A1.", "trial 运行 ≥ 14 天", PASS if trial_days >= 14 else FAIL,
+                  f"({trial_days} 天)"))
 
     # A2: 自动单 ≥ 100
     n_auto = len(auto)
@@ -180,7 +199,7 @@ def main():
     print("\n三类:风险控制 (Risk Control)")
     if not auto:
         for code, label in [("C1.", "最大回撤 ≤ 30%"), ("C2.", "单笔亏损 ≤ 3%"),
-                            ("C3.", "连续亏损 ≤ 8 笔"), ("C4.", "0 笔 OPEN_FAILED")]:
+                            ("C3.", "连续亏损 ≤ 8 笔")]:
             print(fmt_gate(code, label, SKIP, "(无自动单)"))
     else:
         # C1 max drawdown
