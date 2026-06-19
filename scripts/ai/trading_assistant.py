@@ -165,11 +165,28 @@ class TradingAssistant:
             return
         self._try_init_openai()
 
+    @staticmethod
+    def _resolve_deepseek_key() -> str:
+        """DeepSeek key 解析 — DB > env(跟 _resolve_openai_key 对称)。"""
+        try:
+            try:
+                from ai_config_manager import resolve_active_ai  # type: ignore[import-not-found]
+            except ImportError:
+                from scripts.ai_config_manager import resolve_active_ai  # type: ignore[import-not-found]
+            cfg = resolve_active_ai(expected_provider="deepseek")
+            if cfg.get("enabled") and cfg.get("api_key"):
+                return str(cfg["api_key"])
+        except Exception:
+            pass
+        # Fallback to env
+        if os.getenv("DEEPSEEK_ENABLED", "false").lower() in ("1", "true"):
+            return os.getenv("DEEPSEEK_API_KEY", "").strip()
+        return ""
+
     def _try_init_deepseek(self) -> bool:
         """检测 DeepSeek 配置 → 初始化兼容 client。返回 True 表示走 DeepSeek。"""
-        enabled = os.getenv("DEEPSEEK_ENABLED", "false").lower() in ("1", "true")
-        key = os.getenv("DEEPSEEK_API_KEY", "").strip()
-        if not (enabled and key):
+        key = self._resolve_deepseek_key()
+        if not key:
             return False
         try:
             import openai as _openai
@@ -177,6 +194,7 @@ class TradingAssistant:
                 api_key=key,
                 base_url=os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1"),
             )
+            self._active_key = key   # 记下当前用的 key,后面对比变化
             self.provider = "deepseek"
             self.chat_model = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
             self._ready = True  # DeepSeek 不用 Assistants,初始化即就绪
@@ -185,6 +203,31 @@ class TradingAssistant:
         except ImportError:
             return False
 
+    def maybe_reload_key(self) -> bool:
+        """检查 DB 里的 key 跟当前 client 用的是否一致,不一致就 rebuild。
+        每次 decide() 前调一次,免得 Settings 改 key 后还要手动重启 collector。
+        返回 True 表示重新初始化了。"""
+        if self.provider == "deepseek":
+            current = self._resolve_deepseek_key()
+            if current and current != getattr(self, "_active_key", None):
+                print(f"[AI] DeepSeek key 已变化,重建 client")
+                self.client = None
+                self._ready = False
+                return self._try_init_deepseek()
+        elif self.provider == "openai":
+            current = self._resolve_openai_key() or ""
+            if current and current != getattr(self, "_active_key", None):
+                print(f"[AI] OpenAI key 已变化,重建 client")
+                try:
+                    import openai as _openai
+                    self.client = _openai.AsyncOpenAI(api_key=current)
+                    self._active_key = current
+                    print(f"[AI] OpenAI client 已重建")
+                    return True
+                except Exception as e:
+                    print(f"[AI] OpenAI client 重建失败: {e}")
+        return False
+
     def _try_init_openai(self) -> None:
         api_key = self._resolve_openai_key()
         if not api_key:
@@ -192,6 +235,7 @@ class TradingAssistant:
         try:
             import openai as _openai
             self.client = _openai.AsyncOpenAI(api_key=api_key)
+            self._active_key = api_key
             self.provider = "openai"
             self.assistant_id = os.getenv("OPENAI_ASSISTANT_ID")
             self.vector_store_id = os.getenv("OPENAI_VECTOR_STORE_ID")
@@ -282,6 +326,13 @@ class TradingAssistant:
         V5 二次审查 — 根据 provider 走 Assistants(OpenAI+assistant_id)
         或 chat completions(DeepSeek / OpenAI 无 assistant_id)。
         """
+        # 长跑进程的 hot-reload:DB 里 key 变了就重建 client (SettingsPage 改 key
+        # 后免重启 collector)。DB 读 < 5ms,可忽略。
+        try:
+            self.maybe_reload_key()
+        except Exception as e:
+            print(f"[AI] maybe_reload_key 异常(忽略,继续用现有 client): {e}")
+
         from v5_types import AIResult
 
         if strategy_id != "v5_manual":
