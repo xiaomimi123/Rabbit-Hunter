@@ -300,6 +300,10 @@ _PAPER_TRADES_V5_COLUMNS = [
     ("entry_atr_15m",       "REAL"),
     ("ai_decision_id",      "INTEGER"),
     ("source_score_id",     "INTEGER"),
+    # M5 Chandelier 移动止损(让利润奔跑)— 文档 §7
+    ("highest_seen",        "REAL"),       # LONG: 持仓期间最高价
+    ("lowest_seen",         "REAL"),       # SHORT: 持仓期间最低价
+    ("trailing_sl",         "REAL"),       # 移动止损价(从不放宽)
 ]
 
 # paper_trades 完整建表 SQL（供 init_local_db 在新 DB 上建表用）

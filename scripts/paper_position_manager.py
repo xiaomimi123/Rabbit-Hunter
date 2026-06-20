@@ -239,10 +239,28 @@ class PaperPositionManager:
         try:
             cur = conn.execute(
                 "SELECT id, symbol, side, entry_price, target_close_at, "
-                "extension_count, entry_time, stop_loss, take_profit, strategy_id "
+                "extension_count, entry_time, stop_loss, take_profit, strategy_id, "
+                "entry_atr_15m, highest_seen, lowest_seen, trailing_sl "
                 "FROM paper_trades WHERE status='OPEN'")
             cols = [c[0] for c in cur.description]
             return [dict(zip(cols, row)) for row in cur.fetchall()]
+        finally:
+            conn.close()
+
+    def update_trailing_state(
+        self, position_id: int, *,
+        highest_seen: float, lowest_seen: float, trailing_sl: float,
+    ) -> None:
+        """M5 Chandelier:更新 trailing 三件套。仅 SQLite,best-effort。"""
+        conn = self._conn()
+        try:
+            conn.execute(
+                "UPDATE paper_trades SET highest_seen=?, lowest_seen=?, trailing_sl=?, "
+                "updated_at=? WHERE id=?",
+                (highest_seen, lowest_seen, trailing_sl,
+                 _utcnow().isoformat(), position_id),
+            )
+            conn.commit()
         finally:
             conn.close()
 

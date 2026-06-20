@@ -78,16 +78,28 @@ def _signal_reversed(side: str, rsi: float, hist: float, hist_prev: float) -> bo
 def check_exit_triggers(position: dict, market: dict) -> Optional[dict]:
     """检查所有退出条件。返回 CloseIntent dict 或 None(不平)。
 
-    优先级:SL → TP → soft target → 指标反转。
+    优先级:SL(含 trailing) → TP → soft target → 指标反转。
     """
+    from scripts.chandelier import effective_sl_price
+
     side = position["side"]
     current_price = market["price"]
-    sl_price = position["stop_loss"]
+    static_sl = position["stop_loss"]
     tp_price = position["take_profit"]
 
+    # M5 Chandelier:trailing_sl 比 static 更近时,用 trailing。
+    sl_price = effective_sl_price(
+        side=side,
+        static_sl=static_sl,
+        trailing_sl=position.get("trailing_sl"),
+    )
+
     if _sl_hit(side, current_price, sl_price):
+        exit_reason = "TRAILING_SL_HIT" if (
+            position.get("trailing_sl") is not None and sl_price != static_sl
+        ) else "SL_HIT"
         return {"position_id": position["id"], "exit_price": current_price,
-                "exit_reason": "SL_HIT"}
+                "exit_reason": exit_reason}
 
     if _tp_hit(side, current_price, tp_price):
         return {"position_id": position["id"], "exit_price": current_price,
@@ -153,6 +165,32 @@ class V5PositionMonitor:
             except Exception as e:
                 print(f"[V5PositionMonitor] {position['symbol']} 拉指标失败: {e}")
                 continue
+
+            # M5 Chandelier:每 tick 更新 highest/lowest/trailing,只收紧不放宽。
+            try:
+                from scripts.chandelier import update_chandelier
+                from scripts.v5_params import get_param
+                k = float(get_param("v5_sl_atr_mult", 1.5, float))
+                new_high, new_low, new_trail = update_chandelier(
+                    side=position["side"],
+                    current_price=float(market["price"]),
+                    entry_atr=float(position.get("entry_atr_15m") or 0),
+                    highest_seen=position.get("highest_seen"),
+                    lowest_seen=position.get("lowest_seen"),
+                    trailing_sl=position.get("trailing_sl"),
+                    k=k,
+                )
+                if hasattr(pm, "update_trailing_state"):
+                    pm.update_trailing_state(
+                        position["id"], highest_seen=new_high,
+                        lowest_seen=new_low, trailing_sl=new_trail,
+                    )
+                # 注入到当前 position dict 让本轮的 check_exit_triggers 看到最新值
+                position["highest_seen"] = new_high
+                position["lowest_seen"] = new_low
+                position["trailing_sl"] = new_trail
+            except Exception as e:
+                print(f"[V5PositionMonitor] {position['symbol']} chandelier 更新失败: {e}")
 
             intent = check_exit_triggers(position, market)
             if not intent:
