@@ -16,6 +16,11 @@ from typing import List, Optional
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+try:
+    from scripts.http_retry import with_retries          # type: ignore[import-not-found]
+except ImportError:
+    from http_retry import with_retries                   # type: ignore[import-not-found]
+
 
 OKX_BASE = "https://www.okx.com/api/v5/public"
 
@@ -75,31 +80,31 @@ def parse_funding_response(raw: dict) -> List[dict]:
     return out
 
 
-def fetch_funding_history(symbol: str, *, limit: int = 100,
-                           timeout_s: float = 10.0) -> List[dict]:
-    """拉一个 symbol 的最近 N 个 funding 历史。
-
-    Returns parsed rows ready for DB. Raises ValueError on OKX error,
-    URLError on network failure.
-    """
-    instid = symbol_to_okx_instid(symbol)
-    params = urlencode({"instId": instid, "limit": str(limit)})
-    url = f"{OKX_BASE}/funding-rate-history?{params}"
+def _do_get(url: str, timeout_s: float) -> dict:
+    """One HTTP GET — JSON-decoded result. Retried by caller via with_retries."""
     req = Request(url, headers={"User-Agent": "rabbit-hunter-v6/1.0"})
     with urlopen(req, timeout=timeout_s) as resp:
         body = resp.read().decode("utf-8")
-    raw = json.loads(body)
+    return json.loads(body)
+
+
+def fetch_funding_history(symbol: str, *, limit: int = 100,
+                           timeout_s: float = 10.0) -> List[dict]:
+    """拉一个 symbol 的最近 N 个 funding 历史。带 5 次指数退避重试。"""
+    instid = symbol_to_okx_instid(symbol)
+    params = urlencode({"instId": instid, "limit": str(limit)})
+    url = f"{OKX_BASE}/funding-rate-history?{params}"
+    raw = with_retries(lambda: _do_get(url, timeout_s),
+                       description=f"funding history {symbol}")
     return parse_funding_response(raw)
 
 
 def fetch_current_funding(symbol: str, *, timeout_s: float = 10.0) -> Optional[dict]:
-    """拉一个 symbol 的当前(未结算)funding rate。返回单条 dict 或 None。"""
+    """拉一个 symbol 的当前(未结算)funding rate。带重试。返回单条 dict 或 None。"""
     instid = symbol_to_okx_instid(symbol)
     params = urlencode({"instId": instid})
     url = f"{OKX_BASE}/funding-rate?{params}"
-    req = Request(url, headers={"User-Agent": "rabbit-hunter-v6/1.0"})
-    with urlopen(req, timeout=timeout_s) as resp:
-        body = resp.read().decode("utf-8")
-    raw = json.loads(body)
+    raw = with_retries(lambda: _do_get(url, timeout_s),
+                       description=f"funding current {symbol}")
     rows = parse_funding_response(raw)
     return rows[0] if rows else None

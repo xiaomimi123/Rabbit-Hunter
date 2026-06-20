@@ -35,6 +35,16 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
+try:
+    from scripts.http_retry import with_retries          # type: ignore[import-not-found]
+except ImportError:
+    try:
+        from http_retry import with_retries               # type: ignore[import-not-found]
+    except ImportError:
+        # Fallback no-op when running outside repo context
+        def with_retries(fn, **kw):                       # type: ignore[no-redef]
+            return fn()
+
 
 # 全局 Session — Docker Desktop on macOS 经常对 fapi.binance.com / www.okx.com 出
 # 间歇 SSL EOF / Read timeout。共享 Session + Retry 让单次失败自动重试 3 次，
@@ -350,49 +360,57 @@ def fetch_klines_ohlcv(binance_symbol: str, interval: str, limit: int) -> list:
 def _okx_klines(binance_symbol: str, interval: str, limit: int) -> list:
     inst_id = binance_symbol_to_okx_inst(binance_symbol)
     okx_bar = to_okx_interval(interval)
-    try:
+
+    def _do():
         r = _SESSION.get(
             f"{OKX_BASE}/api/v5/market/candles",
             params={"instId": inst_id, "bar": okx_bar, "limit": min(int(limit), 300)},
             timeout=10,
         )
         r.raise_for_status()
-        p = r.json()
-        if p.get("code") != "0":
-            return []
-        bars = []
-        # OKX 最新在前 → reversed 后变成 oldest→newest，对齐 Binance 习惯
-        for k in reversed(p.get("data", []) or []):
-            try:
-                bars.append({
-                    "open":   float(k[1]),
-                    "high":   float(k[2]),
-                    "low":    float(k[3]),
-                    "close":  float(k[4]),
-                    "volume": float(k[5]),
-                })
-            except (TypeError, ValueError, IndexError):
-                continue
-        return bars
+        return r.json()
+
+    try:
+        p = with_retries(_do, description=f"okx klines {inst_id} {interval}")
     except Exception:
         return []
+    if p.get("code") != "0":
+        return []
+    bars = []
+    # OKX 最新在前 → reversed 后变成 oldest→newest，对齐 Binance 习惯
+    for k in reversed(p.get("data", []) or []):
+        try:
+            bars.append({
+                "open":   float(k[1]),
+                "high":   float(k[2]),
+                "low":    float(k[3]),
+                "close":  float(k[4]),
+                "volume": float(k[5]),
+            })
+        except (TypeError, ValueError, IndexError):
+            continue
+    return bars
 
 
 def _binance_klines(binance_symbol: str, interval: str, limit: int) -> list:
-    try:
+    def _do():
         r = _SESSION.get(
             f"{BINANCE_BASE}/fapi/v1/klines",
             params={"symbol": binance_symbol, "interval": interval, "limit": limit},
             timeout=10,
         )
         r.raise_for_status()
-        return [
-            {"open": float(k[1]), "high": float(k[2]), "low": float(k[3]),
-             "close": float(k[4]), "volume": float(k[5])}
-            for k in r.json()
-        ]
+        return r.json()
+
+    try:
+        data = with_retries(_do, description=f"binance klines {binance_symbol} {interval}")
     except Exception:
         return []
+    return [
+        {"open": float(k[1]), "high": float(k[2]), "low": float(k[3]),
+         "close": float(k[4]), "volume": float(k[5])}
+        for k in data
+    ]
 
 
 def fetch_klines_full(binance_symbol: str, interval: str, limit: int):
