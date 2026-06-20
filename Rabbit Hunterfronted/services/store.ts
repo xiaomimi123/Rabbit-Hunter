@@ -5,6 +5,7 @@ interface UIState {
   sidebarCollapsed: boolean;
   expandedSignalIds: Set<number>;
   selectedSymbolForChart: string | null;
+  selectedSymbol: string;
   recentWsEvents: WsEvent[];
   systemMode: Mode | null;
   effectiveAiProvider: AIProvider | null;
@@ -13,7 +14,8 @@ interface UIState {
 
   toggleSidebar: () => void;
   toggleSignalExpanded: (id: number) => void;
-  setSelectedSymbol: (sym: string | null) => void;
+  setSelectedSymbolForChart: (sym: string | null) => void;
+  setSelectedSymbol: (sym: string) => void;
   pushWsEvent: (ev: WsEvent) => void;
   popWsEvent: () => void;
   setSystemMode: (m: Mode) => void;
@@ -27,6 +29,7 @@ export const useUIStore = create<UIState>((set) => ({
   sidebarCollapsed: false,
   expandedSignalIds: new Set(),
   selectedSymbolForChart: null,
+  selectedSymbol: 'BTC/USDT',
   recentWsEvents: [],
   systemMode: null,
   effectiveAiProvider: null,
@@ -43,7 +46,8 @@ export const useUIStore = create<UIState>((set) => ({
       return { expandedSignalIds: next };
     }),
 
-  setSelectedSymbol: (sym) => set({ selectedSymbolForChart: sym }),
+  setSelectedSymbolForChart: (sym) => set({ selectedSymbolForChart: sym }),
+  setSelectedSymbol: (sym) => set({ selectedSymbol: sym }),
 
   pushWsEvent: (ev) =>
     set((s) => {

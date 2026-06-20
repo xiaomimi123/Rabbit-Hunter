@@ -1,6 +1,6 @@
 import { Outlet } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
-import { TopBar } from './TopBar';
+import { HeaderBar } from './HeaderBar';
 import { ErrorBoundary } from '../primitives/ErrorBoundary';
 import { useV5WebSocket } from '../../hooks/useV5WebSocket';
 
@@ -13,14 +13,16 @@ function wsUrl(): string {
 export function AppShell() {
   const status = useV5WebSocket(wsUrl());
   return (
-    <div className="grid grid-cols-[240px_1fr] min-h-screen bg-zinc-950 text-zinc-100">
-      <Sidebar />
-      <div className="flex flex-col min-w-0">
-        <TopBar wsConnected={status.connected} />
-        <main className="flex-1 overflow-y-auto">
-          <ErrorBoundary>
-            <Outlet />
-          </ErrorBoundary>
+    <div className="min-h-screen bg-zinc-950 text-zinc-100">
+      <div className="grid min-h-screen lg:grid-cols-[240px_1fr]">
+        <Sidebar />
+        <main className="min-w-0">
+          <HeaderBar wsConnected={status.connected} />
+          <div className="p-6">
+            <ErrorBoundary>
+              <Outlet />
+            </ErrorBoundary>
+          </div>
         </main>
       </div>
     </div>

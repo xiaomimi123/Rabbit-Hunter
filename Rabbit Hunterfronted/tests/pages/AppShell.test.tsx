@@ -24,23 +24,23 @@ describe('AppShell', () => {
   });
   afterEach(() => vi.unstubAllGlobals());
 
-  it('renders sidebar groups + topbar', () => {
+  it('renders sidebar 9 nav items + outlet content', () => {
     const qc = new QueryClient();
     render(
       <QueryClientProvider client={qc}>
-        <MemoryRouter initialEntries={['/v5/signals']}>
+        <MemoryRouter initialEntries={['/dashboard']}>
           <Routes>
-            <Route path="/v5" element={<AppShell />}>
-              <Route path="signals" element={<div>signals-page</div>} />
+            <Route element={<AppShell />}>
+              <Route path="/dashboard" element={<div>dashboard-page</div>} />
             </Route>
           </Routes>
         </MemoryRouter>
       </QueryClientProvider>
     );
     expect(screen.getByText(/猎兔者/)).toBeInTheDocument();
-    expect(screen.getByText('交易')).toBeInTheDocument();
-    expect(screen.getByText('智能')).toBeInTheDocument();
-    expect(screen.getByText('系统')).toBeInTheDocument();
-    expect(screen.getByText('signals-page')).toBeInTheDocument();
+    expect(screen.getByText('仪表盘')).toBeInTheDocument();
+    expect(screen.getByText('投资组合')).toBeInTheDocument();
+    expect(screen.getByText('监控审计')).toBeInTheDocument();
+    expect(screen.getByText('dashboard-page')).toBeInTheDocument();
   });
 });
