@@ -23,8 +23,8 @@ describe('V5DashboardPage', () => {
         <MemoryRouter><V5DashboardPage /></MemoryRouter>
       </QueryClientProvider>
     );
-    await waitFor(() => expect(screen.getByText('胜率')).toBeInTheDocument());
-    expect(screen.getByText('累计 PnL')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText(/胜率/)).toBeInTheDocument());
+    expect(screen.getByText('累计盈亏')).toBeInTheDocument();
     expect(screen.getByText('平均持仓')).toBeInTheDocument();
     expect(screen.getByText('活仓数')).toBeInTheDocument();
   });

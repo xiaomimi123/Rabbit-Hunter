@@ -7,9 +7,9 @@
 }
 
 html, body {
-  background-color: #0F1115;
-  color: #F1ECDD;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+  background-color: #09090b;             /* zinc-950 — 跟参考样板对齐 */
+  color: #f4f4f5;                        /* zinc-100 */
+  font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
   font-feature-settings: "tnum" on, "lnum" on;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;

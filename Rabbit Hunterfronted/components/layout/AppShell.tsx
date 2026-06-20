@@ -13,7 +13,7 @@ function wsUrl(): string {
 export function AppShell() {
   const status = useV5WebSocket(wsUrl());
   return (
-    <div className="grid grid-cols-[232px_1fr] min-h-screen bg-bg-base text-ivory">
+    <div className="grid grid-cols-[240px_1fr] min-h-screen bg-zinc-950 text-zinc-100">
       <Sidebar />
       <div className="flex flex-col min-w-0">
         <TopBar wsConnected={status.connected} />
