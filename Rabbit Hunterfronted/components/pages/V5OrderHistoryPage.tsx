@@ -1,17 +1,22 @@
 import { ReactNode, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { LineChart as LineChartIcon, TrendingUp, TrendingDown, AlertCircle } from 'lucide-react';
 import { useV5OrderHistory } from '../../hooks/api/useV5OrderHistory';
 import { LoadingSkeleton } from '../primitives/LoadingSkeleton';
-import { Aperture } from '../primitives/Aperture';
 import { Term } from '../shared/Term';
+import { SectionTitle } from '../primitives-v3/SectionTitle';
+import { Card } from '../primitives-v3/Card';
+import { StatusPill } from '../primitives-v3/StatusPill';
+import { cn } from '../primitives-v3/cn';
 import type { V5Position } from '../../types';
 
-const EXIT_BADGE: Record<string, string> = {
-  TP_HIT:         'text-sage border-sage bg-sage-soft',
-  SL_HIT:         'text-oxblood border-oxblood bg-oxblood-soft',
-  SOFT_TARGET:    'text-brass border-brass bg-brass-soft',
-  SIGNAL_REVERSE: 'text-brass border-brass bg-brass-soft',
-  MANUAL_USER:    'text-ink border-ink bg-ink-soft',
+type ExitTone = 'emerald' | 'rose' | 'amber' | 'indigo' | 'zinc';
+const EXIT_TONE: Record<string, ExitTone> = {
+  TP_HIT: 'emerald',
+  SL_HIT: 'rose',
+  SOFT_TARGET: 'amber',
+  SIGNAL_REVERSE: 'amber',
+  MANUAL_USER: 'indigo',
 };
 
 export function V5OrderHistoryPage() {
@@ -26,8 +31,11 @@ export function V5OrderHistoryPage() {
   }, []);
 
   return (
-    <div className="px-8 py-7 pb-16 flex flex-col gap-7 max-w-[1400px]">
-      <PageHead now={now} count={rows.length} />
+    <div className="mx-auto w-full max-w-7xl px-6 py-6 space-y-6">
+      <SectionTitle
+        title="订单历史"
+        subtitle={`已平仓订单 · ${rows.length} 条记录 · ${now.toLocaleTimeString('zh-CN', { hour12: false })}`}
+      />
 
       {q.isLoading && <LoadingSkeleton message="拉取订单历史…" />}
       {!q.isLoading && rows.length === 0 && (
@@ -35,53 +43,37 @@ export function V5OrderHistoryPage() {
       )}
 
       {rows.length > 0 && (
-        <table className="w-full text-[0.78rem] border-collapse">
-          <thead>
-            <tr>
-              <Th>平仓时间</Th>
-              <Th>币种</Th>
-              <Th>方向</Th>
-              <Th align="right">入场</Th>
-              <Th align="right">出场</Th>
-              <Th>原因</Th>
-              <Th align="right"><Term k="PnL">盈亏 $</Term></Th>
-              <Th align="right">盈亏%</Th>
-              <Th align="right">持仓</Th>
-              <Th></Th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map(p => (
-              <Row
-                key={p.id}
-                p={p}
-                onChart={() => navigate(`/v5/chart/${p.symbol}?eventId=${p.id}`)}
-              />
-            ))}
-          </tbody>
-        </table>
+        <Card className="!p-0" bodyClassName="!p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-zinc-800 text-left text-[11px] uppercase tracking-wider text-zinc-500">
+                  <th className="py-3 pl-5 pr-2 font-medium">平仓时间</th>
+                  <th className="py-3 px-2 font-medium">币种</th>
+                  <th className="py-3 px-2 font-medium">方向</th>
+                  <th className="py-3 px-2 font-medium text-right">入场</th>
+                  <th className="py-3 px-2 font-medium text-right">出场</th>
+                  <th className="py-3 px-2 font-medium">原因</th>
+                  <th className="py-3 px-2 font-medium text-right"><Term k="PnL">盈亏 $</Term></th>
+                  <th className="py-3 px-2 font-medium text-right">盈亏%</th>
+                  <th className="py-3 px-2 font-medium text-right">持仓</th>
+                  <th className="py-3 pl-2 pr-5"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-800/60">
+                {rows.map(p => (
+                  <Row
+                    key={p.id}
+                    p={p}
+                    onChart={() => navigate(`/v5/chart/${p.symbol}?eventId=${p.id}`)}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
       )}
     </div>
-  );
-}
-
-function PageHead({ now, count }: { now: Date; count: number }) {
-  const t = now.toLocaleTimeString('zh-CN', { hour12: false });
-  return (
-    <header className="grid grid-cols-[1fr_auto] items-end gap-6 pb-4 border-b border-hairline-strong">
-      <div className="flex items-center gap-4">
-        <Aperture size={34} rotate className="text-brass" />
-        <div>
-          <h1 className="font-display text-[2.6rem] leading-none tracking-tight">订单历史</h1>
-          <p className="font-cn text-ivory-40 text-[0.85rem] mt-1.5">已平仓订单 · {count} 条记录</p>
-        </div>
-      </div>
-      <div className="text-right font-mono text-[0.72rem] text-ivory-40 leading-relaxed">
-        <div className="tracking-wider2 uppercase">观测时间</div>
-        <div><strong className="text-ivory font-medium">{t}</strong> · UTC+8</div>
-        <div>refresh · <strong className="text-ivory font-medium">30s</strong></div>
-      </div>
-    </header>
   );
 }
 
@@ -91,64 +83,64 @@ function Row({ p, onChart }: { p: V5Position; onChart: () => void }) {
   const mins = p.entry_time && p.exit_time
     ? Math.round((new Date(p.exit_time).getTime() - new Date(p.entry_time).getTime()) / 60_000)
     : 0;
-  const sideCls = p.side === 'LONG'
-    ? 'text-sage border-sage bg-sage-soft'
-    : 'text-oxblood border-oxblood bg-oxblood-soft';
-  const exitCls = p.exit_reason ? (EXIT_BADGE[p.exit_reason] || 'text-ivory-70 border-hairline-strong') : 'text-ivory-40 border-hairline';
-  const pnlPctCls = pnlPct >= 0 ? 'text-sage' : 'text-oxblood';
-  const pnlUsdCls = pnlUsd >= 0 ? 'text-sage' : 'text-oxblood';
+  const sideTone = p.side === 'LONG' ? 'emerald' : 'rose';
+  const exitTone = p.exit_reason ? (EXIT_TONE[p.exit_reason] || 'zinc') : 'zinc';
+  const pnlCls = pnlPct >= 0 ? 'text-emerald-300' : 'text-rose-300';
+  const pnlUsdCls = pnlUsd >= 0 ? 'text-emerald-300' : 'text-rose-300';
 
   return (
-    <tr className="border-b border-hairline hover:bg-brass/[0.04]">
-      <Td className="text-ivory-70">{p.exit_time ? new Date(p.exit_time).toLocaleString('zh-CN', { hour12: false }) : '—'}</Td>
-      <Td className="text-ivory font-medium">{p.symbol}</Td>
-      <Td>
-        <span className={`inline-block font-mono text-[0.7rem] tracking-wider2 px-2 py-0.5 border ${sideCls}`}>{p.side}</span>
-      </Td>
-      <Td align="right">{p.entry_price?.toFixed(4) ?? '—'}</Td>
-      <Td align="right">{p.exit_price?.toFixed(4) ?? '—'}</Td>
-      <Td>
-        <span className={`inline-block font-mono text-[0.66rem] tracking-wider2 px-2 py-0.5 border uppercase ${exitCls}`}>
-          {p.exit_reason ?? '—'}
-        </span>
-      </Td>
-      <Td align="right" className={pnlUsdCls}>{pnlUsd >= 0 ? '+' : ''}{pnlUsd.toFixed(2)}</Td>
-      <Td align="right" className={pnlPctCls}>{pnlPct >= 0 ? '+' : ''}{pnlPct.toFixed(2)}%</Td>
-      <Td align="right" className="text-ivory-70">{mins}</Td>
-      <Td>
+    <tr className={cn(
+      'hover:bg-zinc-900/40 transition',
+      pnlPct >= 0 && 'bg-emerald-500/[0.02]',
+      pnlPct < 0 && 'bg-rose-500/[0.02]',
+    )}>
+      <td className="py-2.5 pl-5 pr-2 font-mono text-xs text-zinc-400 whitespace-nowrap">
+        {p.exit_time ? new Date(p.exit_time).toLocaleString('zh-CN', { hour12: false }) : '—'}
+      </td>
+      <td className="py-2.5 px-2 font-mono font-medium text-zinc-100">{p.symbol}</td>
+      <td className="py-2.5 px-2">
+        <StatusPill tone={sideTone} icon={p.side === 'LONG' ? <TrendingUp className="h-2.5 w-2.5" /> : <TrendingDown className="h-2.5 w-2.5" />}>
+          {p.side}
+        </StatusPill>
+      </td>
+      <td className="py-2.5 px-2 text-right font-mono tabular-nums text-zinc-300">{p.entry_price?.toFixed(4) ?? '—'}</td>
+      <td className="py-2.5 px-2 text-right font-mono tabular-nums text-zinc-300">{p.exit_price?.toFixed(4) ?? '—'}</td>
+      <td className="py-2.5 px-2">
+        {p.exit_reason
+          ? <StatusPill tone={exitTone}>{p.exit_reason}</StatusPill>
+          : <span className="text-zinc-600 text-xs">—</span>
+        }
+      </td>
+      <td className={cn('py-2.5 px-2 text-right font-mono tabular-nums', pnlUsdCls)}>
+        {pnlUsd >= 0 ? '+' : ''}{pnlUsd.toFixed(2)}
+      </td>
+      <td className={cn('py-2.5 px-2 text-right font-mono tabular-nums', pnlCls)}>
+        {pnlPct >= 0 ? '+' : ''}{pnlPct.toFixed(2)}%
+      </td>
+      <td className="py-2.5 px-2 text-right font-mono tabular-nums text-zinc-400">{mins}min</td>
+      <td className="py-2.5 pl-2 pr-5">
         <button
           type="button"
           onClick={onChart}
-          className="font-mono text-[0.7rem] text-brass hover:underline"
+          title="查看图表"
+          className="rounded-lg border border-zinc-700 p-1.5 text-zinc-400 transition hover:border-indigo-500 hover:text-indigo-300"
         >
-          → chart
+          <LineChartIcon className="h-3.5 w-3.5" />
         </button>
-      </Td>
+      </td>
     </tr>
   );
 }
 
 function EmptyState({ children }: { children: ReactNode }) {
   return (
-    <div className="py-14 text-center font-body italic text-ivory-40">
-      <Aperture size={42} rotate="slow" className="text-ivory-25 mx-auto block mb-3" />
-      <span className="opacity-60 mr-2">▌</span>{children}
-    </div>
-  );
-}
-
-function Th({ children, align = 'left' }: { children: ReactNode; align?: 'left' | 'right' }) {
-  return (
-    <th className={`text-${align} font-mono text-[0.62rem] tracking-wider3 text-ivory-40 uppercase font-normal px-3.5 py-2.5 border-b border-hairline`}>
-      {children}
-    </th>
-  );
-}
-
-function Td({ children, align = 'left', className = '' }: { children: ReactNode; align?: 'left' | 'right'; className?: string }) {
-  return (
-    <td className={`px-3.5 py-2.5 font-mono text-[0.78rem] tabular-nums ${align === 'right' ? 'text-right' : ''} ${className}`}>
-      {children}
-    </td>
+    <Card>
+      <div className="flex flex-col items-center justify-center py-10 text-center">
+        <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-zinc-800">
+          <AlertCircle className="h-5 w-5 text-zinc-500" />
+        </div>
+        <div className="text-sm text-zinc-400">{children}</div>
+      </div>
+    </Card>
   );
 }

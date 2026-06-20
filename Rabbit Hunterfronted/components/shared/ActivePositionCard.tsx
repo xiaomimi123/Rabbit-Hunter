@@ -1,5 +1,8 @@
+import {
+  TrendingUp, TrendingDown, LineChart as LineChartIcon, X, Clock, Layers,
+} from 'lucide-react';
 import type { V5Position } from '../../types';
-import { Aperture } from '../primitives/Aperture';
+import { cn, cardClassName } from '../primitives-v3/cn';
 
 interface Props {
   position: V5Position;
@@ -28,66 +31,82 @@ export function ActivePositionCard({ position, onClose, onChart }: Props) {
   const isProfit = pnlPct > 0;
   const isShort = position.side === 'SHORT';
   const mins = position.entry_time ? holdingMinutes(position.entry_time) : 0;
-
-  // current price estimation: entry * (1 + pnl_pct%) for LONG; entry * (1 - pnl_pct%) for SHORT
   const cur = position.entry_price != null
     ? position.entry_price * (isShort ? 1 - pnlPct / 100 : 1 + pnlPct / 100)
     : null;
 
-  const accentBorder = isShort ? 'before:bg-oxblood' : 'before:bg-sage';
   const sideBadge = isShort
-    ? 'text-oxblood border-oxblood bg-oxblood-soft'
-    : 'text-sage border-sage bg-sage-soft';
+    ? 'bg-rose-500/15 text-rose-300 border-rose-500/30'
+    : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30';
+  const pnlTone = isProfit ? 'text-emerald-300' : pnlPct < 0 ? 'text-rose-300' : 'text-zinc-300';
+  const accent = isShort ? 'before:bg-rose-500/60' : 'before:bg-emerald-500/60';
 
   return (
-    <article className={`grid grid-cols-[1fr_220px] max-[1100px]:grid-cols-1 bg-bg-base border border-hairline relative before:content-[''] before:absolute before:left-0 before:top-0 before:bottom-0 before:w-[3px] ${accentBorder}`}>
-      <div className="p-5 pl-7">
-        {/* head */}
-        <div className="flex items-baseline gap-3.5 pb-3.5 border-b border-hairline mb-4.5">
-          <h3 className="font-display text-[1.9rem] leading-none tracking-tight text-ivory">{position.symbol}</h3>
-          <span className={`font-mono text-[0.7rem] tracking-wider2 px-2.5 py-0.5 border ${sideBadge}`}>
-            {position.side}
-          </span>
-          <span className="font-mono text-[0.85rem] text-ivory-70 tracking-wide">×{position.leverage}</span>
-          <span className="font-mono text-[0.7rem] text-ivory-40 tracking-wider2 px-2 py-0.5 border border-dashed border-hairline-strong">
-            {position.strategy_id || 'v5_rsi_macd'}
-          </span>
-          <Aperture size={18} rotate="slow" className="ml-auto text-brass opacity-60" />
+    <article className={cn(
+      cardClassName(),
+      'relative overflow-hidden !p-0',
+      'before:absolute before:left-0 before:top-0 before:bottom-0 before:w-1',
+      accent,
+    )}>
+      <div className="grid grid-cols-1 xl:grid-cols-[1fr_220px]">
+        <div className="p-5 pl-7">
+          {/* head */}
+          <div className="flex flex-wrap items-center gap-3 pb-4 border-b border-zinc-800">
+            <h3 className="font-mono text-2xl font-semibold tracking-tight text-zinc-50">{position.symbol}</h3>
+            <span className={cn('inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-medium uppercase tracking-wide', sideBadge)}>
+              {isShort ? <TrendingDown className="h-3 w-3" /> : <TrendingUp className="h-3 w-3" />}
+              {position.side}
+            </span>
+            <span className="font-mono text-sm text-zinc-400">×{position.leverage}</span>
+            <span className="rounded-full border border-zinc-700 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wide text-zinc-500">
+              {position.strategy_id || 'v5_rsi_macd'}
+            </span>
+            <div className="ml-auto flex items-center gap-3 text-[11px] text-zinc-500">
+              <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> {mins}min</span>
+              <span className="flex items-center gap-1"><Layers className="h-3 w-3" /> {position.extension_count ?? 0}/3</span>
+            </div>
+          </div>
+
+          {/* price grid */}
+          <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <Cell label="入场" value={fmtPrice(position.entry_price)} sub={position.entry_time?.slice(11, 19)} />
+            <Cell
+              label="当前"
+              value={fmtPrice(cur)}
+              sub={pctChange(position.entry_price, cur)}
+              subClass={isProfit ? 'text-emerald-300' : pnlPct < 0 ? 'text-rose-300' : ''}
+            />
+            <Cell label="止损" value={fmtPrice(position.sl_price)} valueClass="text-rose-300" sub={pctChange(position.entry_price, position.sl_price)} />
+            <Cell label="止盈" value={fmtPrice(position.tp_price)} valueClass="text-emerald-300" sub={pctChange(position.entry_price, position.tp_price)} />
+          </div>
+
+          {/* PnL */}
+          <div className="mt-5 flex flex-wrap items-baseline gap-x-6 gap-y-2 border-t border-zinc-800 pt-4">
+            <div className={cn('font-mono text-4xl font-semibold tracking-tight tabular-nums', pnlTone)}>
+              {pnlPct >= 0 ? '+' : ''}{pnlPct.toFixed(2)}%
+            </div>
+            <div className={cn('font-mono text-base tabular-nums', pnlTone)}>
+              {pnlUsdt >= 0 ? '+' : ''}{pnlUsdt.toFixed(2)} USDT
+            </div>
+          </div>
         </div>
 
-        {/* price 4-col grid */}
-        <div className="grid grid-cols-4 max-[640px]:grid-cols-2 gap-px bg-hairline border border-hairline mb-4">
-          <Cell label="入场" value={fmtPrice(position.entry_price)} sub={position.entry_time?.slice(11, 19)} />
-          <Cell
-            label="当前"
-            value={fmtPrice(cur)}
-            sub={pctChange(position.entry_price, cur)}
-            subClass={isProfit ? 'text-sage' : pnlPct < 0 ? 'text-oxblood' : ''}
-          />
-          <Cell label="止损" value={fmtPrice(position.sl_price)} valueClass="text-oxblood" sub={pctChange(position.entry_price, position.sl_price)} />
-          <Cell label="止盈" value={fmtPrice(position.tp_price)} valueClass="text-sage" sub={pctChange(position.entry_price, position.tp_price)} />
-        </div>
-
-        {/* PnL row */}
-        <div className="flex items-baseline gap-6 pt-3.5 border-t border-hairline">
-          <div className={`font-display text-[2.4rem] leading-none tracking-tight ${isProfit ? 'text-sage' : pnlPct < 0 ? 'text-oxblood' : 'text-ivory-40'}`}>
-            {`${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(2)}%`}
-          </div>
-          <div className={`font-mono text-[1.05rem] ${isProfit ? 'text-sage' : pnlPct < 0 ? 'text-oxblood' : 'text-ivory-70'}`}>
-            {pnlUsdt >= 0 ? '+' : ''}{pnlUsdt.toFixed(2)} USDT
-          </div>
-          <div className="ml-auto text-right font-mono text-[0.75rem] text-ivory-40 leading-relaxed">
-            hold · <strong className="text-ivory font-medium">{mins} min</strong><br />
-            extensions · <strong className="text-ivory font-medium">{position.extension_count ?? 0} / 3</strong>
-          </div>
-        </div>
-      </div>
-
-      {/* side panel */}
-      <div className="p-5 border-l max-[1100px]:border-l-0 max-[1100px]:border-t border-hairline bg-white/[0.015] flex flex-col gap-3.5 justify-between">
-        <div className="flex flex-col gap-2.5">
-          <ActionButton onClick={() => onChart(position)} glyph="⊕" label="查看图表" />
-          <ActionButton onClick={() => onClose(position)} glyph="×" label="立即平仓" danger />
+        {/* side actions */}
+        <div className="flex flex-col gap-2 border-t border-zinc-800 bg-zinc-950/40 p-5 xl:border-l xl:border-t-0">
+          <button
+            type="button"
+            onClick={() => onChart(position)}
+            className="flex items-center gap-2 rounded-2xl border border-zinc-700 px-3 py-2 text-sm text-zinc-200 transition hover:border-indigo-500 hover:text-indigo-200"
+          >
+            <LineChartIcon className="h-4 w-4" /> 查看图表
+          </button>
+          <button
+            type="button"
+            onClick={() => onClose(position)}
+            className="flex items-center gap-2 rounded-2xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-300 transition hover:border-rose-500 hover:bg-rose-500/20"
+          >
+            <X className="h-4 w-4" /> 立即平仓
+          </button>
         </div>
       </div>
     </article>
@@ -96,23 +115,10 @@ export function ActivePositionCard({ position, onClose, onChart }: Props) {
 
 function Cell({ label, value, valueClass = '', sub, subClass = '' }: { label: string; value: string; valueClass?: string; sub?: string; subClass?: string }) {
   return (
-    <div className="bg-bg-base p-3.5">
-      <div className="font-mono text-[0.62rem] tracking-wider3 text-ivory-40 uppercase mb-1.5">{label}</div>
-      <div className={`font-mono text-[1.25rem] tracking-tight tabular-nums text-ivory ${valueClass}`}>{value}</div>
-      {sub && <div className={`font-mono text-[0.7rem] text-ivory-40 mt-1 ${subClass}`}>{sub}</div>}
+    <div className="rounded-2xl border border-zinc-800 bg-zinc-950/60 p-3">
+      <div className="text-[10px] uppercase tracking-wider text-zinc-500">{label}</div>
+      <div className={cn('mt-1 font-mono text-lg font-medium tabular-nums text-zinc-100', valueClass)}>{value}</div>
+      {sub && <div className={cn('mt-0.5 font-mono text-[11px] text-zinc-500', subClass)}>{sub}</div>}
     </div>
-  );
-}
-
-function ActionButton({ onClick, glyph, label, danger }: { onClick: () => void; glyph: string; label: string; danger?: boolean }) {
-  const baseCls = 'font-mono text-[0.78rem] tracking-wider px-4 py-2.5 border bg-transparent text-left flex items-center gap-2.5 uppercase transition-all duration-200';
-  const variantCls = danger
-    ? 'border-oxblood-soft text-oxblood hover:bg-oxblood-soft hover:border-oxblood'
-    : 'border-hairline-strong text-ivory hover:border-brass hover:text-brass';
-  return (
-    <button type="button" onClick={onClick} className={`${baseCls} ${variantCls}`}>
-      <span className={danger ? 'text-oxblood' : 'text-brass'}>{glyph}</span>
-      <span>{label}</span>
-    </button>
   );
 }

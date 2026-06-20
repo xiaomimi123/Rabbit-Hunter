@@ -1,8 +1,12 @@
 import { ReactNode, useEffect, useState } from 'react';
+import { CheckCircle, TrendingUp, TrendingDown, AlertCircle, Filter } from 'lucide-react';
 import { useV5Signals } from '../../hooks/api/useV5Signals';
 import { LoadingSkeleton } from '../primitives/LoadingSkeleton';
-import { Aperture } from '../primitives/Aperture';
 import { blockReasonZh } from './_signal_helpers';
+import { SectionTitle } from '../primitives-v3/SectionTitle';
+import { Card } from '../primitives-v3/Card';
+import { StatusPill } from '../primitives-v3/StatusPill';
+import { cn } from '../primitives-v3/cn';
 import type { V5Signal } from '../../types';
 
 const BLOCK_OPTIONS = [
@@ -28,133 +32,103 @@ export function V5SignalHistoryPage() {
   const rows = block === 'EXECUTED' ? all.filter(s => s.executed === 1) : all;
 
   return (
-    <div className="px-8 py-7 pb-16 flex flex-col gap-7 max-w-[1400px]">
-      <PageHead now={now} count={rows.length} />
+    <div className="mx-auto w-full max-w-7xl px-6 py-6 space-y-6">
+      <SectionTitle
+        title="信号历史"
+        subtitle={`扫描历史 · ${rows.length} 条记录 · ${now.toLocaleTimeString('zh-CN', { hour12: false })}`}
+      />
 
-      <FilterRow block={block} onBlockChange={setBlock} />
+      <Card className="!p-3" bodyClassName="flex flex-wrap items-center gap-2">
+        <Filter className="h-4 w-4 text-zinc-500 ml-1" />
+        <span className="text-xs text-zinc-500 mr-1">结果筛选</span>
+        {BLOCK_OPTIONS.map(o => (
+          <button
+            key={o.value}
+            type="button"
+            onClick={() => setBlock(o.value)}
+            className={cn(
+              'rounded-full px-3 py-1 text-xs transition',
+              block === o.value
+                ? 'bg-indigo-500/15 text-indigo-300 border border-indigo-500/30'
+                : 'text-zinc-400 hover:text-zinc-100 border border-transparent',
+            )}
+          >
+            {o.label}
+          </button>
+        ))}
+      </Card>
 
       {q.isLoading && <LoadingSkeleton message="拉取信号历史…" />}
-      {!q.isLoading && rows.length === 0 && (
-        <EmptyState>无匹配记录</EmptyState>
-      )}
+      {!q.isLoading && rows.length === 0 && <EmptyState>无匹配记录</EmptyState>}
 
       {rows.length > 0 && (
-        <table className="w-full text-[0.78rem] border-collapse">
-          <thead>
-            <tr>
-              <Th>时间</Th>
-              <Th>币种</Th>
-              <Th>方向</Th>
-              <Th align="right">ΔP15m</Th>
-              <Th align="right">RSI</Th>
-              <Th align="right">MACD hist</Th>
-              <Th>结果</Th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map(s => <Row key={s.id} s={s} />)}
-          </tbody>
-        </table>
+        <Card className="!p-0" bodyClassName="!p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-zinc-800 text-left text-[11px] uppercase tracking-wider text-zinc-500">
+                  <th className="py-3 pl-5 pr-2 font-medium">时间</th>
+                  <th className="py-3 px-2 font-medium">币种</th>
+                  <th className="py-3 px-2 font-medium">方向</th>
+                  <th className="py-3 px-2 font-medium text-right">ΔP15m</th>
+                  <th className="py-3 px-2 font-medium text-right">RSI</th>
+                  <th className="py-3 px-2 font-medium text-right">MACD hist</th>
+                  <th className="py-3 pl-2 pr-5 font-medium">结果</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-800/60">
+                {rows.map(s => <Row key={s.id} s={s} />)}
+              </tbody>
+            </table>
+          </div>
+        </Card>
       )}
-    </div>
-  );
-}
-
-function PageHead({ now, count }: { now: Date; count: number }) {
-  const t = now.toLocaleTimeString('zh-CN', { hour12: false });
-  return (
-    <header className="grid grid-cols-[1fr_auto] items-end gap-6 pb-4 border-b border-hairline-strong">
-      <div className="flex items-center gap-4">
-        <Aperture size={34} rotate className="text-brass" />
-        <div>
-          <h1 className="font-display text-[2.6rem] leading-none tracking-tight">信号历史</h1>
-          <p className="font-cn text-ivory-40 text-[0.85rem] mt-1.5">扫描历史 · {count} 条记录</p>
-        </div>
-      </div>
-      <div className="text-right font-mono text-[0.72rem] text-ivory-40 leading-relaxed">
-        <div className="tracking-wider2 uppercase">观测时间</div>
-        <div><strong className="text-ivory font-medium">{t}</strong> · UTC+8</div>
-      </div>
-    </header>
-  );
-}
-
-function FilterRow({ block, onBlockChange }: { block: string; onBlockChange: (b: string) => void }) {
-  return (
-    <div className="flex flex-wrap items-center gap-x-6 gap-y-3 px-6 py-4 border border-hairline bg-gradient-to-b from-bg-base to-bg-surface">
-      <div className="flex flex-col gap-1">
-        <div className="font-mono text-[0.62rem] tracking-wider3 text-ivory-40 uppercase">结果筛选</div>
-        <div className="inline-flex flex-wrap border border-hairline-strong">
-          {BLOCK_OPTIONS.map(o => (
-            <button
-              key={o.value}
-              type="button"
-              onClick={() => onBlockChange(o.value)}
-              className={`font-mono text-[0.7rem] tracking-wider2 px-3 py-1 border-r border-hairline-strong last:border-r-0 ${
-                block === o.value
-                  ? 'bg-brass-soft text-brass'
-                  : 'text-ivory-70 hover:bg-white/[0.04]'
-              }`}
-            >
-              {o.label}
-            </button>
-          ))}
-        </div>
-      </div>
     </div>
   );
 }
 
 function Row({ s }: { s: V5Signal }) {
-  const sideCls = s.side === 'LONG'
-    ? 'text-sage border-sage bg-sage-soft'
-    : s.side === 'SHORT'
-    ? 'text-oxblood border-oxblood bg-oxblood-soft'
-    : 'text-ivory-40 border-hairline-strong';
-  const deltaCls = s.delta_15m_pct >= 0 ? 'text-sage' : 'text-oxblood';
+  const sideTone: 'emerald' | 'rose' | 'zinc' = s.side === 'LONG' ? 'emerald' : s.side === 'SHORT' ? 'rose' : 'zinc';
+  const deltaCls = s.delta_15m_pct >= 0 ? 'text-emerald-300' : 'text-rose-300';
 
   return (
-    <tr className="border-b border-hairline hover:bg-brass/[0.04]">
-      <Td className="text-ivory-70">{new Date(s.created_at).toLocaleString('zh-CN', { hour12: false })}</Td>
-      <Td className="text-ivory font-medium">{s.symbol}</Td>
-      <Td>
-        <span className={`inline-block font-mono text-[0.7rem] tracking-wider2 px-2 py-0.5 border ${sideCls}`}>{s.side ?? '—'}</span>
-      </Td>
-      <Td align="right" className={deltaCls}>{(s.delta_15m_pct * 100).toFixed(2)}%</Td>
-      <Td align="right">{s.rsi_15m.toFixed(1)}</Td>
-      <Td align="right">{s.macd_hist_15m.toFixed(4)}</Td>
-      <Td>
-        {s.executed
-          ? <span className="inline-block font-mono text-[0.66rem] tracking-wider2 px-2 py-0.5 border border-sage text-sage bg-sage-soft uppercase">✓ 执行</span>
-          : s.block_reason
-          ? <span className="font-mono text-[0.78rem] text-brass">{blockReasonZh(s.block_reason)}</span>
-          : <span className="text-ivory-40">—</span>}
-      </Td>
+    <tr className="hover:bg-zinc-900/40">
+      <td className="py-2.5 pl-5 pr-2 font-mono text-xs text-zinc-400 whitespace-nowrap">
+        {new Date(s.created_at).toLocaleString('zh-CN', { hour12: false })}
+      </td>
+      <td className="py-2.5 px-2 font-mono font-medium text-zinc-100">{s.symbol}</td>
+      <td className="py-2.5 px-2">
+        <StatusPill tone={sideTone} icon={s.side === 'LONG' ? <TrendingUp className="h-2.5 w-2.5" /> : s.side === 'SHORT' ? <TrendingDown className="h-2.5 w-2.5" /> : undefined}>
+          {s.side ?? '—'}
+        </StatusPill>
+      </td>
+      <td className={cn('py-2.5 px-2 text-right font-mono tabular-nums', deltaCls)}>
+        {(s.delta_15m_pct * 100).toFixed(2)}%
+      </td>
+      <td className="py-2.5 px-2 text-right font-mono tabular-nums text-zinc-300">{s.rsi_15m.toFixed(1)}</td>
+      <td className="py-2.5 px-2 text-right font-mono tabular-nums text-zinc-300">{s.macd_hist_15m.toFixed(4)}</td>
+      <td className="py-2.5 pl-2 pr-5">
+        {s.executed === 1 ? (
+          <StatusPill tone="emerald" icon={<CheckCircle className="h-2.5 w-2.5" />}>执行</StatusPill>
+        ) : s.block_reason ? (
+          <span className="text-xs text-zinc-400">{blockReasonZh(s.block_reason)}</span>
+        ) : (
+          <span className="text-xs text-zinc-600">—</span>
+        )}
+      </td>
     </tr>
   );
 }
 
 function EmptyState({ children }: { children: ReactNode }) {
   return (
-    <div className="py-14 text-center font-body italic text-ivory-40">
-      <Aperture size={42} rotate="slow" className="text-ivory-25 mx-auto block mb-3" />
-      <span className="opacity-60 mr-2">▌</span>{children}
-    </div>
-  );
-}
-
-function Th({ children, align = 'left' }: { children: ReactNode; align?: 'left' | 'right' }) {
-  return (
-    <th className={`text-${align} font-mono text-[0.62rem] tracking-wider3 text-ivory-40 uppercase font-normal px-3.5 py-2.5 border-b border-hairline`}>
-      {children}
-    </th>
-  );
-}
-
-function Td({ children, align = 'left', className = '' }: { children: ReactNode; align?: 'left' | 'right'; className?: string }) {
-  return (
-    <td className={`px-3.5 py-2.5 font-mono text-[0.78rem] tabular-nums ${align === 'right' ? 'text-right' : ''} ${className}`}>
-      {children}
-    </td>
+    <Card>
+      <div className="flex flex-col items-center justify-center py-10 text-center">
+        <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-zinc-800">
+          <AlertCircle className="h-5 w-5 text-zinc-500" />
+        </div>
+        <div className="text-sm text-zinc-400">{children}</div>
+      </div>
+    </Card>
   );
 }

@@ -1,11 +1,17 @@
-import { ReactNode, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { Brain, Database, Zap, Heart, CheckCircle, XCircle } from 'lucide-react';
 import { useV5AIStatus, useV5AIDecisions } from '../../hooks/api/useV5AIStatus';
 import { useV5Calibration } from '../../hooks/api/useV5Reflections';
 import { useV5FundingStatus } from '../../hooks/api/useV5Funding';
 import { useUIStore } from '../../services/store';
 import { LoadingSkeleton } from '../primitives/LoadingSkeleton';
 import { Sparkline } from '../primitives/Sparkline';
-import { Aperture } from '../primitives/Aperture';
+import { SectionTitle } from '../primitives-v3/SectionTitle';
+import { MetricCard } from '../primitives-v3/MetricCard';
+import { Card } from '../primitives-v3/Card';
+import { StatusPill } from '../primitives-v3/StatusPill';
+import { Alert } from '../primitives-v3/Alert';
+import { cn } from '../primitives-v3/cn';
 
 export function V5AIStatusPage() {
   const status = useV5AIStatus();
@@ -39,343 +45,276 @@ export function V5AIStatusPage() {
     ? lastAiEvent.last_latency_ms
     : null;
 
-  return (
-    <div className="px-8 py-7 pb-16 flex flex-col gap-7 max-w-[1400px]">
-      <PageHead now={now} latencyMs={lastLatency} />
+  const avgConf = decisions.length > 0
+    ? Math.round(decisions.reduce((a, d) => a + (d.confidence ?? 0) * 100, 0) / decisions.length)
+    : 0;
+  const executedN = decisions.filter(d => d.execute).length;
+  const rejectedN = decisions.filter(d => !d.execute).length;
 
-      {/* Triplet */}
-      <section className="grid grid-cols-3 max-[1100px]:grid-cols-1 gap-px bg-hairline border border-hairline">
-        <Triplet label="模型" status={healthy ? '在线' : '离线'}>
-          <div className="font-display text-[2.6rem] leading-none tracking-tight">
-            {provider.toLowerCase()}<span className="text-brass">·</span>{(s?.chat_model ?? 'chat').replace(/^[^-]+-/, '')}
+  return (
+    <div className="mx-auto w-full max-w-7xl px-6 py-6 space-y-6">
+      <SectionTitle
+        title="AI 状态"
+        subtitle={`决策头脑 · 校准 · 拥挤侦测 · ${now.toLocaleTimeString('zh-CN', { hour12: false })}`}
+        action={
+          <StatusPill tone={healthy ? 'emerald' : 'rose'} icon={healthy ? <Heart className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}>
+            {healthy ? '在线' : '离线'}
+          </StatusPill>
+        }
+      />
+
+      <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-3">
+        <Card>
+          <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-zinc-500">
+            <Brain className="h-3.5 w-3.5 text-indigo-400" />
+            <span>模型</span>
+            <StatusPill tone={healthy ? 'emerald' : 'rose'} className="ml-auto">
+              {healthy ? '在线' : '离线'}
+            </StatusPill>
           </div>
-          <div className="font-body italic text-[0.78rem] text-ivory-40 mt-2">
-            primary model · {s?.healthy_ratio_24h != null ? `${Math.round(s.healthy_ratio_24h * 100)}% healthy 24h` : 'no health record'}
+          <div className="mt-3 font-mono text-2xl font-semibold text-zinc-50 truncate">
+            {provider.toLowerCase()}
+            <span className="text-indigo-400">·</span>
+            {(s?.chat_model ?? 'chat').replace(/^[^-]+-/, '')}
+          </div>
+          <div className="mt-1 text-xs text-zinc-500">
+            primary model · {s?.healthy_ratio_24h != null ? `${Math.round(s.healthy_ratio_24h * 100)}% healthy 24h` : '无健康记录'}
           </div>
           <div className="mt-4 h-8">
             <Sparkline values={sparkValues.length > 1 ? sparkValues : [0, 0]} width={220} height={28} />
           </div>
-          <div className="mt-2 flex justify-between font-mono text-[0.65rem] text-ivory-40 tracking-wide">
-            <span>confidence · recent {decisions.length}</span>
-            <span>avg{' '}
-              <strong className="text-ivory font-medium">
-                {decisions.length > 0
-                  ? Math.round(decisions.reduce((a, d) => a + (d.confidence ?? 0) * 100, 0) / decisions.length)
-                  : 0}%
-              </strong>
-            </span>
+          <div className="mt-2 flex justify-between text-[11px] text-zinc-500">
+            <span>近 {decisions.length} 次置信度</span>
+            <span>均值 <span className="text-zinc-200">{avgConf}%</span></span>
           </div>
-        </Triplet>
+        </Card>
 
-        <Triplet label="RAG 记忆" status="已索引" tone="brass">
-          <div className="font-display text-[2.6rem] leading-none tracking-tight">
+        <Card>
+          <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-zinc-500">
+            <Database className="h-3.5 w-3.5 text-amber-400" />
+            <span>RAG 记忆</span>
+            <StatusPill tone="amber" className="ml-auto">已索引</StatusPill>
+          </div>
+          <div className="mt-3 font-mono text-2xl font-semibold text-zinc-50">
             {s?.rag_cases_in_db ?? 0}
-            <span className="font-mono text-ivory-40 text-[1.2rem] ml-2"> cases</span>
+            <span className="text-base text-zinc-400 ml-2">cases</span>
           </div>
-          <div className="font-body italic text-[0.78rem] text-ivory-40 mt-2">
-            {Math.round((s?.rag_utilization_24h ?? 0) * 100)}% utilized · last 24h
+          <div className="mt-1 text-xs text-zinc-500">
+            {Math.round((s?.rag_utilization_24h ?? 0) * 100)}% 利用率 · 近 24h
           </div>
-          <div className="mt-4 h-1.5 bg-white/[0.04]">
+          <div className="mt-4 h-2 rounded-full bg-zinc-900 overflow-hidden">
             <div
-              className="h-full bg-brass"
+              className="h-full bg-amber-500 transition-all"
               style={{ width: `${Math.round((s?.rag_utilization_24h ?? 0) * 100)}%` }}
             />
           </div>
-          <div className="mt-2 flex justify-between font-mono text-[0.65rem] text-ivory-40 tracking-wide">
+          <div className="mt-2 flex justify-between text-[11px] text-zinc-500">
             <span>utilization</span>
             <span>{s?.rag_cases_in_db ?? 0} indexed</span>
           </div>
-        </Triplet>
+        </Card>
 
-        <Triplet label="24h 决策数" status={healthy ? '健康' : '静默'}>
-          <div className="font-display text-[2.6rem] leading-none tracking-tight">
+        <Card>
+          <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-zinc-500">
+            <Zap className="h-3.5 w-3.5 text-emerald-400" />
+            <span>24h 决策</span>
+            <StatusPill tone={healthy ? 'emerald' : 'zinc'} className="ml-auto">
+              {healthy ? '健康' : '静默'}
+            </StatusPill>
+          </div>
+          <div className="mt-3 font-mono text-2xl font-semibold text-zinc-50">
             {s?.decisions_24h ?? 0}
           </div>
-          <div className="font-body italic text-[0.78rem] text-ivory-40 mt-2">
-            {decisions.filter(d => d.execute).length} executed · {decisions.filter(d => !d.execute).length} rejected
+          <div className="mt-1 text-xs text-zinc-500">
+            {executedN} 通过 · {rejectedN} 拒绝
           </div>
           <div className="mt-4 h-8">
             <Sparkline values={sparkValues.length > 1 ? sparkValues : [0, 0]} width={220} height={28} />
           </div>
-          <div className="mt-2 flex justify-between font-mono text-[0.65rem] text-ivory-40 tracking-wide">
-            <span>confidence trend</span>
-            <span>last <strong className="text-ivory font-medium">{decisions.length}</strong></span>
+          <div className="mt-2 flex justify-between text-[11px] text-zinc-500">
+            <span>置信度走势</span>
+            <span>last <span className="text-zinc-200">{decisions.length}</span></span>
           </div>
-        </Triplet>
-      </section>
+        </Card>
+      </div>
 
-      {/* Health beacon banner */}
       {lastAiEvent && (
-        <div className="border border-hairline px-4 py-2.5 font-mono text-[0.78rem] text-brass bg-brass-soft">
-          <span className="mr-2">▌</span>
-          last health beacon · provider={lastAiEvent.provider} healthy={String(lastAiEvent.healthy)} latency={lastLatency ?? '—'}ms
-        </div>
+        <Alert tone="info">
+          last health beacon · provider={lastAiEvent.provider} · healthy={String(lastAiEvent.healthy)} · latency={lastLatency ?? '—'}ms
+        </Alert>
       )}
 
-      <Section title="决策流" meta={`last ${decisions.length} events · live`}>
+      <Card title="决策流" subtitle={`最近 ${decisions.length} 条事件 · live`} className="!p-0" bodyClassName="!p-0">
         {dec.isLoading ? (
-          <LoadingSkeleton message="拉取决策流中…" />
+          <div className="p-6"><LoadingSkeleton message="拉取决策流中…" /></div>
         ) : decisions.length === 0 ? (
-          <EmptyState message="等待下一条决策…" />
+          <div className="px-4 py-10 text-center text-sm text-zinc-500">等待下一条决策…</div>
         ) : (
-          <table className="w-full text-[0.78rem] border-collapse">
-            <thead>
-              <tr>
-                <Th>时间</Th>
-                <Th>币种</Th>
-                <Th>结果</Th>
-                <Th align="right">置信</Th>
-                <Th align="right">顶 1 距</Th>
-                <Th align="right">RAG</Th>
-                <Th>分析</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {decisions.map(d => (
-                <tr
-                  key={d.id}
-                  className={`ticker-row border-b border-hairline hover:bg-brass/[0.04] ${
-                    d.execute ? 'border-l-2 border-l-sage' : 'border-l-2 border-l-oxblood'
-                  }`}
-                >
-                  <Td className="text-ivory-70">{new Date(d.created_at).toLocaleTimeString('zh-CN', { hour12: false })}</Td>
-                  <Td className="text-ivory text-[0.85rem]">{d.symbol}</Td>
-                  <Td>
-                    <VerdictBadge execute={d.execute} />
-                  </Td>
-                  <Td align="right" className={d.execute ? 'text-sage' : 'text-oxblood'}>
-                    {d.confidence == null ? '—' : `${Math.round(d.confidence * 100)}%`}
-                  </Td>
-                  <Td align="right">{d.top1_distance == null ? '—' : d.top1_distance.toFixed(2)}</Td>
-                  <Td align="right" className="text-ivory-40">{d.rag_case_count}</Td>
-                  <Td className="text-ivory-70 font-body italic max-w-[420px] leading-relaxed">
-                    {d.reasoning.length > 100 ? d.reasoning.slice(0, 100) + '…' : d.reasoning}
-                  </Td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-zinc-800 text-left text-[11px] uppercase tracking-wider text-zinc-500">
+                  <th className="py-3 pl-5 pr-2 font-medium">时间</th>
+                  <th className="py-3 px-2 font-medium">币种</th>
+                  <th className="py-3 px-2 font-medium">结果</th>
+                  <th className="py-3 px-2 font-medium text-right">置信</th>
+                  <th className="py-3 px-2 font-medium text-right">顶 1 距</th>
+                  <th className="py-3 px-2 font-medium text-right">RAG</th>
+                  <th className="py-3 pl-2 pr-5 font-medium">分析</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-zinc-800/60">
+                {decisions.map(d => (
+                  <tr
+                    key={d.id}
+                    className={cn(
+                      'ticker-row hover:bg-zinc-900/40',
+                      d.execute && 'bg-emerald-500/[0.03]',
+                      !d.execute && 'bg-rose-500/[0.03]',
+                    )}
+                  >
+                    <td className="py-2.5 pl-5 pr-2 font-mono text-xs text-zinc-400">
+                      {new Date(d.created_at).toLocaleTimeString('zh-CN', { hour12: false })}
+                    </td>
+                    <td className="py-2.5 px-2 font-mono font-medium text-zinc-100">{d.symbol}</td>
+                    <td className="py-2.5 px-2">
+                      <StatusPill tone={d.execute ? 'emerald' : 'rose'} icon={d.execute ? <CheckCircle className="h-2.5 w-2.5" /> : <XCircle className="h-2.5 w-2.5" />}>
+                        {d.execute ? '通过' : '拒绝'}
+                      </StatusPill>
+                    </td>
+                    <td className={cn('py-2.5 px-2 text-right font-mono tabular-nums', d.execute ? 'text-emerald-300' : 'text-rose-300')}>
+                      {d.confidence == null ? '—' : `${Math.round(d.confidence * 100)}%`}
+                    </td>
+                    <td className="py-2.5 px-2 text-right font-mono tabular-nums text-zinc-400">{d.top1_distance == null ? '—' : d.top1_distance.toFixed(2)}</td>
+                    <td className="py-2.5 px-2 text-right font-mono tabular-nums text-zinc-500">{d.rag_case_count}</td>
+                    <td className="py-2.5 pl-2 pr-5 text-zinc-400 max-w-[420px] truncate" title={d.reasoning}>
+                      {d.reasoning.length > 100 ? d.reasoning.slice(0, 100) + '…' : d.reasoning}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
-      </Section>
+      </Card>
 
-      <Section title="置信度校准" meta="预测对比实际 · 30d">
+      <Card title="置信度校准" subtitle="预测对比实际 · 30d">
         <CalibrationTable />
-      </Section>
+      </Card>
 
-      <Section title="Funding 拥挤度 · top 20" meta="|z| ≥ 2.0 为极端 · 按 |z| 降序">
+      <Card title="Funding 拥挤度 · top 20" subtitle="|z| ≥ 2.0 为极端 · 按 |z| 降序">
         <FundingHeatmap />
-      </Section>
+      </Card>
     </div>
-  );
-}
-
-/* ─────────────── helpers ─────────────── */
-
-function PageHead({ now, latencyMs }: { now: Date; latencyMs: number | null }) {
-  const t = now.toLocaleTimeString('zh-CN', { hour12: false });
-  return (
-    <header className="grid grid-cols-[1fr_auto] items-end gap-6 pb-4 border-b border-hairline-strong">
-      <div className="flex items-center gap-4">
-        <Aperture size={34} rotate className="text-brass" />
-        <div>
-          <h1 className="font-display text-[2.6rem] leading-none tracking-tight">AI 状态</h1>
-          <p className="font-cn text-ivory-40 text-[0.85rem] mt-1.5">决策头脑 · 校准 · 拥挤侦测</p>
-        </div>
-      </div>
-      <div className="text-right font-mono text-[0.72rem] text-ivory-40 leading-relaxed">
-        <div className="tracking-wider2 uppercase">上次心跳</div>
-        <div><strong className="text-ivory font-medium">{t}</strong></div>
-        <div>latency · <strong className="text-ivory font-medium">{latencyMs ?? '—'}{latencyMs != null && 'ms'}</strong></div>
-      </div>
-    </header>
-  );
-}
-
-function Triplet({ label, status, tone = 'sage', children }: { label: string; status: string; tone?: 'sage' | 'brass'; children: ReactNode }) {
-  const statusCls = tone === 'brass'
-    ? 'text-brass border-brass bg-brass-soft'
-    : 'text-sage border-sage bg-sage-soft';
-  return (
-    <div className="bg-bg-base p-6">
-      <div className="flex items-center gap-2.5 mb-4.5">
-        <Aperture size={16} className="text-brass" />
-        <span className="font-mono text-[0.66rem] tracking-wider4 text-ivory-40 uppercase">{label}</span>
-        <span className={`ml-auto font-mono text-[0.65rem] tracking-wider2 uppercase px-2 py-0.5 border ${statusCls}`}>
-          {status}
-        </span>
-      </div>
-      {children}
-    </div>
-  );
-}
-
-function Section({ title, meta, children }: { title: ReactNode; meta?: ReactNode; children: ReactNode }) {
-  return (
-    <section className="grid grid-cols-[1fr_200px] gap-7 items-start max-[1100px]:grid-cols-1">
-      <div>
-        <header className="flex items-center gap-3.5 pb-4 border-b border-hairline mb-5">
-          <Aperture size={18} className="text-brass" />
-          <h2 className="font-display text-[1.4rem] tracking-tight leading-none">{title}</h2>
-          {meta && <span className="ml-auto font-mono text-[0.7rem] text-ivory-40 tracking-wide">{meta}</span>}
-        </header>
-        {children}
-      </div>
-      <aside className="font-body italic text-[0.78rem] text-ivory-40 leading-snug pt-[50px] border-l border-hairline pl-4 max-[1100px]:hidden">
-        {/* placeholder for future annotations */}
-      </aside>
-    </section>
-  );
-}
-
-function EmptyState({ message }: { message: string }) {
-  return (
-    <div className="py-8 text-center font-body italic text-ivory-40">
-      <span className="opacity-60 mr-2">▌</span>{message}
-    </div>
-  );
-}
-
-function Th({ children, align = 'left' }: { children: ReactNode; align?: 'left' | 'right' }) {
-  return (
-    <th
-      className={`text-${align} font-mono text-[0.62rem] tracking-wider3 text-ivory-40 uppercase font-normal px-3.5 py-2.5 border-b border-hairline`}
-    >
-      {children}
-    </th>
-  );
-}
-
-function Td({ children, align = 'left', className = '' }: { children: ReactNode; align?: 'left' | 'right'; className?: string }) {
-  return (
-    <td className={`px-3.5 py-2.5 font-mono text-[0.78rem] tabular-nums ${align === 'right' ? 'text-right' : ''} ${className}`}>
-      {children}
-    </td>
-  );
-}
-
-function VerdictBadge({ execute }: { execute: boolean }) {
-  const cls = execute
-    ? 'text-sage border-sage bg-sage-soft'
-    : 'text-oxblood border-oxblood bg-oxblood-soft';
-  return (
-    <span className={`inline-block px-2 py-0.5 border font-mono text-[0.66rem] tracking-wider2 uppercase ${cls}`}>
-      {execute ? '通过' : '拒绝'}
-    </span>
   );
 }
 
 function CalibrationTable() {
   const q = useV5Calibration();
   const points = q.data?.data ?? [];
-  if (points.length === 0) return <EmptyState message="等待每桶至少 10 条 reflection…" />;
+  if (points.length === 0) return <div className="py-8 text-center text-sm text-zinc-500">等待每桶至少 10 条 reflection…</div>;
 
   return (
-    <table className="w-full text-[0.78rem] border-collapse">
-      <thead>
-        <tr>
-          <Th>模型 · 区间</Th>
-          <Th align="right">n</Th>
-          <Th align="right">预测</Th>
-          <Th align="right">实际</Th>
-          <Th align="right">偏差</Th>
-          <Th align="right">校准倍数</Th>
-        </tr>
-      </thead>
-      <tbody>
-        {points.map(p => {
-          const drift = p.actual_win_rate - p.predicted_win_rate;
-          const driftCls =
-            Math.abs(drift) < 0.05 ? 'text-sage'
-            : Math.abs(drift) < 0.15 ? 'text-brass'
-            : 'text-oxblood';
-          return (
-            <tr key={`${p.ai_model}-${p.confidence_bucket}`} className="border-b border-hairline hover:bg-brass/[0.04]">
-              <Td className="text-ivory-70">{p.ai_model} · {(p.confidence_bucket * 100).toFixed(0)}%</Td>
-              <Td align="right">{p.sample_count}</Td>
-              <Td align="right">{(p.predicted_win_rate * 100).toFixed(1)}%</Td>
-              <Td align="right" className={drift >= 0 ? 'text-sage' : 'text-oxblood'}>
-                {(p.actual_win_rate * 100).toFixed(1)}%
-              </Td>
-              <Td align="right" className={driftCls}>
-                {drift >= 0 ? '+' : ''}{(drift * 100).toFixed(1)}pt
-              </Td>
-              <Td align="right" className="text-ivory font-medium">×{p.calibration_multiplier.toFixed(2)}</Td>
-            </tr>
-          );
-        })}
-      </tbody>
-    </table>
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-zinc-800 text-left text-[11px] uppercase tracking-wider text-zinc-500">
+            <th className="py-2 pr-2 font-medium">模型 · 区间</th>
+            <th className="py-2 px-2 font-medium text-right">n</th>
+            <th className="py-2 px-2 font-medium text-right">预测</th>
+            <th className="py-2 px-2 font-medium text-right">实际</th>
+            <th className="py-2 px-2 font-medium text-right">偏差</th>
+            <th className="py-2 pl-2 font-medium text-right">校准倍数</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-zinc-800/60">
+          {points.map(p => {
+            const drift = p.actual_win_rate - p.predicted_win_rate;
+            const driftCls =
+              Math.abs(drift) < 0.05 ? 'text-emerald-300'
+              : Math.abs(drift) < 0.15 ? 'text-amber-300'
+              : 'text-rose-300';
+            return (
+              <tr key={`${p.ai_model}-${p.confidence_bucket}`} className="hover:bg-zinc-900/40">
+                <td className="py-2 pr-2 font-mono text-xs text-zinc-300">{p.ai_model} · {(p.confidence_bucket * 100).toFixed(0)}%</td>
+                <td className="py-2 px-2 text-right font-mono tabular-nums text-zinc-400">{p.sample_count}</td>
+                <td className="py-2 px-2 text-right font-mono tabular-nums">{(p.predicted_win_rate * 100).toFixed(1)}%</td>
+                <td className={cn('py-2 px-2 text-right font-mono tabular-nums', drift >= 0 ? 'text-emerald-300' : 'text-rose-300')}>
+                  {(p.actual_win_rate * 100).toFixed(1)}%
+                </td>
+                <td className={cn('py-2 px-2 text-right font-mono tabular-nums', driftCls)}>
+                  {drift >= 0 ? '+' : ''}{(drift * 100).toFixed(1)}pt
+                </td>
+                <td className="py-2 pl-2 text-right font-mono tabular-nums text-zinc-100">×{p.calibration_multiplier.toFixed(2)}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
 function FundingHeatmap() {
   const q = useV5FundingStatus();
   const rows = q.data?.data ?? [];
-  if (rows.length === 0) return <EmptyState message="等待 funding 缓存刷新…" />;
+  if (rows.length === 0) return <div className="py-8 text-center text-sm text-zinc-500">等待 funding 缓存刷新…</div>;
 
-  // sort by |z| desc (the preview shows extremes at top)
   const sorted = rows.slice().sort((a, b) => Math.abs(b.zscore_30d ?? 0) - Math.abs(a.zscore_30d ?? 0));
 
   return (
-    <div className="font-mono text-[0.78rem]">
+    <div className="space-y-1">
       {sorted.map(r => {
         const z = r.zscore_30d ?? 0;
         const absZ = Math.abs(z);
         const extreme = r.is_extreme;
         const zCls = extreme
-          ? (z > 0 ? 'text-oxblood' : 'text-sage')
-          : absZ >= 1 ? 'text-brass'
-          : 'text-ivory-70';
+          ? (z > 0 ? 'text-rose-300' : 'text-emerald-300')
+          : absZ >= 1 ? 'text-amber-300'
+          : 'text-zinc-300';
         const labelText = r.extreme_direction === 'long_crowded'
-          ? 'LONGS✦CROWDED'
+          ? '多头拥挤'
           : r.extreme_direction === 'short_crowded'
-          ? 'SHORTS✦CROWDED'
+          ? '空头拥挤'
           : absZ >= 1 ? (z > 0 ? '多头偏强' : '空头偏强')
           : '中性';
-        const labelCls = r.extreme_direction === 'long_crowded'
-          ? 'text-oxblood'
-          : r.extreme_direction === 'short_crowded'
-          ? 'text-sage'
-          : absZ >= 1 ? 'text-brass'
-          : 'text-ivory-40';
-
-        // Bipolar bar — half-width either side of center
-        const widthPct = Math.min(50, absZ * 18);   // 18% per z-unit, cap 50
+        const widthPct = Math.min(50, absZ * 18);
 
         return (
           <div
             key={r.symbol}
-            className={`grid grid-cols-[100px_110px_80px_1fr_180px_60px] items-center gap-3.5 py-2 border-b border-hairline ${
-              extreme ? 'bg-brass-soft -mx-3 px-3' : ''
-            }`}
+            className={cn(
+              'grid grid-cols-[100px_110px_70px_1fr_120px_60px] items-center gap-3 rounded-xl px-3 py-2 text-sm',
+              extreme ? 'bg-indigo-500/[0.06]' : 'hover:bg-zinc-900/40',
+            )}
           >
-            <div className="text-ivory">
-              {extreme && <span className="text-brass mr-1">✦</span>}
+            <div className="font-mono text-zinc-100">
+              {extreme && <span className="text-indigo-300 mr-1">✦</span>}
               {r.symbol}
             </div>
-            <div className="text-right text-ivory-70">
+            <div className="text-right font-mono tabular-nums text-zinc-400 text-xs">
               {(r.current_funding_rate * 100).toFixed(4)}%
             </div>
-            <div className={`text-right text-[0.85rem] ${zCls}`}>
+            <div className={cn('text-right font-mono tabular-nums', zCls)}>
               {z >= 0 ? '+' : ''}{z.toFixed(2)}
             </div>
-            <div className="h-3 bg-white/[0.03] relative">
-              <span className="absolute left-1/2 -top-0.5 -bottom-0.5 w-px bg-ivory-40" />
+            <div className="relative h-2 rounded-full bg-zinc-900 overflow-hidden">
+              <span className="absolute left-1/2 -top-0.5 -bottom-0.5 w-px bg-zinc-700" />
               {z > 0 && (
                 <span
-                  className={`absolute top-0 h-full ${extreme ? 'bg-brass-soft border-r border-oxblood' : 'bg-oxblood-soft border-r border-oxblood'}`}
+                  className={cn('absolute top-0 h-full rounded-r-full', extreme ? 'bg-rose-500' : 'bg-rose-500/60')}
                   style={{ left: '50%', width: `${widthPct}%` }}
                 />
               )}
               {z < 0 && (
                 <span
-                  className={`absolute top-0 h-full ${extreme ? 'bg-brass-soft border-l border-sage' : 'bg-sage-soft border-l border-sage'}`}
+                  className={cn('absolute top-0 h-full rounded-l-full', extreme ? 'bg-emerald-500' : 'bg-emerald-500/60')}
                   style={{ right: '50%', width: `${widthPct}%` }}
                 />
               )}
             </div>
-            <div className={`text-[0.7rem] tracking-wide ${labelCls}`}>{labelText}</div>
-            <div className="text-right text-[0.7rem] text-ivory-40">n={r.sample_size_30d}</div>
+            <div className="text-xs text-zinc-400">{labelText}</div>
+            <div className="text-right text-xs text-zinc-600">n={r.sample_size_30d}</div>
           </div>
         );
       })}

@@ -1,11 +1,17 @@
 import { ReactNode, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
+import { CheckCircle, AlertTriangle, ChevronRight, ChevronLeft, TrendingUp, TrendingDown } from 'lucide-react';
 import { useV5ManualOrder } from '../../hooks/api/useV5ManualOrder';
 import { useSystemMode } from '../../hooks/useSystemMode';
 import { NumberInput } from '../primitives/NumberInput';
 import { IndicatorGauges } from '../shared/IndicatorGauges';
-import { Aperture } from '../primitives/Aperture';
 import { Term } from '../shared/Term';
+import { SectionTitle } from '../primitives-v3/SectionTitle';
+import { Card } from '../primitives-v3/Card';
+import { StatusPill } from '../primitives-v3/StatusPill';
+import { Alert } from '../primitives-v3/Alert';
+import { FormField, TextInput, PrimaryButton, SecondaryButton } from '../primitives-v3/FormField';
+import { cn } from '../primitives-v3/cn';
 import type { Side, ManualOrderPreviewResponse } from '../../types';
 
 type Step = 1 | 2 | 3;
@@ -27,17 +33,25 @@ export function V5ManualOrderPage() {
 
   if (mode === 'LIVE') {
     return (
-      <div className="px-8 py-7 pb-16 max-w-[800px]">
-        <div className="border border-alarm/40 bg-alarm/10 px-4 py-3 font-mono text-[0.85rem] text-alarm">
-          ⚠ 手动开单仅在 SHADOW 模式可用。
-        </div>
+      <div className="mx-auto w-full max-w-3xl px-6 py-6">
+        <Alert tone="warning">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4" />
+            <span>手动开单仅在 SHADOW 模式可用。</span>
+          </div>
+        </Alert>
       </div>
     );
   }
 
   return (
-    <div className="px-8 py-7 pb-16 flex flex-col gap-7 max-w-[1400px]">
-      <PageHead step={step} />
+    <div className="mx-auto w-full max-w-7xl px-6 py-6 space-y-6">
+      <SectionTitle
+        title="手动开单"
+        subtitle={`paper-trade · Step ${step}/3`}
+        action={<StatusPill tone="amber">SHADOW</StatusPill>}
+      />
+
       <StepIndicator current={step} />
 
       {step === 1 && (
@@ -78,27 +92,17 @@ export function V5ManualOrderPage() {
       )}
 
       {step === 3 && (
-        <div className="py-14 text-center">
-          <Aperture size={56} className="text-sage mx-auto block mb-4" />
-          <p className="font-display text-[2.2rem] text-sage leading-tight">✓ 模拟开仓成功</p>
-          <p className="font-cn text-ivory-40 text-[0.85rem] mt-2">即将跳转到活仓监控…</p>
-        </div>
+        <Card>
+          <div className="py-10 text-center">
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/15">
+              <CheckCircle className="h-7 w-7 text-emerald-300" />
+            </div>
+            <p className="text-2xl font-semibold text-emerald-300">模拟开仓成功</p>
+            <p className="mt-2 text-sm text-zinc-400">即将跳转到活仓监控…</p>
+          </div>
+        </Card>
       )}
     </div>
-  );
-}
-
-function PageHead({ step }: { step: Step }) {
-  return (
-    <header className="grid grid-cols-[1fr_auto] items-end gap-6 pb-4 border-b border-hairline-strong">
-      <div className="flex items-center gap-4">
-        <Aperture size={34} rotate className="text-brass" />
-        <div>
-          <h1 className="font-display text-[2.6rem] leading-none tracking-tight">手动开单</h1>
-          <p className="font-cn text-ivory-40 text-[0.85rem] mt-1.5">手动开单 · paper-trade · Step {step}/3</p>
-        </div>
-      </div>
-    </header>
   );
 }
 
@@ -112,22 +116,24 @@ function StepIndicator({ current }: { current: Step }) {
     <div className="flex items-center gap-0">
       {steps.map((s, i) => (
         <div key={s.id} className="flex items-center gap-3 flex-1">
-          <div className={`w-9 h-9 grid place-items-center border-2 font-display text-[1.1rem] ${
-            current === s.id
-              ? 'border-brass text-brass bg-brass-soft'
-              : current > s.id
-              ? 'border-sage text-sage bg-sage-soft'
-              : 'border-hairline-strong text-ivory-40'
-          }`}>
+          <div className={cn(
+            'flex h-10 w-10 items-center justify-center rounded-2xl font-mono text-base font-medium',
+            current === s.id && 'bg-indigo-500 text-white shadow-lg shadow-indigo-500/30',
+            current > s.id && 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/40',
+            current < s.id && 'border border-zinc-800 bg-zinc-950 text-zinc-500',
+          )}>
             {current > s.id ? '✓' : s.id}
           </div>
-          <span className={`font-cn text-[0.85rem] ${
-            current === s.id ? 'text-brass' : current > s.id ? 'text-sage' : 'text-ivory-40'
-          }`}>
+          <span className={cn(
+            'text-sm',
+            current === s.id && 'text-indigo-300',
+            current > s.id && 'text-emerald-300',
+            current < s.id && 'text-zinc-500',
+          )}>
             {s.label}
           </span>
           {i < steps.length - 1 && (
-            <div className={`flex-1 h-px ${current > s.id ? 'bg-sage' : 'bg-hairline'} mx-2`} />
+            <div className={cn('flex-1 h-px mx-2', current > s.id ? 'bg-emerald-500/40' : 'bg-zinc-800')} />
           )}
         </div>
       ))}
@@ -144,60 +150,51 @@ function Step1({ symbol, onSymbolChange, side, onSideChange, size, onSizeChange,
   error: string | null;
 }) {
   return (
-    <section className="border border-hairline p-6 flex flex-col gap-5">
-      <header className="flex items-center gap-3.5 pb-3 border-b border-hairline">
-        <Aperture size={18} className="text-brass" />
-        <h2 className="font-display text-[1.4rem] tracking-tight leading-none">参数</h2>
-      </header>
-
-      <div className="grid grid-cols-3 max-[768px]:grid-cols-1 gap-5">
-        <Field label="Symbol">
-          <input
-            value={symbol}
-            onChange={e => onSymbolChange(e.target.value)}
-            className="w-full font-mono text-[0.95rem] bg-bg-base border border-hairline-strong px-3 py-2 text-ivory focus:border-brass focus:outline-none"
-          />
-        </Field>
-        <Field label="方向">
-          <div className="inline-flex border border-hairline-strong">
+    <Card title="参数">
+      <div className="grid gap-5 md:grid-cols-3">
+        <FormField label="Symbol">
+          <TextInput value={symbol} onChange={e => onSymbolChange(e.target.value)} />
+        </FormField>
+        <FormField label="方向">
+          <div className="flex rounded-2xl border border-zinc-800 p-1">
             {(['LONG', 'SHORT'] as Side[]).map(opt => (
               <button
                 key={opt}
                 type="button"
                 onClick={() => onSideChange(opt)}
-                className={`font-mono text-[0.8rem] tracking-wider2 px-4 py-2 border-r border-hairline-strong last:border-r-0 ${
+                className={cn(
+                  'flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl py-2 text-sm font-medium transition',
                   side === opt
                     ? opt === 'LONG'
-                      ? 'bg-sage-soft text-sage'
-                      : 'bg-oxblood-soft text-oxblood'
-                    : 'text-ivory-70 hover:bg-white/[0.04]'
-                }`}
+                      ? 'bg-emerald-500/15 text-emerald-300'
+                      : 'bg-rose-500/15 text-rose-300'
+                    : 'text-zinc-400 hover:text-zinc-100',
+                )}
               >
+                {opt === 'LONG' ? <TrendingUp className="h-3.5 w-3.5" /> : <TrendingDown className="h-3.5 w-3.5" />}
                 {opt}
               </button>
             ))}
           </div>
-        </Field>
-        <Field label="Size (USDT)">
+        </FormField>
+        <FormField label="Size (USDT)">
           <NumberInput value={size} min={5} max={500} step={1} onChange={onSizeChange} />
-        </Field>
+        </FormField>
       </div>
 
       {error && (
-        <div className="border border-oxblood-soft bg-oxblood-soft px-3 py-2 font-mono text-[0.85rem] text-oxblood">
-          评估失败:{error}
-        </div>
+        <Alert tone="error" className="mt-4">评估失败:{error}</Alert>
       )}
 
-      <button
-        type="button"
+      <PrimaryButton
         disabled={isPending || !symbol}
         onClick={onSubmit}
-        className="self-start font-mono text-[0.85rem] tracking-wider px-5 py-2 border border-brass text-brass bg-brass-soft uppercase hover:bg-brass hover:text-bg-base disabled:opacity-40"
+        className="mt-5 inline-flex items-center gap-1.5"
       >
-        {isPending ? '评估中…' : '模拟评估 →'}
-      </button>
-    </section>
+        {isPending ? '评估中…' : '模拟评估'}
+        <ChevronRight className="h-4 w-4" />
+      </PrimaryButton>
+    </Card>
   );
 }
 
@@ -212,13 +209,8 @@ function Step2({ data, slMult, setSlMult, tpMult, setTpMult, sizeMult, setSizeMu
 }) {
   return (
     <>
-      <section className="border border-hairline p-6 flex flex-col gap-5">
-        <header className="flex items-center gap-3.5 pb-3 border-b border-hairline">
-          <Aperture size={18} className="text-brass" />
-          <h2 className="font-display text-[1.4rem] tracking-tight leading-none">评估</h2>
-        </header>
-
-        <div className="grid grid-cols-3 max-[1100px]:grid-cols-1 gap-px bg-hairline border border-hairline">
+      <Card title="评估" subtitle="指标 + 规则 + AI 二审">
+        <div className="grid gap-4 md:grid-cols-3">
           <SubCard title="指标">
             <IndicatorGauges
               rsi_15m={data.indicators.rsi_15m}
@@ -230,33 +222,33 @@ function Step2({ data, slMult, setSlMult, tpMult, setTpMult, sizeMult, setSizeMu
           </SubCard>
 
           <SubCard title="规则决策">
-            <div className="flex flex-col gap-2 font-mono text-[0.85rem]">
+            <div className="space-y-3">
               <div>
                 {data.decision.should_trade
-                  ? <span className="inline-block border border-sage text-sage bg-sage-soft px-2 py-0.5 text-[0.78rem] tracking-wider2 uppercase">✓ {data.decision.side}</span>
-                  : <span className="inline-block border border-oxblood text-oxblood bg-oxblood-soft px-2 py-0.5 text-[0.78rem] tracking-wider2 uppercase">✗ 不建议</span>
+                  ? <StatusPill tone="emerald">✓ {data.decision.side}</StatusPill>
+                  : <StatusPill tone="rose">✗ 不建议</StatusPill>
                 }
               </div>
-              <div className="font-body italic text-[0.85rem] text-ivory-70 leading-relaxed">{data.decision.reasoning}</div>
-              <div className="font-mono text-[0.78rem] text-ivory-70">
-                SL <span className="text-oxblood">${data.risk_plan.sl_price.toFixed(4)}</span>
-                <span className="text-ivory-25 mx-2">·</span>
-                TP <span className="text-sage">${data.risk_plan.tp_price.toFixed(4)}</span>
+              <div className="text-sm text-zinc-300 leading-relaxed">{data.decision.reasoning}</div>
+              <div className="text-xs font-mono text-zinc-400 pt-2 border-t border-zinc-800">
+                SL <span className="text-rose-300">${data.risk_plan.sl_price.toFixed(4)}</span>
+                <span className="text-zinc-600 mx-2">·</span>
+                TP <span className="text-emerald-300">${data.risk_plan.tp_price.toFixed(4)}</span>
               </div>
             </div>
           </SubCard>
 
           <SubCard title="AI 二审">
-            <div className="flex flex-col gap-3">
-              <div>
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
                 {data.ai_result.execute
-                  ? <span className="inline-block border border-sage text-sage bg-sage-soft px-2 py-0.5 text-[0.78rem] tracking-wider2 uppercase">✓ execute</span>
-                  : <span className="inline-block border border-oxblood text-oxblood bg-oxblood-soft px-2 py-0.5 text-[0.78rem] tracking-wider2 uppercase">✗ reject</span>
+                  ? <StatusPill tone="emerald">✓ execute</StatusPill>
+                  : <StatusPill tone="rose">✗ reject</StatusPill>
                 }
-                <span className="font-mono text-[0.78rem] text-brass ml-3">conf {Math.round((data.ai_result.confidence ?? 0) * 100)}%</span>
+                <span className="text-xs text-indigo-300">置信 {Math.round((data.ai_result.confidence ?? 0) * 100)}%</span>
               </div>
-              <div className="font-body italic text-[0.85rem] text-ivory-70 leading-relaxed">{data.ai_result.reasoning}</div>
-              <div className="grid grid-cols-3 gap-2 font-mono text-[0.78rem] pt-2 border-t border-hairline">
+              <div className="text-sm text-zinc-300 leading-relaxed">{data.ai_result.reasoning}</div>
+              <div className="grid grid-cols-3 gap-2 pt-2 border-t border-zinc-800">
                 <MultField label="SL ×" value={slMult} min={0.5} max={3} step={0.1} onChange={setSlMult} />
                 <MultField label="TP ×" value={tpMult} min={0.5} max={5} step={0.1} onChange={setTpMult} />
                 <MultField label="Size ×" value={sizeMult} min={0.1} max={2} step={0.1} onChange={setSizeMult} />
@@ -264,66 +256,57 @@ function Step2({ data, slMult, setSlMult, tpMult, setTpMult, sizeMult, setSizeMu
             </div>
           </SubCard>
         </div>
-      </section>
+      </Card>
 
-      <section className="border border-hairline p-6 flex flex-col gap-4">
-        <header className="flex items-center gap-3.5 pb-3 border-b border-hairline">
-          <Aperture size={18} className="text-brass" />
-          <h2 className="font-display text-[1.4rem] tracking-tight leading-none">
-            <Term k="RAG">RAG</Term> 历史相似 top-{data.rag_cases.length}
-          </h2>
-        </header>
+      <Card title={<><Term k="RAG">RAG</Term> 历史相似 top-{data.rag_cases.length}</>}>
         {data.rag_cases.length === 0 ? (
-          <div className="py-6 text-center font-body italic text-ivory-40">
-            <span className="opacity-60 mr-2">▌</span>RAG 冷启动期,无相似 case
-          </div>
+          <div className="py-6 text-center text-sm text-zinc-500">RAG 冷启动期,无相似 case</div>
         ) : (
-          <table className="w-full text-[0.78rem] border-collapse">
-            <thead>
-              <tr>
-                <Th align="right">RSI</Th>
-                <Th align="right">MACD hist</Th>
-                <Th>结果</Th>
-                <Th align="right">PnL</Th>
-                <Th>原因</Th>
-                <Th align="right">距离</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.rag_cases.map((c, i) => (
-                <tr key={i} className="border-b border-hairline hover:bg-brass/[0.04]">
-                  <Td align="right">{c.entry_rsi_15m.toFixed(1)}</Td>
-                  <Td align="right">{c.entry_macd_hist_15m.toFixed(4)}</Td>
-                  <Td className={c.outcome === 'WIN' ? 'text-sage' : c.outcome === 'LOSS' ? 'text-oxblood' : 'text-ivory-70'}>{c.outcome}</Td>
-                  <Td align="right" className={c.pnl_pct >= 0 ? 'text-sage' : 'text-oxblood'}>{(c.pnl_pct * 100).toFixed(2)}%</Td>
-                  <Td className="text-ivory-70">{c.exit_reason ?? '—'}</Td>
-                  <Td align="right" className="text-ivory-40">{c.distance.toFixed(3)}</Td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-zinc-800 text-left text-[11px] uppercase tracking-wider text-zinc-500">
+                  <th className="py-2 px-2 font-medium text-right">RSI</th>
+                  <th className="py-2 px-2 font-medium text-right">MACD hist</th>
+                  <th className="py-2 px-2 font-medium">结果</th>
+                  <th className="py-2 px-2 font-medium text-right">PnL</th>
+                  <th className="py-2 px-2 font-medium">原因</th>
+                  <th className="py-2 px-2 font-medium text-right">距离</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-zinc-800/60">
+                {data.rag_cases.map((c, i) => (
+                  <tr key={i} className="hover:bg-zinc-900/40">
+                    <td className="py-2 px-2 text-right font-mono tabular-nums text-zinc-300">{c.entry_rsi_15m.toFixed(1)}</td>
+                    <td className="py-2 px-2 text-right font-mono tabular-nums text-zinc-300">{c.entry_macd_hist_15m.toFixed(4)}</td>
+                    <td className={cn('py-2 px-2 font-medium', c.outcome === 'WIN' ? 'text-emerald-300' : c.outcome === 'LOSS' ? 'text-rose-300' : 'text-zinc-400')}>{c.outcome}</td>
+                    <td className={cn('py-2 px-2 text-right font-mono tabular-nums', c.pnl_pct >= 0 ? 'text-emerald-300' : 'text-rose-300')}>{(c.pnl_pct * 100).toFixed(2)}%</td>
+                    <td className="py-2 px-2 text-zinc-400">{c.exit_reason ?? '—'}</td>
+                    <td className="py-2 px-2 text-right font-mono tabular-nums text-zinc-500">{c.distance.toFixed(3)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
         {data.rag_summary && (
-          <div className="mt-2 font-body italic text-[0.85rem] text-ivory-70 leading-relaxed">{data.rag_summary}</div>
+          <div className="mt-3 text-sm text-zinc-300 leading-relaxed italic">{data.rag_summary}</div>
         )}
-      </section>
+      </Card>
 
       <div className="flex justify-between">
-        <button
-          type="button"
-          onClick={onBack}
-          className="font-mono text-[0.85rem] tracking-wider px-4 py-2 border border-hairline-strong text-ivory-70 hover:border-brass hover:text-brass uppercase"
-        >
-          ↩ 回到 Step 1
-        </button>
-        <button
-          type="button"
+        <SecondaryButton onClick={onBack} className="inline-flex items-center gap-1.5">
+          <ChevronLeft className="h-4 w-4" />
+          回到 Step 1
+        </SecondaryButton>
+        <PrimaryButton
           disabled={executePending}
           onClick={onConfirm}
-          className="font-mono text-[0.85rem] tracking-wider px-5 py-2 border border-sage text-sage bg-sage-soft uppercase hover:bg-sage hover:text-bg-base disabled:opacity-40"
+          className="bg-emerald-500 hover:bg-emerald-400 inline-flex items-center gap-1.5"
         >
-          {executePending ? '开仓中…' : '确认模拟开仓 →'}
-        </button>
+          {executePending ? '开仓中…' : '确认模拟开仓'}
+          <ChevronRight className="h-4 w-4" />
+        </PrimaryButton>
       </div>
     </>
   );
@@ -331,18 +314,9 @@ function Step2({ data, slMult, setSlMult, tpMult, setTpMult, sizeMult, setSizeMu
 
 function SubCard({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div className="bg-bg-base p-4 flex flex-col gap-3">
-      <div className="font-mono text-[0.66rem] tracking-wider3 text-ivory-40 uppercase pb-2 border-b border-hairline">{title}</div>
+    <div className="rounded-2xl border border-zinc-800 bg-zinc-950/60 p-4">
+      <div className="text-[10px] uppercase tracking-wider text-zinc-500 pb-2 border-b border-zinc-800 mb-3">{title}</div>
       {children}
-    </div>
-  );
-}
-
-function Field({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <div className="font-mono text-[0.62rem] tracking-wider3 text-ivory-40 uppercase">{label}</div>
-      <div>{children}</div>
     </div>
   );
 }
@@ -350,24 +324,8 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 function MultField({ label, value, min, max, step, onChange }: { label: string; value: number; min: number; max: number; step: number; onChange: (n: number) => void }) {
   return (
     <label className="flex flex-col gap-1">
-      <span className="text-[0.62rem] tracking-wider3 text-ivory-40 uppercase">{label}</span>
+      <span className="text-[10px] uppercase tracking-wider text-zinc-500">{label}</span>
       <NumberInput value={value} min={min} max={max} step={step} onChange={onChange} />
     </label>
-  );
-}
-
-function Th({ children, align = 'left' }: { children: ReactNode; align?: 'left' | 'right' }) {
-  return (
-    <th className={`text-${align} font-mono text-[0.62rem] tracking-wider3 text-ivory-40 uppercase font-normal px-3.5 py-2.5 border-b border-hairline`}>
-      {children}
-    </th>
-  );
-}
-
-function Td({ children, align = 'left', className = '' }: { children: ReactNode; align?: 'left' | 'right'; className?: string }) {
-  return (
-    <td className={`px-3.5 py-2.5 font-mono text-[0.78rem] tabular-nums ${align === 'right' ? 'text-right' : ''} ${className}`}>
-      {children}
-    </td>
   );
 }
