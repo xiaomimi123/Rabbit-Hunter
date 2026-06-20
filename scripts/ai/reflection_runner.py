@@ -160,6 +160,13 @@ def _persist(db_path: str, ctx: dict, ai_out: ReflectionAIOutput,
     finally:
         conn.close()
 
+    # M8 自动剪枝:每次新反思后刷新 setup_performance。
+    try:
+        from scripts.setup_performance import refresh_setup_performance
+        refresh_setup_performance(db_path)
+    except Exception as e:
+        print(f"[Reflection] setup_performance refresh 失败: {e}")
+
 
 def _already_reflected(db_path: str, paper_trade_id: int) -> bool:
     conn = sqlite3.connect(db_path)

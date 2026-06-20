@@ -148,15 +148,28 @@ def gate_sl_attached(*, sl_price: Optional[float]) -> None:
         )
 
 
-def gate_setup_enabled(*, setup_type: str) -> None:
-    """禁用 setup(默认含 161 笔隐形杀手)→ 拒。
+def gate_setup_enabled(*, setup_type: str, db_path: Optional[str] = None) -> None:
+    """禁用 setup → 拒。
 
-    后续 M8 setup_performance 可往这个集合追加 / 移除。
+    检查两个来源:
+    1. DEFAULT_DISABLED_SETUPS(宪法静态清单,含文档 §4 161 笔杀手)
+    2. setup_performance 表中 status='disabled' 的(M8 自动剪枝产物)
     """
-    if setup_type in DEFAULT_DISABLED_SETUPS:
+    if db_path is None:
+        if setup_type in DEFAULT_DISABLED_SETUPS:
+            raise IronlawViolation(
+                "SETUP_DISABLED",
+                f"setup_type {setup_type!r} in DEFAULT_DISABLED_SETUPS",
+            )
+        return
+
+    # 有 db_path 时,使用 M8 维护的运行时清单
+    from scripts.setup_performance import get_disabled_setups
+    disabled = get_disabled_setups(db_path)
+    if setup_type in disabled:
         raise IronlawViolation(
             "SETUP_DISABLED",
-            f"setup_type {setup_type!r} is in DEFAULT_DISABLED_SETUPS",
+            f"setup_type {setup_type!r} is disabled (default or auto-pruned)",
         )
 
 

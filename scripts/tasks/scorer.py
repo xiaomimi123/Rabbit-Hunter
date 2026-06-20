@@ -185,7 +185,7 @@ async def process_enriched_v5(*, enriched: EnrichedItem, ai, paper_pm, live_pm,
             "macd_hist_prev": indicators.macd_hist_prev_15m,
             "funding_z_score": funding_z_score,
         })
-        gate_setup_enabled(setup_type=setup_type)
+        gate_setup_enabled(setup_type=setup_type, db_path=db_path)
     except IronlawViolation as e:
         _write_trade_score(db_path, enriched, indicators, decision,
                           block_reason=f"IRONLAW:{e.kind}",
