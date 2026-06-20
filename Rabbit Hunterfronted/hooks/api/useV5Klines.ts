@@ -3,7 +3,7 @@ import { apiGet } from '../../services/api';
 import type { KlinesResponse, Interval } from '../../types';
 
 function encodeSymbol(sym: string): string {
-  return sym;
+  return sym.replace(/\//g, '_');
 }
 
 export function useV5Klines(symbol: string | null, interval: Interval = '15m', limit = 200) {
