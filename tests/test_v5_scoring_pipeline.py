@@ -35,7 +35,7 @@ async def test_strong_signal_writes_trade_scores_v5_and_paper_trade(fresh_db, mo
         size_multiplier=1.0, confidence=0.7, reasoning="test"
     ))
 
-    monkeypatch.setenv("PAPER_INITIAL_BALANCE_USDT", "1000")
+    monkeypatch.setenv("PAPER_INITIAL_BALANCE_USDT", "100000")
 
     from scripts.tasks.scorer import process_enriched_v5
     from v5_types import EnrichedItem
@@ -47,9 +47,10 @@ async def test_strong_signal_writes_trade_scores_v5_and_paper_trade(fresh_db, mo
     from scripts.paper_position_manager import PaperPositionManager
     paper_pm = PaperPositionManager(db_path=fresh_db)
 
+    # 用 100k 本金:1% = 1000 USDT 风险预算,足够吸收测试 fixture 的极端 ATR。
     await process_enriched_v5(
         enriched=enriched, ai=fake_ai, paper_pm=paper_pm, live_pm=None,
-        mode="SHADOW", db_path=fresh_db, balance_usdt=1000.0,
+        mode="SHADOW", db_path=fresh_db, balance_usdt=100_000.0,
     )
 
     conn = sqlite3.connect(fresh_db)

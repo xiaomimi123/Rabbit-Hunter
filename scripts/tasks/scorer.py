@@ -17,6 +17,16 @@ from v5_types import AIResult, Decision, EnrichedItem, Indicators, RiskPlan
 
 
 from scripts.v5_params import get_param
+from scripts.risk_constitution import (
+    MAX_PER_TRADE_RISK_PCT, resolve_risk_pct_for_equity,
+)
+from scripts.risk_gates import (
+    IronlawViolation,
+    clamp_evolution_size_mult, clamp_evolution_sl_mult, clamp_evolution_tp_mult,
+    gate_daily_drawdown, gate_final_sl_ratio, gate_liquidation_distance,
+    gate_min_rr, gate_per_trade_risk, gate_setup_enabled, gate_sl_attached,
+    get_today_realized_pnl,
+)
 
 
 def _enqueue_ws(db_path: str, payload: dict) -> None:
@@ -40,8 +50,15 @@ def _max_concurrent() -> int:
     return int(get_param("v5_max_concurrent", 3, int))
 
 
-def _risk_per_trade() -> float:
-    return float(get_param("v5_risk_per_trade", 0.015, float))
+def _risk_per_trade(equity_usdt: float = 10_000.0) -> float:
+    """M3 立宪后:风险百分比从 risk_constitution 资格层映射,而非 param。
+
+    保留 v5_risk_per_trade 仅作为软上限(若 <宪法上限 则使用 param 值)。
+    永远不超过宪法允许的 tier 值。
+    """
+    constitution_pct = resolve_risk_pct_for_equity(equity_usdt)
+    param_pct = float(get_param("v5_risk_per_trade", MAX_PER_TRADE_RISK_PCT, float))
+    return min(constitution_pct, param_pct)
 
 
 def _leverage() -> int:
@@ -158,10 +175,40 @@ async def process_enriched_v5(*, enriched: EnrichedItem, ai, paper_pm, live_pm,
                           funding_rate_8h=funding_rate_8h)
         return
 
+    # M3 铁律层:setup 禁用清单 + 日熔断(开仓前两道闸门)。
+    try:
+        from scripts.ai.setup_type import derive_setup_type
+        setup_type = derive_setup_type({
+            "side": decision.side,
+            "rsi_15m": indicators.rsi_15m,
+            "macd_hist": indicators.macd_hist_15m,
+            "macd_hist_prev": indicators.macd_hist_prev_15m,
+            "funding_z_score": funding_z_score,
+        })
+        gate_setup_enabled(setup_type=setup_type)
+    except IronlawViolation as e:
+        _write_trade_score(db_path, enriched, indicators, decision,
+                          block_reason=f"IRONLAW:{e.kind}",
+                          funding_z_score=funding_z_score,
+                          funding_rate_8h=funding_rate_8h)
+        return
+
+    try:
+        today_pnl = get_today_realized_pnl(db_path)
+        gate_daily_drawdown(equity_usdt=balance_usdt, today_realized_pnl=today_pnl)
+    except IronlawViolation as e:
+        _write_trade_score(db_path, enriched, indicators, decision,
+                          block_reason=f"IRONLAW:{e.kind}",
+                          funding_z_score=funding_z_score,
+                          funding_rate_8h=funding_rate_8h)
+        return
+
+    # 单点解析风险百分比:同一值喂给 plan() 和后续 gate,确保一致。
+    risk_pct = _risk_per_trade(balance_usdt)
     risk = plan(
         side=decision.side, entry=enriched.current_price,
         atr=indicators.atr_15m, balance=balance_usdt,
-        risk_pct=_risk_per_trade(), leverage=_leverage(),
+        risk_pct=risk_pct, leverage=_leverage(),
     )
 
     # ai=None 兼容(OPENAI_AI_ENABLED=false 或 AI 初始化失败):
@@ -186,6 +233,62 @@ async def process_enriched_v5(*, enriched: EnrichedItem, ai, paper_pm, live_pm,
                               funding_z_score=funding_z_score,
                               funding_rate_8h=funding_rate_8h)
             return
+
+    # M3 进化层 clamp:把 AI multipliers 钳在文档 §5 第二层窄区间内。
+    ai_result = AIResult(
+        execute=ai_result.execute,
+        sl_multiplier=clamp_evolution_sl_mult(ai_result.sl_multiplier),
+        tp_multiplier=clamp_evolution_tp_mult(ai_result.tp_multiplier),
+        size_multiplier=clamp_evolution_size_mult(ai_result.size_multiplier),
+        confidence=ai_result.confidence,
+        reasoning=ai_result.reasoning,
+    )
+
+    # M3 铁律层(开仓前最后一道):SL ratio / RR / SL 必挂 / 强平距 / 单笔风险。
+    try:
+        final_sl_dist = abs(risk.entry_price - risk.sl_price) * ai_result.sl_multiplier
+        final_tp_dist = abs(risk.tp_price - risk.entry_price) * ai_result.tp_multiplier
+        gate_final_sl_ratio(sl_distance=final_sl_dist, atr=indicators.atr_15m)
+        gate_min_rr(sl_distance=final_sl_dist, tp_distance=final_tp_dist)
+        final_sl_price = (
+            risk.entry_price - final_sl_dist if decision.side == "LONG"
+            else risk.entry_price + final_sl_dist
+        )
+        gate_sl_attached(sl_price=final_sl_price)
+        gate_liquidation_distance(
+            entry=risk.entry_price, sl_price=final_sl_price,
+            leverage=risk.leverage, side=decision.side,
+        )
+        # 单笔风险:size × leverage × sl_dist_pct,SL 放宽时按比例重算 size 再 gate。
+        final_sl_dist_pct = final_sl_dist / risk.entry_price
+        max_size_for_cap = (balance_usdt * risk_pct) / (final_sl_dist_pct * risk.leverage)
+        final_size = min(
+            risk.size_usdt * ai_result.size_multiplier,
+            max_size_for_cap,
+        )
+        # 反算 size_multiplier 给 paper_pm 落库
+        actual_size_mult = final_size / risk.size_usdt if risk.size_usdt > 0 else 1.0
+        ai_result = AIResult(
+            execute=ai_result.execute,
+            sl_multiplier=ai_result.sl_multiplier,
+            tp_multiplier=ai_result.tp_multiplier,
+            size_multiplier=actual_size_mult,
+            confidence=ai_result.confidence,
+            reasoning=ai_result.reasoning,
+        )
+        planned_loss = final_size * risk.leverage * final_sl_dist_pct
+        gate_per_trade_risk(
+            equity_usdt=balance_usdt, planned_loss_usdt=planned_loss,
+            cap_pct=risk_pct,
+        )
+    except IronlawViolation as e:
+        _write_trade_score(db_path, enriched, indicators, decision,
+                          ai=ai_result, risk=risk,
+                          block_reason=f"IRONLAW:{e.kind}",
+                          funding_z_score=funding_z_score,
+                          funding_rate_8h=funding_rate_8h)
+        print(f"[V5Scorer] {enriched.symbol} IRONLAW reject: {e}")
+        return
 
     try:
         if mode == "SHADOW":
