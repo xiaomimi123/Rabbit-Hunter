@@ -3,6 +3,7 @@ import {
   useV5Reflections, useV5FailureTaxonomy, useV5Calibration,
 } from '../../hooks/api/useV5Reflections';
 import { useV5AIDecisions } from '../../hooks/api/useV5AIStatus';
+import { useSetupPerformance } from '../../hooks/api/useV5Constitution';
 import { Drawer } from '../primitives-v3/Drawer';
 import { SectionTitle } from '../primitives-v3/SectionTitle';
 import { MetricCard } from '../primitives-v3/MetricCard';
@@ -118,6 +119,8 @@ export function AuditPage() {
         </Card>
       </div>
 
+      <SetupPerformanceTable />
+
       <Card title="失败模式分类" subtitle={`${modes.length} 项 · ${modes.filter(m => m.is_active).length} 激活`} className="!p-0" bodyClassName="!p-0">
         {modes.length === 0 ? (
           <div className="px-4 py-10 text-center text-sm text-zinc-500">无失败模式数据</div>
@@ -172,5 +175,80 @@ export function AuditPage() {
         </div>
       </Drawer>
     </div>
+  );
+}
+
+function SetupPerformanceTable() {
+  const q = useSetupPerformance();
+  const rows = q.data?.rows ?? [];
+  if (rows.length === 0) {
+    return (
+      <Card title="M8 setup_performance" subtitle="n ≥ 30 才可信 · 自动剪枝">
+        <div className="py-6 text-center text-sm text-zinc-500">
+          还没有 setup 聚合记录 — 至少 1 笔关仓后,reflection_runner 会自动写入。
+        </div>
+      </Card>
+    );
+  }
+  return (
+    <Card
+      title="M8 setup_performance"
+      subtitle={`${rows.length} 个 setup · n ≥ 30 才可信 · 负期望自动 disable`}
+      className="!p-0"
+      bodyClassName="!p-0"
+    >
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-zinc-800 text-left text-[11px] uppercase tracking-wider text-zinc-500">
+              <th className="py-3 pl-5 pr-2">setup_type</th>
+              <th className="py-3 px-2 text-right">n</th>
+              <th className="py-3 px-2 text-right">win/loss</th>
+              <th className="py-3 px-2 text-right">avg R</th>
+              <th className="py-3 px-2 text-right">total R</th>
+              <th className="py-3 pl-2 pr-5">status</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-zinc-800/60">
+            {rows.map(r => {
+              const tone = r.status === 'active' ? 'emerald'
+                : r.status === 'disabled' ? 'rose' : 'amber';
+              return (
+                <tr key={r.setup_type} className={cn(
+                  'hover:bg-zinc-900/40',
+                  r.status === 'disabled' && 'bg-rose-500/[0.04]',
+                )}>
+                  <td className="py-2.5 pl-5 pr-2 font-mono text-xs text-zinc-200">{r.setup_type}</td>
+                  <td className={cn('py-2.5 px-2 text-right font-mono tabular-nums',
+                    r.sample_count >= 30 ? 'text-zinc-100' : 'text-amber-300',
+                  )}>{r.sample_count}</td>
+                  <td className="py-2.5 px-2 text-right font-mono tabular-nums text-xs text-zinc-400">
+                    <span className="text-emerald-300">{r.win_count}</span>
+                    {' / '}
+                    <span className="text-rose-300">{r.loss_count}</span>
+                  </td>
+                  <td className={cn('py-2.5 px-2 text-right font-mono tabular-nums',
+                    (r.avg_realized_r ?? 0) >= 0 ? 'text-emerald-300' : 'text-rose-300',
+                  )}>
+                    {(r.avg_realized_r ?? 0).toFixed(2)}
+                  </td>
+                  <td className={cn('py-2.5 px-2 text-right font-mono tabular-nums',
+                    (r.total_realized_r ?? 0) >= 0 ? 'text-emerald-300' : 'text-rose-300',
+                  )}>
+                    {(r.total_realized_r ?? 0).toFixed(1)}
+                  </td>
+                  <td className="py-2.5 pl-2 pr-5">
+                    <StatusPill tone={tone}>{r.status}</StatusPill>
+                    {r.disabled_reason && (
+                      <span className="ml-2 text-[10px] text-zinc-500">{r.disabled_reason}</span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </Card>
   );
 }

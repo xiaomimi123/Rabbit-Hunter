@@ -1,13 +1,16 @@
+import { Shield, AlertTriangle, CheckCircle } from 'lucide-react';
 import { useV5AIStatus } from '../../hooks/api/useV5AIStatus';
 import { useV5ActivePositions } from '../../hooks/api/useV5ActivePositions';
 import { useV5OrderHistory } from '../../hooks/api/useV5OrderHistory';
 import { useV5FundingStatus } from '../../hooks/api/useV5Funding';
+import { useConstitution, useIronlawState } from '../../hooks/api/useV5Constitution';
 import { useUIStore } from '../../services/store';
 import { useSystemMode } from '../../hooks/useSystemMode';
 import { SectionTitle } from '../primitives-v3/SectionTitle';
 import { MetricCard } from '../primitives-v3/MetricCard';
 import { Card } from '../primitives-v3/Card';
 import { StatusPill } from '../primitives-v3/StatusPill';
+import { Alert } from '../primitives-v3/Alert';
 import { cn } from '../primitives-v3/cn';
 
 export function ReliabilityPage() {
@@ -28,12 +31,82 @@ export function ReliabilityPage() {
     ...recent.slice(0, 30).map(p => ({ id: `c-${p.id}`, time: p.exit_time, symbol: p.symbol, side: p.side, action: p.exit_reason ?? 'CLOSE', source: (p.exit_reason === 'MANUAL_USER' ? 'manual' : 'auto') as 'auto' | 'manual' })),
   ].filter(r => r.time).sort((a, b) => new Date(b.time!).getTime() - new Date(a.time!).getTime()).slice(0, 30);
 
+  const constitution = useConstitution();
+  const ironlaw = useIronlawState();
+  const c = constitution.data;
+  const ils = ironlaw.data;
+
   return (
     <div className="space-y-6">
       <SectionTitle
         title="执行可靠性"
-        subtitle="系统状态、风险闸门、订单生命周期和安全事件"
+        subtitle="M3 铁律层 + 系统状态 + 订单生命周期 + 安全事件"
       />
+
+      {ils?.daily_dd_triggered && (
+        <Alert tone="error">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4" />
+            <span>日熔断已触发 — 今日已实现 {ils.today_realized_pnl.toFixed(2)} USDT,新单已锁。</span>
+          </div>
+        </Alert>
+      )}
+
+      <Card
+        title="M3 铁律层 · 宪法"
+        subtitle="任何模块违规直接 raise IronlawViolation,Fail-closed 拒单"
+        actions={
+          <StatusPill tone={ils?.daily_dd_triggered ? 'rose' : 'emerald'} icon={ils?.daily_dd_triggered ? <AlertTriangle className="h-3 w-3" /> : <Shield className="h-3 w-3" />}>
+            {ils?.daily_dd_triggered ? '熔断中' : '生效'}
+          </StatusPill>
+        }
+      >
+        {c ? (
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <Iron label="单笔风险上限" value={`${(c.max_per_trade_risk_pct * 100).toFixed(1)}%`} hint="of equity" />
+            <Iron label="日熔断阈值" value={`${(c.daily_drawdown_limit_pct * 100).toFixed(1)}%`} hint="today realized ≤" />
+            <Iron label="盈亏比下限" value={`${c.min_rr.toFixed(2)}`} hint="TP / SL ≥" />
+            <Iron label="强平距 / SL" value={`≥ ${c.min_liq_to_sl_distance_ratio.toFixed(1)}×`} hint="LIQ_TOO_CLOSE 拒" />
+            <Iron label="SL/ATR 落地区间" value={`[${c.final_sl_atr_ratio_min}, ${c.final_sl_atr_ratio_max}]`} hint="窄区间 evolution" />
+            <Iron label="进化 SL 修正器" value={`[${c.evolution_ai_sl_mult_min}, ${c.evolution_ai_sl_mult_max}]`} hint="AI 修正窗口" />
+            <Iron label="进化仓位系数" value={`[${c.evolution_size_mult_min}, ${c.evolution_size_mult_max}]`} hint="AI 修正窗口" />
+            <Iron label="M8 决策门槛" value={`n ≥ ${c.min_sample_size_for_decision}`} hint="setup 可信样本数" />
+          </div>
+        ) : <div className="text-sm text-zinc-500">拉取宪法中…</div>}
+      </Card>
+
+      {ils && (
+        <Card title="运行时风控状态" subtitle="今日已实现 + 日 DD 剩余 + 活仓占用">
+          <div className="grid gap-3 sm:grid-cols-3">
+            <Iron
+              label="今日已实现 PnL"
+              value={`${ils.today_realized_pnl >= 0 ? '+' : ''}${ils.today_realized_pnl.toFixed(2)} USDT`}
+              tone={ils.today_realized_pnl >= 0 ? 'emerald' : 'rose'}
+            />
+            <Iron
+              label="日 DD 剩余预算"
+              value={`${ils.daily_dd_remaining_usdt.toFixed(2)} USDT`}
+              hint={ils.daily_dd_triggered ? '已耗尽 — 新单锁' : '可继续开仓'}
+              tone={ils.daily_dd_triggered ? 'rose' : 'emerald'}
+            />
+            <Iron
+              label="槽位"
+              value={`${ils.open_positions} / ${ils.max_concurrent}`}
+              hint={ils.open_positions >= ils.max_concurrent ? '满仓' : `${ils.max_concurrent - ils.open_positions} 空闲`}
+            />
+          </div>
+          {c && c.default_disabled_setups.length > 0 && (
+            <div className="mt-4">
+              <div className="text-xs uppercase tracking-wider text-zinc-500 mb-2">默认禁用 setup(文档 §4 + M8 剪枝)</div>
+              <div className="flex flex-wrap gap-2">
+                {c.default_disabled_setups.map(s => (
+                  <StatusPill key={s} tone="rose">{s}</StatusPill>
+                ))}
+              </div>
+            </div>
+          )}
+        </Card>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-3">
         <MetricCard label="系统模式" value={mode ?? '—'} trend={mode === 'LIVE' ? 'down' : 'neutral'} hint={mode === 'LIVE' ? '实盘 — 真实资金' : '影子盘 — 仅记录'} />
@@ -132,6 +205,26 @@ export function ReliabilityPage() {
           </div>
         </Card>
       </div>
+    </div>
+  );
+}
+
+function Iron({ label, value, hint, tone }: {
+  label: string;
+  value: string;
+  hint?: string;
+  tone?: 'emerald' | 'rose';
+}) {
+  return (
+    <div className="rounded-2xl border border-zinc-800 bg-zinc-950/60 p-3">
+      <div className="text-[10px] uppercase tracking-wider text-zinc-500">{label}</div>
+      <div className={cn(
+        'mt-1 font-mono text-lg font-semibold tabular-nums',
+        tone === 'emerald' && 'text-emerald-300',
+        tone === 'rose' && 'text-rose-300',
+        !tone && 'text-zinc-100',
+      )}>{value}</div>
+      {hint && <div className="text-[11px] text-zinc-500 mt-0.5">{hint}</div>}
     </div>
   );
 }
