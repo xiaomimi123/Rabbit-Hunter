@@ -320,9 +320,11 @@ def _main():
     print(f"[WF] report → {args.out}")
 
     k = report.pass_doc_kpi
+    gpf = f"{k['gross_profit_factor']:.2f}" if k['gross_profit_factor'] is not None else "∞"
+    npf = f"{k['net_profit_factor']:.2f}" if k['net_profit_factor'] is not None else "∞"
     print(f"[WF] OOS n={k['n_oos_trades']} "
-          f"gross avg_R={k['gross_avg_r']:.3f} PF={k['gross_profit_factor']:.2f} | "
-          f"net avg_R={k['net_avg_r']:.3f} PF={k['net_profit_factor']:.2f} "
+          f"gross avg_R={k['gross_avg_r']:.3f} PF={gpf} | "
+          f"net avg_R={k['net_avg_r']:.3f} PF={npf} "
           f"→ doc §15 KPI #2: {'PASS' if k['kpi_passes_doc_15_2'] else 'FAIL'}")
 
 
