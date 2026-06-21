@@ -21,11 +21,15 @@ class BacktestEntry:
     exit_time: Optional[str]
     exit_price: Optional[float]
     exit_reason: Optional[Literal["SL_HIT", "TP_HIT", "HORIZON_TIMEOUT"]]
-    realized_r: Optional[float]
+    realized_r: Optional[float]      # gross R (扣前)
     holding_minutes: Optional[int]
     funding_z_at_entry: Optional[float]
     rsi_15m_at_entry: float
     macd_hist_15m_at_entry: float
+    # M6 扣成本(可空 — 旧报告兼容)
+    net_realized_r: Optional[float] = None
+    fee_cost_r: Optional[float] = None
+    slippage_cost_r: Optional[float] = None
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -87,6 +91,12 @@ class BacktestSummary:
     max_concurrent_reached: int = 0
     profit_factor: Optional[float] = None
     max_drawdown_r: float = 0.0
+    # M6 扣成本后(net)对照
+    overall_net: Optional[SetupStats] = None
+    profit_factor_net: Optional[float] = None
+    max_drawdown_r_net: Optional[float] = None
+    by_setup_type_net: Dict[str, SetupStats] = field(default_factory=dict)
+    cost_config: Optional[dict] = None
 
     def to_dict(self) -> dict:
         return {
@@ -103,4 +113,9 @@ class BacktestSummary:
             "max_concurrent_reached": self.max_concurrent_reached,
             "profit_factor": self.profit_factor,
             "max_drawdown_r": self.max_drawdown_r,
+            "overall_net": self.overall_net.to_dict() if self.overall_net else None,
+            "profit_factor_net": self.profit_factor_net,
+            "max_drawdown_r_net": self.max_drawdown_r_net,
+            "by_setup_type_net": {k: v.to_dict() for k, v in self.by_setup_type_net.items()},
+            "cost_config": self.cost_config,
         }

@@ -37,6 +37,7 @@ services:
       - "127.0.0.1:8000:8000"
     volumes:
       - ./data:/app/data
+      - ./reports:/app/reports          # M6 walk-forward 报告
     networks:
       - rh
 

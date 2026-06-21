@@ -2,17 +2,67 @@
 
 Profit factor = sum(positive R) / |sum(negative R)|; None if no losses.
 Max drawdown computed on cumulative-R curve, in chronological entry order.
+
+M6 升级:同时算 gross(扣前)和 net(扣成本后)两套 PF/MaxDD/avg_R 对照。
 """
 from __future__ import annotations
 
+import copy
 from collections import defaultdict
-from typing import List
+from dataclasses import asdict
+from typing import List, Optional
 
+from scripts.backtest.cost_model import CostConfig, compute_cost_breakdown
 from scripts.backtest.schemas import (
     BacktestEntry,
     BacktestSummary,
     SetupStats,
 )
+
+
+def _pf_and_dd(rs: List[float]) -> tuple[Optional[float], float]:
+    """共用:返回 (profit_factor, max_drawdown_r)。"""
+    wins_sum = sum(r for r in rs if r > 0)
+    losses_sum = sum(-r for r in rs if r < 0)
+    pf = (wins_sum / losses_sum) if losses_sum > 0 else None
+    cum = 0.0
+    peak = 0.0
+    max_dd = 0.0
+    for r in rs:
+        cum += r
+        peak = max(peak, cum)
+        max_dd = min(max_dd, cum - peak)
+    return pf, max_dd
+
+
+def _net_view(entry: BacktestEntry) -> Optional[BacktestEntry]:
+    """返回 entry 副本,把 realized_r 替换成 net_realized_r。
+
+    若没算过 net(老数据),返回 None。
+    """
+    if entry.net_realized_r is None:
+        return None
+    e = copy.copy(entry)
+    e.realized_r = entry.net_realized_r
+    return e
+
+
+def apply_costs_to_entries(
+    entries: List[BacktestEntry], cfg: CostConfig,
+) -> None:
+    """就地为每个 entry 填 net_realized_r / fee_cost_r / slippage_cost_r。"""
+    for e in entries:
+        if e.realized_r is None:
+            continue
+        br = compute_cost_breakdown(
+            gross_r=e.realized_r,
+            entry_price=e.entry_price,
+            sl_price=e.sl_price,
+            cfg=cfg,
+        )
+        e.net_realized_r = br.net_r
+        e.fee_cost_r = br.fee_cost_r
+        e.slippage_cost_r = br.slippage_cost_r
 
 
 def build_summary(
@@ -22,6 +72,7 @@ def build_summary(
     period_start: str,
     period_end: str,
     max_concurrent_reached: int,
+    cost_config: Optional[CostConfig] = None,
 ) -> BacktestSummary:
     closed = [e for e in entries if e.realized_r is not None]
 
@@ -34,21 +85,9 @@ def build_summary(
         by_symbol[e.symbol].append(e)
 
     rs = [e.realized_r for e in closed]
-    wins_sum = sum(r for r in rs if r > 0)
-    losses_sum = sum(-r for r in rs if r < 0)
-    pf = (wins_sum / losses_sum) if losses_sum > 0 else None
+    pf, max_dd = _pf_and_dd(rs)
 
-    # Max drawdown on cumulative R curve in chronological entry order.
-    # closed list is in entry order because runner appends in order.
-    cum = 0.0
-    peak = 0.0
-    max_dd = 0.0
-    for r in rs:
-        cum += r
-        peak = max(peak, cum)
-        max_dd = min(max_dd, cum - peak)
-
-    return BacktestSummary(
+    summary = BacktestSummary(
         period_start=period_start,
         period_end=period_end,
         total_signals=total_signals,
@@ -63,6 +102,26 @@ def build_summary(
         profit_factor=pf,
         max_drawdown_r=max_dd,
     )
+
+    # M6 扣成本对照:若任一 entry 有 net_realized_r,就算 net 视图
+    net_closed = [e for e in closed if e.net_realized_r is not None]
+    if net_closed:
+        net_views = [v for v in (_net_view(e) for e in net_closed) if v is not None]
+        net_rs = [v.realized_r for v in net_views]
+        net_pf, net_dd = _pf_and_dd(net_rs)
+        net_by_setup: dict = defaultdict(list)
+        for v in net_views:
+            net_by_setup[v.setup_type].append(v)
+        summary.overall_net = SetupStats.from_entries(net_views)
+        summary.profit_factor_net = net_pf
+        summary.max_drawdown_r_net = net_dd
+        summary.by_setup_type_net = {
+            k: SetupStats.from_entries(v) for k, v in net_by_setup.items()
+        }
+        if cost_config is not None:
+            summary.cost_config = asdict(cost_config)
+
+    return summary
 
 
 def format_report(s: BacktestSummary) -> str:
