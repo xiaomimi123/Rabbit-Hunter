@@ -83,12 +83,17 @@ _HTTP_TIMEOUT = 15
 
 
 def binance_symbol_to_okx_inst(binance_symbol: str) -> str:
-    """BTCUSDT → BTC-USDT-SWAP（OKX 永续合约 instId）。
-    特殊：以 1000 前缀的 meme（如 1000PEPEUSDT）OKX 不一定有对应 SWAP，
+    """BTCUSDT / BTC/USDT → BTC-USDT-SWAP（OKX 永续合约 instId）。
+
+    两种输入格式都吃 — 前端/ccxt 给的可能是 BTC/USDT,内部 collector 给的
+    是 BTCUSDT。统一去掉所有 '/' 后再判 USDT 后缀。
+
+    特殊：以 1000 前缀的 meme（如 1000PEPEUSDT）OKX 不一定有对应 SWAP,
     上层会拿到 404 → 跳过该 symbol。"""
-    if binance_symbol.endswith("USDT"):
-        return f"{binance_symbol[:-4]}-USDT-SWAP"
-    return binance_symbol
+    flat = binance_symbol.replace("/", "")
+    if flat.endswith("USDT"):
+        return f"{flat[:-4]}-USDT-SWAP"
+    return flat
 
 
 def okx_inst_to_binance_symbol(inst_id: str) -> str:
