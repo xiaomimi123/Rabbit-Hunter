@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard, Briefcase, LineChart, History,
-  FlaskConical, Shield, Eye, Stethoscope, Settings, Bot,
+  FlaskConical, Shield, Eye, Stethoscope, Settings, Bot, BookOpen,
 } from 'lucide-react';
 import { cn } from '../primitives-v3/cn';
 
@@ -16,6 +16,7 @@ const NAV: NavItem[] = [
   { to: '/reliability', label: '执行可靠性', Icon: Shield },
   { to: '/audit',       label: '监控审计',   Icon: Eye },
   { to: '/diagnostics', label: '策略诊断',   Icon: Stethoscope },
+  { to: '/knowledge',   label: '知识层',     Icon: BookOpen },
   { to: '/settings',    label: '系统设置',   Icon: Settings },
 ];
 

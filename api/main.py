@@ -227,6 +227,7 @@ from api.routes import v5_reflection
 from api.routes import v5_funding
 from api.routes import v5_constitution
 from api.routes import v5_walkforward
+from api.routes import v5_m9
 from api.websocket_v5 import router as ws_v5_router
 
 # TODO(v5): weights/system/market routers still use V4.3 DB schema (Supabase).
@@ -248,6 +249,7 @@ app.include_router(v5_reflection.router,      dependencies=_global_auth)
 app.include_router(v5_funding.router,         dependencies=_global_auth)
 app.include_router(v5_constitution.router,    dependencies=_global_auth)
 app.include_router(v5_walkforward.router,     dependencies=_global_auth)
+app.include_router(v5_m9.router,              dependencies=_global_auth)
 app.include_router(ws_v5_router)  # WebSocket — no HTTP auth middleware
 
 # V4.3 routes — disabled pending V5 rewire

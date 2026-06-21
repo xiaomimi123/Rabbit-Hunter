@@ -8,6 +8,7 @@ import { BacktestPage } from './components/pages-v4/BacktestPage';
 import { ReliabilityPage } from './components/pages-v4/ReliabilityPage';
 import { AuditPage } from './components/pages-v4/AuditPage';
 import { DiagnosticsPage } from './components/pages-v4/DiagnosticsPage';
+import { KnowledgePage } from './components/pages-v4/KnowledgePage';
 import { SettingsPage } from './components/pages-v4/SettingsPage';
 import { V5ChartPage } from './components/pages/V5ChartPage';
 import { V5ManualOrderPage } from './components/pages/V5ManualOrderPage';
@@ -27,6 +28,7 @@ export default function App() {
           <Route path="/reliability" element={<ReliabilityPage />} />
           <Route path="/audit"       element={<AuditPage />} />
           <Route path="/diagnostics" element={<DiagnosticsPage />} />
+          <Route path="/knowledge"   element={<KnowledgePage />} />
           <Route path="/settings"    element={<SettingsPage />} />
           <Route path="/chart/:symbol" element={<V5ChartPage />} />
           <Route path="/manual"      element={<V5ManualOrderPage />} />

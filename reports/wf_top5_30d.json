@@ -1,0 +1,65 @@
+{
+  "config": {
+    "start_iso": "2026-05-19",
+    "end_iso": "2026-06-18",
+    "symbols": [
+      "BTC/USDT",
+      "ETH/USDT",
+      "SOL/USDT",
+      "BNB/USDT",
+      "XRP/USDT"
+    ],
+    "train_days": 15,
+    "oos_days": 7,
+    "step_days": 7,
+    "cache_root": "data/backtest_cache",
+    "db_path": "data/rabbit_hunter.db",
+    "cost_config": {
+      "maker_fee_rate": 0.0002,
+      "taker_fee_rate": 0.0005,
+      "slippage_pct": 0.0005,
+      "maker_ratio": 0.5
+    },
+    "setup_filter": null,
+    "quiet": false
+  },
+  "windows": [
+    {
+      "train_start": "2026-05-19T00:00:00+00:00",
+      "train_end": "2026-06-03T00:00:00+00:00",
+      "oos_start": "2026-06-03T00:00:00+00:00",
+      "oos_end": "2026-06-10T00:00:00+00:00",
+      "n_entries": 0,
+      "n_closed": 0
+    },
+    {
+      "train_start": "2026-05-26T00:00:00+00:00",
+      "train_end": "2026-06-10T00:00:00+00:00",
+      "oos_start": "2026-06-10T00:00:00+00:00",
+      "oos_end": "2026-06-17T00:00:00+00:00",
+      "n_entries": 0,
+      "n_closed": 0
+    }
+  ],
+  "oos_combined_entries": [],
+  "oos_summary": {
+    "n": 0,
+    "win_rate": 0.0,
+    "avg_r": 0.0,
+    "total_r": 0.0,
+    "median_r": 0.0,
+    "best_r": 0.0,
+    "worst_r": 0.0,
+    "profit_factor": null,
+    "max_drawdown_r": 0.0
+  },
+  "oos_summary_net": {},
+  "pass_doc_kpi": {
+    "n_oos_trades": 0,
+    "gross_avg_r": 0.0,
+    "gross_profit_factor": null,
+    "net_avg_r": 0.0,
+    "net_profit_factor": null,
+    "kpi_passes_doc_15_2": false
+  }
+}
