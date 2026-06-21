@@ -17,7 +17,8 @@ export function HeaderBar({ wsConnected }: Props) {
   const provider = useUIStore(s => s.effectiveAiProvider);
   const selectedSymbol = useUIStore(s => s.selectedSymbol);
   const setSelectedSymbol = useUIStore(s => s.setSelectedSymbol);
-  const klines = useV5Klines(selectedSymbol, '15m', 2);
+  // 后端 API 要求 limit ≥ 10;只用最后两根算 15m 涨跌。
+  const klines = useV5Klines(selectedSymbol, '15m', 10);
   const qc = useQueryClient();
   const [tick, setTick] = useState(0);
 
