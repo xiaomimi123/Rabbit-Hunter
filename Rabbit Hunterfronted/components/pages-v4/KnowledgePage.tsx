@@ -370,7 +370,7 @@ function ValidateModal({
   const [trainDays, setTrainDays] = useState(15);
   const [oosDays, setOosDays] = useState(7);
   const [stepDays, setStepDays] = useState(7);
-  const [result, setResult] = useState<{ kpi_passes: boolean; n_oos_trades: number; net_avg_r: number; net_profit_factor: number | null; wf_report_path: string } | null>(null);
+  const [accepted, setAccepted] = useState<{ candidate_id: number; status: string } | null>(null);
 
   if (!candidate) return null;
 
@@ -396,18 +396,14 @@ function ValidateModal({
           </FormField>
         </div>
 
-        {result && (
-          <Alert tone={result.kpi_passes ? 'success' : 'error'}>
-            <div className="text-sm">
-              <div className="flex items-center gap-2 mb-1">
-                {result.kpi_passes ? <CheckCircle className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
-                <span className="font-medium">{result.kpi_passes ? 'KPI PASS' : 'KPI FAIL'}</span>
-              </div>
-              <div className="space-y-0.5 font-mono text-xs">
-                <div>OOS n = <span className="text-zinc-100">{result.n_oos_trades}</span></div>
-                <div>net avg R = <span className={cn(result.net_avg_r >= 0 ? 'text-emerald-300' : 'text-rose-300')}>{result.net_avg_r.toFixed(3)}</span></div>
-                <div>net PF = <span className={cn((result.net_profit_factor ?? 0) > 1 ? 'text-emerald-300' : 'text-rose-300')}>{result.net_profit_factor != null ? result.net_profit_factor.toFixed(2) : '∞'}</span></div>
-                <div>报告:<span className="text-indigo-300">{result.wf_report_path}</span></div>
+        {accepted && (
+          <Alert tone="info">
+            <div className="flex items-center gap-2">
+              <FlaskConical className="h-4 w-4" />
+              <div className="text-sm">
+                已派发到后台 — 候选 #{accepted.candidate_id} 状态:
+                <span className="ml-1 font-mono text-indigo-200">{accepted.status}</span>。
+                可关闭此弹窗,候选状态会在主表自动刷新(每 30s)。
               </div>
             </div>
           </Alert>
@@ -424,7 +420,7 @@ function ValidateModal({
                 symbols: symbols.split(',').map(s => s.trim()).filter(Boolean),
                 train_days: trainDays, oos_days: oosDays, step_days: stepDays,
               });
-              setResult(r);
+              setAccepted({ candidate_id: r.candidate_id, status: r.status });
             }}
           >
             {validate.isPending ? '跑 WF 中…' : '开始验证'}
