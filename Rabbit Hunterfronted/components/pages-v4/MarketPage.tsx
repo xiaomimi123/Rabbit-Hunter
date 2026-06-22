@@ -22,8 +22,14 @@ export function MarketPage() {
   const funding = useV5FundingStatus();
   const signals = useV5Signals(20, { side: null, showExecutedOnly: false });
 
-  const symbolFunding = funding.data?.data?.find(f => f.symbol === selectedSymbol);
-  const symbolSignals = (signals.data?.data ?? []).filter(s => s.symbol === selectedSymbol).slice(0, 5);
+  // 后端 symbol 可能是 'BTCUSDT' 无斜杠,前端 selectedSymbol 带斜杠 'BTC/USDT'。
+  // 归一化后再比对。
+  const normalize = (s: string | null | undefined) => (s ?? '').replace(/\//g, '').toUpperCase();
+  const target = normalize(selectedSymbol);
+  const symbolFunding = funding.data?.data?.find(f => normalize(f.symbol) === target);
+  const symbolSignals = (signals.data?.data ?? [])
+    .filter(s => normalize(s.symbol) === target)
+    .slice(0, 5);
 
   return (
     <div className="space-y-6">
