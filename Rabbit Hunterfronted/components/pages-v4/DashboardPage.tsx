@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { Play, Square, Activity as ActivityIcon, AlertCircle } from 'lucide-react';
+import { Play, Square, Activity as ActivityIcon, AlertCircle, Wallet, AlertTriangle } from 'lucide-react';
 import { useV5Dashboard } from '../../hooks/api/useV5Dashboard';
 import { useV5ActivePositions } from '../../hooks/api/useV5ActivePositions';
 import { useV5AIDecisions } from '../../hooks/api/useV5AIStatus';
 import { useV5Klines } from '../../hooks/api/useV5Klines';
+import { useAccountBalance } from '../../hooks/api/useV5Account';
 import { useUIStore } from '../../services/store';
 import { useSystemMode } from '../../hooks/useSystemMode';
 import { useV5Settings } from '../../hooks/api/useV5Settings';
@@ -27,18 +28,89 @@ export function DashboardPage() {
   const [timeframe, setTimeframe] = useState<Interval>('15m');
   const klines = useV5Klines(selectedSymbol, timeframe, 50);
 
+  const balance = useAccountBalance();
   const d = dash.data;
   const positions = active.data?.combined ?? [];
   const decisionList = decisions.data?.decisions ?? [];
   const klineData = klines.data?.klines ?? [];
   const closes = klineData.map(k => k.close);
+  const b = balance.data;
 
   return (
     <div className="space-y-6">
       <SectionTitle
         title="仪表盘"
-        subtitle="账户摘要、运行控制和最近 24h 信号扫描配置。"
+        subtitle="账户摘要、运行控制和最近 24h 信号扫描"
       />
+
+      {/* 资产卡:OKX 余额(已绑定)+ SHADOW paper 视图 */}
+      <Card title="账户资产" subtitle={b?.status === 'ok' ? `${b.exchange.toUpperCase()} ${b.testnet ? '模拟盘' : '实盘'} · 30s 刷新` : 'SHADOW 模拟账户'}>
+        <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-4">
+          {b?.status === 'ok' && (
+            <>
+              <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-3">
+                <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-zinc-500">
+                  <Wallet className="h-3 w-3 text-emerald-300" />
+                  <span>OKX 总资产</span>
+                </div>
+                <div className="mt-1 font-mono text-2xl font-semibold tabular-nums text-emerald-300">
+                  {b.total_usdt.toFixed(2)} <span className="text-sm text-emerald-400/70">USDT</span>
+                </div>
+                <div className="text-xs text-zinc-500 mt-0.5">可用 {b.available_usdt.toFixed(2)}</div>
+              </div>
+            </>
+          )}
+
+          {b?.status === 'not_configured' && (
+            <div className="md:col-span-2 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-3">
+              <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-zinc-500">
+                <AlertTriangle className="h-3 w-3 text-amber-300" />
+                <span>OKX 未绑定</span>
+              </div>
+              <div className="mt-1 text-sm text-amber-200">
+                去 <span className="font-mono text-amber-100">/settings</span> 填 API key/secret/passphrase 后即可显示实盘资产。
+              </div>
+            </div>
+          )}
+
+          {b?.status === 'error' && (
+            <div className="md:col-span-2 rounded-2xl border border-rose-500/30 bg-rose-500/10 p-3">
+              <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-zinc-500">
+                <AlertCircle className="h-3 w-3 text-rose-300" />
+                <span>OKX 拉取失败</span>
+              </div>
+              <div className="mt-1 text-xs text-rose-300 font-mono truncate" title={b.error ?? ''}>
+                {(b.error ?? '').slice(0, 80)}
+              </div>
+            </div>
+          )}
+
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-950/60 p-3">
+            <div className="text-[10px] uppercase tracking-wider text-zinc-500">SHADOW 初始本金</div>
+            <div className="mt-1 font-mono text-2xl font-semibold tabular-nums text-zinc-100">
+              {(b?.paper_initial_balance_usdt ?? 10000).toFixed(0)} <span className="text-sm text-zinc-500">USDT</span>
+            </div>
+            <div className="text-xs text-zinc-500 mt-0.5">PAPER_INITIAL_BALANCE_USDT</div>
+          </div>
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-950/60 p-3">
+            <div className="text-[10px] uppercase tracking-wider text-zinc-500">SHADOW 累计 PnL</div>
+            <div className={cn(
+              'mt-1 font-mono text-2xl font-semibold tabular-nums',
+              (b?.paper_realized_pnl_usdt ?? 0) >= 0 ? 'text-emerald-300' : 'text-rose-300',
+            )}>
+              {(b?.paper_realized_pnl_usdt ?? 0) >= 0 ? '+' : ''}{(b?.paper_realized_pnl_usdt ?? 0).toFixed(2)}
+            </div>
+            <div className="text-xs text-zinc-500 mt-0.5">所有 CLOSED paper_trades 之和</div>
+          </div>
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-950/60 p-3">
+            <div className="text-[10px] uppercase tracking-wider text-zinc-500">SHADOW 活仓</div>
+            <div className="mt-1 font-mono text-2xl font-semibold tabular-nums text-zinc-100">
+              {b?.paper_open_count ?? 0} <span className="text-sm text-zinc-500">/ 3</span>
+            </div>
+            <div className="text-xs text-zinc-500 mt-0.5">paper_trades status=OPEN</div>
+          </div>
+        </div>
+      </Card>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard label="24h PnL" value={`${(d?.pnl_total_usdt ?? 0) >= 0 ? '+' : ''}${(d?.pnl_total_usdt ?? 0).toFixed(2)} USDT`} trend={d && d.pnl_total_usdt >= 0 ? 'up' : 'down'} hint={d ? `胜率 ${(d.win_rate_24h * 100).toFixed(0)}% · ${d.closed_24h.length} 笔` : '—'} />

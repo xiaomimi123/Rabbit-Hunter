@@ -144,7 +144,7 @@ function ReportDetail({ report }: { report: any }) {
         <MetricCard
           label="net MaxDD"
           value={`${(net.max_drawdown_r ?? 0).toFixed(2)} R`}
-          hint={`win rate ${(net.win_rate * 100).toFixed(0)}%`}
+          hint={`win rate ${Math.round((net.win_rate ?? 0) * 100)}%`}
         />
       </div>
 
@@ -227,27 +227,30 @@ function ReportDetail({ report }: { report: any }) {
 }
 
 function Row({ label, s, highlight }: { label: string; s: any; highlight?: boolean }) {
-  if (!s || s.n === 0) {
+  // 后端在没 net 数据时返回 {} — s 不是 null 但所有字段是 undefined。
+  // 必须 require s.n 是个正整数才能渲染数字行。
+  if (!s || typeof s.n !== 'number' || s.n === 0) {
     return <tr><td colSpan={7} className="py-3 text-center text-zinc-500 text-sm">{label}: 无数据</td></tr>;
   }
+  const fix = (v: any, d: number) => (typeof v === 'number' ? v.toFixed(d) : '—');
   return (
     <tr className={highlight ? 'bg-indigo-500/[0.06]' : ''}>
       <td className="py-2.5 px-2 font-medium text-zinc-100">{label}</td>
       <td className="py-2.5 px-2 text-right font-mono tabular-nums">{s.n}</td>
-      <td className="py-2.5 px-2 text-right font-mono tabular-nums">{(s.win_rate * 100).toFixed(0)}%</td>
+      <td className="py-2.5 px-2 text-right font-mono tabular-nums">{fix((s.win_rate ?? 0) * 100, 0)}%</td>
       <td className={cn(
         'py-2.5 px-2 text-right font-mono tabular-nums',
-        s.avg_r >= 0 ? 'text-emerald-300' : 'text-rose-300',
-      )}>{s.avg_r.toFixed(3)}</td>
+        (s.avg_r ?? 0) >= 0 ? 'text-emerald-300' : 'text-rose-300',
+      )}>{fix(s.avg_r, 3)}</td>
       <td className={cn(
         'py-2.5 px-2 text-right font-mono tabular-nums',
-        s.total_r >= 0 ? 'text-emerald-300' : 'text-rose-300',
-      )}>{s.total_r.toFixed(2)}</td>
+        (s.total_r ?? 0) >= 0 ? 'text-emerald-300' : 'text-rose-300',
+      )}>{fix(s.total_r, 2)}</td>
       <td className="py-2.5 px-2 text-right font-mono tabular-nums">
         {s.profit_factor != null ? s.profit_factor.toFixed(2) : '∞'}
       </td>
       <td className="py-2.5 px-2 text-right font-mono tabular-nums text-rose-300">
-        {s.max_drawdown_r.toFixed(2)}
+        {fix(s.max_drawdown_r, 2)}
       </td>
     </tr>
   );

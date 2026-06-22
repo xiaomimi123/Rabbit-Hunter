@@ -1,23 +1,19 @@
 import { NavLink } from 'react-router-dom';
 import {
-  LayoutDashboard, Briefcase, LineChart, History,
-  FlaskConical, Shield, Eye, Stethoscope, Settings, Bot, BookOpen,
+  LayoutDashboard, Database, History,
+  FlaskConical, Brain, Settings, Bot,
 } from 'lucide-react';
 import { cn } from '../primitives-v3/cn';
 
 interface NavItem { to: string; label: string; Icon: any }
 
 const NAV: NavItem[] = [
-  { to: '/dashboard',   label: '仪表盘',     Icon: LayoutDashboard },
-  { to: '/portfolio',   label: '投资组合',   Icon: Briefcase },
-  { to: '/market',      label: '市场分析',   Icon: LineChart },
-  { to: '/history',     label: '交易历史',   Icon: History },
-  { to: '/backtest',    label: '策略验证',   Icon: FlaskConical },
-  { to: '/reliability', label: '执行可靠性', Icon: Shield },
-  { to: '/audit',       label: '监控审计',   Icon: Eye },
-  { to: '/diagnostics', label: '策略诊断',   Icon: Stethoscope },
-  { to: '/knowledge',   label: '知识层',     Icon: BookOpen },
-  { to: '/settings',    label: '系统设置',   Icon: Settings },
+  { to: '/dashboard',  label: '仪表盘',   Icon: LayoutDashboard },
+  { to: '/collect',    label: '采集数据', Icon: Database },
+  { to: '/history',    label: '交易历史', Icon: History },
+  { to: '/backtest',   label: '策略验证', Icon: FlaskConical },
+  { to: '/learning',   label: 'AI 学习',  Icon: Brain },
+  { to: '/settings',   label: '系统设置', Icon: Settings },
 ];
 
 export function Sidebar() {
@@ -56,6 +52,9 @@ export function Sidebar() {
       <div className="mt-6 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-3 text-xs text-zinc-500">
         <div className="mb-1 font-medium text-zinc-300">深链入口</div>
         <div className="flex flex-col gap-1 text-zinc-400">
+          <NavLink to="/portfolio" className="hover:text-indigo-300">投资组合</NavLink>
+          <NavLink to="/reliability" className="hover:text-indigo-300">执行可靠性</NavLink>
+          <NavLink to="/knowledge" className="hover:text-indigo-300">知识层</NavLink>
           <NavLink to="/manual" className="hover:text-indigo-300">手动开单</NavLink>
           <NavLink to="/glossary" className="hover:text-indigo-300">术语词典</NavLink>
         </div>

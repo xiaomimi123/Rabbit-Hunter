@@ -1,6 +1,8 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AppShell } from './components/layout/AppShell';
 import { DashboardPage } from './components/pages-v4/DashboardPage';
+import { CollectPage } from './components/pages-v4/CollectPage';
+import { LearningPage } from './components/pages-v4/LearningPage';
 import { PortfolioPage } from './components/pages-v4/PortfolioPage';
 import { MarketPage } from './components/pages-v4/MarketPage';
 import { HistoryPage } from './components/pages-v4/HistoryPage';
@@ -21,6 +23,9 @@ export default function App() {
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route element={<AppShell />}>
           <Route path="/dashboard"   element={<DashboardPage />} />
+          <Route path="/collect"     element={<CollectPage />} />
+          <Route path="/learning"    element={<LearningPage />} />
+          <Route path="/settings"    element={<SettingsPage />} />
           <Route path="/portfolio"   element={<PortfolioPage />} />
           <Route path="/market"      element={<MarketPage />} />
           <Route path="/history"     element={<HistoryPage />} />
@@ -29,7 +34,6 @@ export default function App() {
           <Route path="/audit"       element={<AuditPage />} />
           <Route path="/diagnostics" element={<DiagnosticsPage />} />
           <Route path="/knowledge"   element={<KnowledgePage />} />
-          <Route path="/settings"    element={<SettingsPage />} />
           <Route path="/chart/:symbol" element={<V5ChartPage />} />
           <Route path="/manual"      element={<V5ManualOrderPage />} />
           <Route path="/glossary"    element={<V5GlossaryPage />} />

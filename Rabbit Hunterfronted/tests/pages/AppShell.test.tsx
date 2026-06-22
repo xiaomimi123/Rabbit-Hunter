@@ -24,7 +24,7 @@ describe('AppShell', () => {
   });
   afterEach(() => vi.unstubAllGlobals());
 
-  it('renders sidebar 9 nav items + outlet content', () => {
+  it('renders sidebar 6 nav items + outlet content', () => {
     const qc = new QueryClient();
     render(
       <QueryClientProvider client={qc}>
@@ -39,8 +39,9 @@ describe('AppShell', () => {
     );
     expect(screen.getByText(/猎兔者/)).toBeInTheDocument();
     expect(screen.getByText('仪表盘')).toBeInTheDocument();
-    expect(screen.getByText('投资组合')).toBeInTheDocument();
-    expect(screen.getByText('监控审计')).toBeInTheDocument();
+    expect(screen.getByText('采集数据')).toBeInTheDocument();
+    expect(screen.getByText('AI 学习')).toBeInTheDocument();
+    expect(screen.getByText('系统设置')).toBeInTheDocument();
     expect(screen.getByText('dashboard-page')).toBeInTheDocument();
   });
 });
