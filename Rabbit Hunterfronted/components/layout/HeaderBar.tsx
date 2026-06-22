@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { RefreshCw, Wifi, WifiOff } from 'lucide-react';
+import { useLocation } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useUIStore } from '../../services/store';
 import { useSystemMode } from '../../hooks/useSystemMode';
@@ -7,6 +8,10 @@ import { useV5Klines } from '../../hooks/api/useV5Klines';
 import { cn } from '../primitives-v3/cn';
 
 const SYMBOLS = ['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'BNB/USDT', 'XRP/USDT', 'DOGE/USDT'];
+
+// 只有跟当前 symbol 强相关的页面才展示左侧 symbol 选择 + 价格 + 15m。
+// 其他页面(history/backtest/audit/knowledge/reliability/settings)隐藏左半部分。
+const SYMBOL_AWARE_ROUTES = ['/dashboard', '/portfolio', '/market', '/diagnostics', '/chart'];
 
 interface Props {
   wsConnected: boolean;
@@ -17,8 +22,10 @@ export function HeaderBar({ wsConnected }: Props) {
   const provider = useUIStore(s => s.effectiveAiProvider);
   const selectedSymbol = useUIStore(s => s.selectedSymbol);
   const setSelectedSymbol = useUIStore(s => s.setSelectedSymbol);
-  // 后端 API 要求 limit ≥ 10;只用最后两根算 15m 涨跌。
-  const klines = useV5Klines(selectedSymbol, '15m', 10);
+  const location = useLocation();
+  const symbolAware = SYMBOL_AWARE_ROUTES.some(p => location.pathname.startsWith(p));
+  // 仅在 symbol-aware 路由才拉 K 线,省去无意义请求。
+  const klines = useV5Klines(symbolAware ? selectedSymbol : null, '15m', 10);
   const qc = useQueryClient();
   const [tick, setTick] = useState(0);
 
@@ -37,6 +44,7 @@ export function HeaderBar({ wsConnected }: Props) {
   return (
     <header className="sticky top-0 z-20 border-b border-zinc-800 bg-zinc-950/90 px-6 py-4 backdrop-blur">
       <div className="flex flex-wrap items-center justify-between gap-4">
+        {symbolAware ? (
         <div className="flex flex-wrap items-center gap-3">
           <select
             value={selectedSymbol}
@@ -65,6 +73,7 @@ export function HeaderBar({ wsConnected }: Props) {
             </div>
           </div>
         </div>
+        ) : <div />}
 
         <div className="flex flex-wrap items-center gap-3">
           {mode && (
