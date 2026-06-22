@@ -20,7 +20,7 @@ export interface CandidateOut {
   rule_spec_json: string;
   source_quote: string | null;
   extracted_by: string;
-  status: 'pending' | 'validated' | 'approved' | 'rejected' | 'broken';
+  status: 'pending' | 'validating' | 'validated' | 'approved' | 'rejected' | 'broken';
   wf_report_path: string | null;
   kpi_passes: number | null;
   reject_reason: string | null;
@@ -36,6 +36,12 @@ export interface ValidationResult {
   n_oos_trades: number;
   net_avg_r: number;
   net_profit_factor: number | null;
+}
+
+export interface ValidationAccepted {
+  accepted: boolean;
+  candidate_id: number;
+  status: string;
 }
 
 export function useM9Books() {
@@ -83,7 +89,7 @@ export function useM9ValidateCandidate() {
     mutationFn: ({ id, ...payload }: {
       id: number; start_iso: string; end_iso: string; symbols: string[];
       train_days?: number; oos_days?: number; step_days?: number;
-    }) => apiPost<ValidationResult>(`/api/v5/m9/candidates/${id}/validate`, payload),
+    }) => apiPost<ValidationAccepted>(`/api/v5/m9/candidates/${id}/validate`, payload),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['m9', 'candidates'] }),
   });
 }

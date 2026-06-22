@@ -95,6 +95,12 @@ class ValidationResult(BaseModel):
     net_profit_factor: Optional[float]
 
 
+class ValidationAccepted(BaseModel):
+    accepted: bool
+    candidate_id: int
+    status: str
+
+
 class ApproveRequest(BaseModel):
     approver: str = "user"
 
@@ -161,13 +167,18 @@ async def list_all_candidates(status: Optional[str] = None) -> CandidatesListRes
     return CandidatesListResponse(candidates=[CandidateOut(**c) for c in rows])
 
 
-@router.post("/candidates/{candidate_id}/validate", response_model=ValidationResult)
+@router.post("/candidates/{candidate_id}/validate", response_model=ValidationAccepted)
 async def validate_candidate(
     candidate_id: int, payload: ValidationRequest,
-) -> ValidationResult:
-    from scripts.m9_validate import trigger_validation
+) -> ValidationAccepted:
+    """触发 walk-forward 验证(异步)。
+
+    立即返回 accepted,后台线程跑完会把候选状态从 validating → validated/broken。
+    前端通过 GET /candidates 轮询取结果(每 30s 自动 refetch)。
+    """
+    from scripts.m9_validate import trigger_validation_async
     try:
-        result = trigger_validation(
+        result = trigger_validation_async(
             db_path=_db(), candidate_id=candidate_id,
             start_iso=payload.start_iso, end_iso=payload.end_iso,
             symbols=payload.symbols,
@@ -177,9 +188,7 @@ async def validate_candidate(
         )
     except ValueError as e:
         raise HTTPException(404, str(e))
-    except Exception as e:
-        raise HTTPException(500, f"validation failed: {e}")
-    return ValidationResult(**result)
+    return ValidationAccepted(**result)
 
 
 @router.post("/candidates/{candidate_id}/approve")

@@ -110,3 +110,80 @@ def test_trigger_validation_missing_candidate_raises(db_path, tmp_path):
             symbols=["BTC/USDT"],
             reports_dir=str(tmp_path),
         )
+
+
+# ─── async version ───────────────────────────────
+
+
+def test_trigger_validation_async_returns_immediately_and_marks_validating(db_path, tmp_path):
+    """异步入口立即返回 accepted,并把候选标 validating。"""
+    from scripts.m9_knowledge import add_candidate_rule, get_candidate
+    from scripts.m9_validate import trigger_validation_async
+    import threading
+    import time
+
+    cid = add_candidate_rule(
+        db_path, name="x", rule_spec={"setup_type_name": "test_setup"},
+    )
+
+    started = threading.Event()
+    finished = threading.Event()
+
+    def slow_wf(_cfg):
+        started.set()
+        finished.wait(timeout=2.0)
+        return _fake_report(passes=True)
+
+    with patch("scripts.m9_validate.run_walkforward", side_effect=slow_wf):
+        result = trigger_validation_async(
+            db_path=db_path, candidate_id=cid,
+            start_iso="2026-01-01", end_iso="2026-03-01",
+            symbols=["BTC/USDT"], reports_dir=str(tmp_path),
+        )
+
+        # API 立刻返回
+        assert result["accepted"] is True
+        assert result["status"] == "validating"
+
+        # 后台线程已经开跑
+        assert started.wait(timeout=1.0)
+        # DB 应当已经看到 validating 状态
+        c = get_candidate(db_path, cid)
+        assert c["status"] == "validating"
+
+        # 放线程跑完
+        finished.set()
+        # 给点时间让线程写完
+        for _ in range(20):
+            time.sleep(0.05)
+            c = get_candidate(db_path, cid)
+            if c["status"] == "validated":
+                break
+        assert c["status"] == "validated"
+        assert c["kpi_passes"] == 1
+
+
+def test_trigger_validation_async_marks_broken_on_exception(db_path, tmp_path):
+    """worker 异常时,候选标 broken + 写 reject_reason。"""
+    from scripts.m9_knowledge import add_candidate_rule, get_candidate
+    from scripts.m9_validate import trigger_validation_async
+    import time
+
+    cid = add_candidate_rule(db_path, name="x", rule_spec={"setup_type_name": "s"})
+
+    def boom(_cfg):
+        raise RuntimeError("simulated walkforward failure")
+
+    with patch("scripts.m9_validate.run_walkforward", side_effect=boom):
+        trigger_validation_async(
+            db_path=db_path, candidate_id=cid,
+            start_iso="2026-01-01", end_iso="2026-03-01",
+            symbols=["BTC/USDT"], reports_dir=str(tmp_path),
+        )
+        for _ in range(20):
+            time.sleep(0.05)
+            c = get_candidate(db_path, cid)
+            if c["status"] == "broken":
+                break
+    assert c["status"] == "broken"
+    assert "RuntimeError" in (c["reject_reason"] or "")

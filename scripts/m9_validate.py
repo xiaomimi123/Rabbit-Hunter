@@ -2,11 +2,17 @@
 
 依据:文档 §11 第 3 步 + §15 KPI #2 #3。
 
-trigger_validation(candidate_id):
+trigger_validation(candidate_id):  -- 同步版,可能阻塞数分钟
   1. 取候选规则的 rule_spec_json
   2. 若 spec 指明 setup_type_name → 用 --setup-filter 跑 WF
   3. 把 WF 报告路径回写到 candidate
   4. 根据 pass_doc_kpi 写 kpi_passes 标记
+
+trigger_validation_async(candidate_id):  -- 后台线程版,API 立即返回
+  1. 候选立即标 status='validating'
+  2. 在守护线程里跑 trigger_validation
+  3. 失败时标 status='broken' 并写 reject_reason
+  4. 前端 30s 轮询 list_candidates 看到状态翻转
 
 简化:此版本只支持把 setup_type_name 直接交给 walkforward(因为现有 backtest engine
 就是按 V5 策略派生 setup_type)。后续 M9.4 接入"规则注入参数"时,本函数会被扩展。
@@ -15,6 +21,9 @@ from __future__ import annotations
 
 import json
 import os
+import sqlite3
+import threading
+import traceback
 from datetime import datetime, timezone
 from typing import List, Optional
 
@@ -87,4 +96,75 @@ def trigger_validation(
     }
 
 
-__all__ = ["trigger_validation"]
+def _mark_validating(db_path: str, candidate_id: int) -> None:
+    """同步写一行 status='validating',让前端立刻看到 spinner。"""
+    conn = sqlite3.connect(db_path)
+    try:
+        conn.execute(
+            "UPDATE m9_candidate_rules SET status='validating', "
+            "wf_report_path=NULL, kpi_passes=NULL WHERE id=?",
+            (candidate_id,),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _mark_broken(db_path: str, candidate_id: int, reason: str) -> None:
+    """验证过程中异常时标记。"""
+    conn = sqlite3.connect(db_path)
+    try:
+        conn.execute(
+            "UPDATE m9_candidate_rules SET status='broken', "
+            "reject_reason=? WHERE id=?",
+            (reason[:500], candidate_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def trigger_validation_async(
+    *,
+    db_path: str,
+    candidate_id: int,
+    start_iso: str,
+    end_iso: str,
+    symbols: List[str],
+    train_days: int = 30,
+    oos_days: int = 14,
+    step_days: int = 14,
+    cache_root: str = "data/backtest_cache",
+    reports_dir: str = "reports",
+) -> dict:
+    """异步入口:立即返回,后台线程跑 trigger_validation。
+
+    返回 {accepted: True, candidate_id, status: 'validating'}。
+    前端通过 candidate list 轮询拿最终结果。
+    """
+    candidate = get_candidate(db_path, candidate_id)
+    if not candidate:
+        raise ValueError(f"candidate {candidate_id} not found")
+
+    _mark_validating(db_path, candidate_id)
+
+    def _worker():
+        try:
+            trigger_validation(
+                db_path=db_path, candidate_id=candidate_id,
+                start_iso=start_iso, end_iso=end_iso, symbols=symbols,
+                train_days=train_days, oos_days=oos_days, step_days=step_days,
+                cache_root=cache_root, reports_dir=reports_dir,
+            )
+        except Exception as e:
+            tb = traceback.format_exc()
+            print(f"[M9] validation worker for #{candidate_id} 异常:\n{tb}")
+            _mark_broken(db_path, candidate_id, f"{type(e).__name__}: {e}")
+
+    t = threading.Thread(target=_worker, daemon=True, name=f"m9-wf-{candidate_id}")
+    t.start()
+
+    return {"accepted": True, "candidate_id": candidate_id, "status": "validating"}
+
+
+__all__ = ["trigger_validation", "trigger_validation_async"]

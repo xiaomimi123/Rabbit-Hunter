@@ -21,18 +21,20 @@ import { cn } from '../primitives-v3/cn';
 
 const STATUS_TONES = {
   pending: 'amber',
+  validating: 'indigo',
   validated: 'indigo',
   approved: 'emerald',
   rejected: 'rose',
-  broken: 'zinc',
+  broken: 'rose',
 } as const;
 
 const STATUS_LABELS = {
   pending: '待验证',
+  validating: '跑 WF 中…',
   validated: '已验证',
   approved: '已批准',
   rejected: '已拒绝',
-  broken: '失效',
+  broken: '验证异常',
 } as const;
 
 export function KnowledgePage() {

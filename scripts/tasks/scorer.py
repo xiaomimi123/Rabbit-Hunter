@@ -65,6 +65,29 @@ def _leverage() -> int:
     return int(get_param("v5_leverage", 10, int))
 
 
+def _enable_auto_trading(db_path: str) -> bool:
+    """实时读 system_settings.enable_auto_trading。
+
+    Dashboard 切开关后,scorer 下次 tick 立即看到(5s TTL 内可能多此一击,但写入会
+    立即可见,因为这是直接的 SQLite 读)。默认 True — 没显式关时正常开仓。
+    """
+    import sqlite3
+    try:
+        conn = sqlite3.connect(db_path)
+        try:
+            row = conn.execute(
+                "SELECT value FROM system_settings WHERE key='enable_auto_trading' "
+                "ORDER BY rowid DESC LIMIT 1"
+            ).fetchone()
+            if row and row[0] is not None:
+                return str(row[0]).strip().lower() in ("1", "true", "yes")
+            return True
+        finally:
+            conn.close()
+    except sqlite3.OperationalError:
+        return True  # 表/库不存在时 fail-open(开发期不阻塞)
+
+
 def _utcnow() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -171,6 +194,15 @@ async def process_enriched_v5(*, enriched: EnrichedItem, ai, paper_pm, live_pm,
     if _count_open_positions(db_path) >= _max_concurrent():
         _write_trade_score(db_path, enriched, indicators, decision,
                           block_reason="MAX_CONCURRENT_POSITIONS",
+                          funding_z_score=funding_z_score,
+                          funding_rate_8h=funding_rate_8h)
+        return
+
+    # Dashboard 启动/暂停扫描:每次 tick 读 system_settings.enable_auto_trading。
+    # 关掉时仍写 trade_scores(诊断有价值)但不开仓 — 立即生效,不必重启容器。
+    if not _enable_auto_trading(db_path):
+        _write_trade_score(db_path, enriched, indicators, decision,
+                          block_reason="AUTO_TRADING_DISABLED",
                           funding_z_score=funding_z_score,
                           funding_rate_8h=funding_rate_8h)
         return

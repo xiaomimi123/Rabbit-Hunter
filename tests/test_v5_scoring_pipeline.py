@@ -128,6 +128,70 @@ def test_process_enriched_v5_injects_funding_zscore(monkeypatch):
     assert row[1] == 0.0008
 
 
+def test_disabled_auto_trading_writes_block_reason_no_paper_trade(monkeypatch):
+    """enable_auto_trading=false → trade_scores 写一行 'AUTO_TRADING_DISABLED',无开仓。"""
+    import asyncio
+    import sqlite3
+    import tempfile
+    from unittest.mock import MagicMock, AsyncMock
+
+    tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+    tmp.close()
+    monkeypatch.setenv("V5_STRATEGY_MODE", "and_strict")
+    monkeypatch.setenv("V5_RSI_OVERBOUGHT", "60")
+    monkeypatch.setenv("DB_PATH", tmp.name)
+    monkeypatch.setenv("V5_USE_SYMBOL_WHITELIST", "false")
+
+    from scripts.local_db import init_local_db
+    init_local_db(tmp.name)
+
+    # 关掉自动交易开关
+    conn = sqlite3.connect(tmp.name)
+    conn.execute(
+        "INSERT INTO system_settings(key, value) VALUES (?, ?)",
+        ("enable_auto_trading", "false"),
+    )
+    conn.commit()
+    conn.close()
+
+    rising_then_drop = [100 + i * 2 for i in range(40)] + [180, 178, 176]
+    klines_15m = _build_klines(rising_then_drop)
+    klines_4h = _build_klines([100 + i * 1.5 for i in range(40)])
+
+    from v5_types import AIResult, EnrichedItem
+    fake_ai = MagicMock()
+    fake_ai.decide = AsyncMock(return_value=AIResult(
+        execute=True, sl_multiplier=1.0, tp_multiplier=1.0,
+        size_multiplier=1.0, confidence=0.7, reasoning="test"
+    ))
+
+    from scripts.tasks.scorer import process_enriched_v5
+    from scripts.paper_position_manager import PaperPositionManager
+    paper_pm = PaperPositionManager(db_path=tmp.name)
+
+    enriched = EnrichedItem(
+        symbol="TEST/USDT", current_price=176.0, delta_15m_pct=-0.034,
+        volume_24h_usdt=50_000_000, klines_15m=klines_15m, klines_4h=klines_4h,
+    )
+
+    asyncio.run(process_enriched_v5(
+        enriched=enriched, ai=fake_ai, paper_pm=paper_pm, live_pm=None,
+        mode="SHADOW", db_path=tmp.name, balance_usdt=100_000.0,
+    ))
+
+    conn = sqlite3.connect(tmp.name)
+    scores = conn.execute(
+        "SELECT block_reason, executed FROM trade_scores_v5"
+    ).fetchall()
+    trades = conn.execute("SELECT COUNT(*) FROM paper_trades").fetchone()
+    conn.close()
+
+    assert len(scores) == 1
+    assert scores[0][0] == "AUTO_TRADING_DISABLED"
+    assert scores[0][1] == 0     # executed = 0
+    assert trades[0] == 0         # 无开仓
+
+
 def test_process_enriched_v5_funding_null_when_cache_miss(monkeypatch):
     """cache 没数据时,funding_z_score 写 NULL,不阻塞。"""
     import asyncio
