@@ -65,6 +65,30 @@ def _leverage() -> int:
     return int(get_param("v5_leverage", 10, int))
 
 
+def _ai_fail_open(db_path: str) -> bool:
+    """实时读 system_settings.ai_fail_open。
+
+    True = AI 不可用时(超时/异常/余额不足)允许跳过 AI 二审。
+    SHADOW 模式无论此值都视为 true(数据采集优先于 AI gate);
+    LIVE 模式默认 False — 文档要求 fail-closed。
+    """
+    import sqlite3
+    try:
+        conn = sqlite3.connect(db_path)
+        try:
+            row = conn.execute(
+                "SELECT value FROM system_settings WHERE key='ai_fail_open' "
+                "ORDER BY rowid DESC LIMIT 1"
+            ).fetchone()
+            if row and row[0] is not None:
+                return str(row[0]).strip().lower() in ("1", "true", "yes")
+            return False
+        finally:
+            conn.close()
+    except sqlite3.OperationalError:
+        return False
+
+
 def _enable_auto_trading(db_path: str) -> bool:
     """实时读 system_settings.enable_auto_trading。
 
@@ -260,11 +284,30 @@ async def process_enriched_v5(*, enriched: EnrichedItem, ai, paper_pm, live_pm,
     else:
         ai_result = await ai.decide(enriched, indicators, decision, risk)
         if not ai_result.execute:
-            _write_trade_score(db_path, enriched, indicators, decision,
-                              ai=ai_result, risk=risk, block_reason="AI_REJECTED",
-                              funding_z_score=funding_z_score,
-                              funding_rate_8h=funding_rate_8h)
-            return
+            # 区分:AI 真说"不",vs AI 本身报错/超时(infra failure)。
+            # trading_assistant 把后者包成 execute=False + reasoning 前缀
+            # "AI 调用异常" / "AI 调用超时"。SHADOW + ai_fail_open=true 下
+            # infra failure 不应阻塞数据采集,自动 pass-through。
+            reasoning = ai_result.reasoning or ""
+            is_infra_error = (
+                reasoning.startswith("AI 调用异常")
+                or reasoning.startswith("AI 调用超时")
+            )
+            ai_fail_open = _ai_fail_open(db_path)
+            if is_infra_error and (mode == "SHADOW" or ai_fail_open):
+                print(f"[V5Scorer] {enriched.symbol} AI infra error, "
+                      f"SHADOW pass-through: {reasoning[:100]}")
+                ai_result = AIResult(
+                    execute=True, sl_multiplier=1.0, tp_multiplier=1.0,
+                    size_multiplier=1.0, confidence=0.5,
+                    reasoning=f"AI unavailable, pass-through: {reasoning[:120]}",
+                )
+            else:
+                _write_trade_score(db_path, enriched, indicators, decision,
+                                  ai=ai_result, risk=risk, block_reason="AI_REJECTED",
+                                  funding_z_score=funding_z_score,
+                                  funding_rate_8h=funding_rate_8h)
+                return
 
     # M3 进化层 clamp:把 AI multipliers 钳在文档 §5 第二层窄区间内。
     ai_result = AIResult(

@@ -128,6 +128,121 @@ def test_process_enriched_v5_injects_funding_zscore(monkeypatch):
     assert row[1] == 0.0008
 
 
+def test_shadow_ai_infra_error_passes_through_and_opens_paper_trade(monkeypatch):
+    """SHADOW + AI 报错(余额不足/超时)→ pass-through 开仓,不当作 AI_REJECTED。"""
+    import asyncio
+    import sqlite3
+    import tempfile
+    from unittest.mock import MagicMock, AsyncMock
+
+    tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+    tmp.close()
+    monkeypatch.setenv("V5_STRATEGY_MODE", "and_strict")
+    monkeypatch.setenv("V5_RSI_OVERBOUGHT", "60")
+    monkeypatch.setenv("DB_PATH", tmp.name)
+    monkeypatch.setenv("V5_USE_SYMBOL_WHITELIST", "false")
+
+    from scripts.local_db import init_local_db
+    init_local_db(tmp.name)
+
+    rising_then_drop = [100 + i * 2 for i in range(40)] + [180, 178, 176]
+    klines_15m = _build_klines(rising_then_drop)
+    klines_4h = _build_klines([100 + i * 1.5 for i in range(40)])
+
+    from v5_types import AIResult, EnrichedItem
+    # AI 模拟"调用异常"(像 DeepSeek 402 Insufficient Balance)
+    fake_ai = MagicMock()
+    fake_ai.decide = AsyncMock(return_value=AIResult(
+        execute=False, sl_multiplier=1.0, tp_multiplier=1.0,
+        size_multiplier=0.0, confidence=0.0,
+        reasoning="AI 调用异常 APIStatusError: 402 Insufficient Balance",
+    ))
+
+    from scripts.tasks.scorer import process_enriched_v5
+    from scripts.paper_position_manager import PaperPositionManager
+    paper_pm = PaperPositionManager(db_path=tmp.name)
+
+    enriched = EnrichedItem(
+        symbol="TEST/USDT", current_price=176.0, delta_15m_pct=-0.034,
+        volume_24h_usdt=50_000_000, klines_15m=klines_15m, klines_4h=klines_4h,
+    )
+
+    asyncio.run(process_enriched_v5(
+        enriched=enriched, ai=fake_ai, paper_pm=paper_pm, live_pm=None,
+        mode="SHADOW", db_path=tmp.name, balance_usdt=100_000.0,
+    ))
+
+    conn = sqlite3.connect(tmp.name)
+    scores = conn.execute(
+        "SELECT block_reason, executed, ai_reasoning FROM trade_scores_v5"
+    ).fetchall()
+    trades = conn.execute("SELECT side, status FROM paper_trades").fetchall()
+    conn.close()
+
+    assert len(scores) == 1
+    assert scores[0][0] is None     # 无 block(进了 paper)
+    assert scores[0][1] == 1         # executed = 1
+    # AI reasoning 里能看到 pass-through 标记
+    assert "pass-through" in (scores[0][2] or "")
+    assert len(trades) == 1
+    assert trades[0] == ("SHORT", "OPEN")
+
+
+def test_live_ai_infra_error_still_rejects_unless_fail_open(monkeypatch):
+    """LIVE 模式默认 ai_fail_open=false → AI 报错仍当 AI_REJECTED 拒。"""
+    import asyncio
+    import sqlite3
+    import tempfile
+    from unittest.mock import MagicMock, AsyncMock
+
+    tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+    tmp.close()
+    monkeypatch.setenv("V5_STRATEGY_MODE", "and_strict")
+    monkeypatch.setenv("V5_RSI_OVERBOUGHT", "60")
+    monkeypatch.setenv("DB_PATH", tmp.name)
+    monkeypatch.setenv("V5_USE_SYMBOL_WHITELIST", "false")
+
+    from scripts.local_db import init_local_db
+    init_local_db(tmp.name)
+
+    rising_then_drop = [100 + i * 2 for i in range(40)] + [180, 178, 176]
+    klines_15m = _build_klines(rising_then_drop)
+    klines_4h = _build_klines([100 + i * 1.5 for i in range(40)])
+
+    from v5_types import AIResult, EnrichedItem
+    fake_ai = MagicMock()
+    fake_ai.decide = AsyncMock(return_value=AIResult(
+        execute=False, sl_multiplier=1.0, tp_multiplier=1.0,
+        size_multiplier=0.0, confidence=0.0,
+        reasoning="AI 调用超时(>20s),fail-closed",
+    ))
+
+    from scripts.tasks.scorer import process_enriched_v5
+    from scripts.paper_position_manager import PaperPositionManager
+    paper_pm = PaperPositionManager(db_path=tmp.name)
+
+    enriched = EnrichedItem(
+        symbol="TEST/USDT", current_price=176.0, delta_15m_pct=-0.034,
+        volume_24h_usdt=50_000_000, klines_15m=klines_15m, klines_4h=klines_4h,
+    )
+
+    asyncio.run(process_enriched_v5(
+        enriched=enriched, ai=fake_ai, paper_pm=paper_pm, live_pm=None,
+        mode="LIVE", db_path=tmp.name, balance_usdt=100_000.0,
+    ))
+
+    conn = sqlite3.connect(tmp.name)
+    scores = conn.execute(
+        "SELECT block_reason, executed FROM trade_scores_v5"
+    ).fetchall()
+    trades = conn.execute("SELECT COUNT(*) FROM paper_trades").fetchone()
+    conn.close()
+
+    assert scores[0][0] == "AI_REJECTED"   # LIVE 默认 fail-closed
+    assert scores[0][1] == 0
+    assert trades[0] == 0
+
+
 def test_disabled_auto_trading_writes_block_reason_no_paper_trade(monkeypatch):
     """enable_auto_trading=false → trade_scores 写一行 'AUTO_TRADING_DISABLED',无开仓。"""
     import asyncio
