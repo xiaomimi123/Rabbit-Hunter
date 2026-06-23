@@ -12,13 +12,14 @@ from typing import Optional
 
 from v5_indicator_engine import calculate_indicators
 from v5_strategy import decide
-from v5_risk_calculator import plan
+from v5_risk_calculator import derive_safe_leverage, plan
 from v5_types import AIResult, Decision, EnrichedItem, Indicators, RiskPlan
 
 
+from scripts.config import get_config
 from scripts.v5_params import get_param
 from scripts.risk_constitution import (
-    MAX_PER_TRADE_RISK_PCT, resolve_risk_pct_for_equity,
+    EQUITY_TIERS, MAX_PER_TRADE_RISK_PCT, resolve_risk_pct_for_equity,
 )
 from scripts.risk_gates import (
     IronlawViolation,
@@ -55,10 +56,19 @@ def _risk_per_trade(equity_usdt: float = 10_000.0) -> float:
 
     保留 v5_risk_per_trade 仅作为软上限(若 <宪法上限 则使用 param 值)。
     永远不超过宪法允许的 tier 值。
+
+    assert 兜底:防回归到 "config 默认 1.5% 静默生效" 的旧 bug——
+    返回值绝不允许超过 EQUITY_TIERS 里的最高允许值(0.015,本金 > 50k 解锁的 tier 1)。
     """
     constitution_pct = resolve_risk_pct_for_equity(equity_usdt)
     param_pct = float(get_param("v5_risk_per_trade", MAX_PER_TRADE_RISK_PCT, float))
-    return min(constitution_pct, param_pct)
+    result = min(constitution_pct, param_pct)
+    absolute_ceiling = max(pct for _ceiling, pct in EQUITY_TIERS)
+    assert result <= absolute_ceiling + 1e-9, (
+        f"_risk_per_trade returned {result} > {absolute_ceiling} (EQUITY_TIERS ceiling); "
+        f"constitution={constitution_pct}, param={param_pct}"
+    )
+    return result
 
 
 def _leverage() -> int:
@@ -231,6 +241,16 @@ async def process_enriched_v5(*, enriched: EnrichedItem, ai, paper_pm, live_pm,
                           funding_rate_8h=funding_rate_8h)
         return
 
+    # 宪法 §5:自动批量做空(VULTURE)默认关闭。
+    # decision.side=="SHORT" 必须有显式 ENABLE_SHORT_TRADING=true 才放行。
+    # 不依赖 strategy 自觉过滤;此处是动钱前的最后一道硬开关。
+    if decision.side == "SHORT" and not get_config().enable_short_trading:
+        _write_trade_score(db_path, enriched, indicators, decision,
+                          block_reason="SHORT_DISABLED",
+                          funding_z_score=funding_z_score,
+                          funding_rate_8h=funding_rate_8h)
+        return
+
     # M3 铁律层:setup 禁用清单 + 日熔断(开仓前两道闸门)。
     try:
         from scripts.ai.setup_type import derive_setup_type
@@ -261,10 +281,17 @@ async def process_enriched_v5(*, enriched: EnrichedItem, ai, paper_pm, live_pm,
 
     # 单点解析风险百分比:同一值喂给 plan() 和后续 gate,确保一致。
     risk_pct = _risk_per_trade(balance_usdt)
+    # 宪法 §5:杠杆按 SL 距离反推(强平距 ≥ 2 × SL 距),再 cap 到用户配置。
+    # 用户 cap 默认 5(宪法"起步 3-5x")。若窄 ATR + 高 cap 不满足,
+    # derive 会自动降到刚好满足;若极端宽 SL 仍不满足,gate_liquidation_distance 兜底拒单。
+    safe_leverage = derive_safe_leverage(
+        entry=enriched.current_price, atr=indicators.atr_15m,
+        leverage_cap=_leverage(),
+    )
     risk = plan(
         side=decision.side, entry=enriched.current_price,
         atr=indicators.atr_15m, balance=balance_usdt,
-        risk_pct=risk_pct, leverage=_leverage(),
+        risk_pct=risk_pct, leverage=safe_leverage,
     )
 
     # ai=None 兼容(OPENAI_AI_ENABLED=false 或 AI 初始化失败):

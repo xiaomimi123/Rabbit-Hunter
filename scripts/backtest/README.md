@@ -92,9 +92,9 @@ When deciding:
 
 ## What's NOT in MVP (defer to V2)
 
-- Web UI at `/v5/backtest`
+- ~~Web UI at `/v5/backtest`~~ — implemented; see frontend route `/backtest` + `api/routes/v5_walkforward.py`.
 - Parameter grid search
-- Walk-forward train/test split
+- ~~Walk-forward train/test split~~ — implemented as M6; see `scripts/walkforward.py` + `tests/test_walkforward.py`. Reports land in `reports/wf_*.json`.
 - AI gate replay
 - Slippage / fee modeling
 - Persistent klines DB table (we fetch on-demand each run)

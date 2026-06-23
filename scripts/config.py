@@ -22,7 +22,9 @@ class TradingConfig:
     binance_api_key: str = ""
     binance_api_secret: str = ""
     binance_testnet: bool = False
-    binance_leverage: int = 10
+    # 起步杠杆。宪法 §5 要求 3-5x 起步 + 按 SL 距离反推；
+    # v5_risk_calculator.derive_safe_leverage 会在此 cap 下再按 SL 距离往下压。
+    binance_leverage: int = 5
 
     # ── AI 判断 ──────────────────────────────────────────────
     deepseek_enabled: bool = False
@@ -37,14 +39,15 @@ class TradingConfig:
     sl_tp_fail_open: bool = False
 
     # ── SHORT 路径开关 ────────────────────────────────────────
-    # V5 strategy 内部根据 RSI/MACD 判定 LONG/SHORT，此开关用于
-    # 临时禁用 SHORT（如：异常市况下只做多）。
-    enable_short_trading: bool = True
+    # 宪法（§5）要求 VULTURE / 自动批量做空默认关闭。
+    # scorer 在 decision.side=="SHORT" 时硬检查此开关，未开启则拒单（block_reason=SHORT_DISABLED）。
+    enable_short_trading: bool = False
 
     # ── V5 风险参数 ──────────────────────────────────────────
-    # 单笔风险占余额百分比（0.015 = 1.5%）。env 变量名保留 V43_RISK_PER_TRADE
-    # 以避免破坏现有部署，但语义就是 V5 的 risk_per_trade。
-    risk_per_trade: float = 0.015
+    # 单笔风险占余额百分比。宪法 §5 tier 0（本金 < 50k）= 1%。
+    # 实际生效值由 scripts.risk_constitution.resolve_risk_pct_for_equity 按净值映射，
+    # scorer._risk_per_trade 取 min(constitution_pct, param_pct) 作为软上限。
+    risk_per_trade: float = 0.01
 
     # ── 采集参数 ─────────────────────────────────────────────
     scan_interval: float = 1.0
@@ -77,13 +80,13 @@ def _load_from_env() -> TradingConfig:
         binance_api_key=os.environ.get("BINANCE_API_KEY", ""),
         binance_api_secret=os.environ.get("BINANCE_API_SECRET", ""),
         binance_testnet=os.environ.get("BINANCE_TESTNET", "false").lower() in ("1", "true"),
-        binance_leverage=int(os.environ.get("BINANCE_LEVERAGE", "10")),
+        binance_leverage=int(os.environ.get("BINANCE_LEVERAGE", "5")),
         deepseek_enabled=os.environ.get("DEEPSEEK_ENABLED", "0") in ("1", "true", "True"),
         enable_auto_trading=os.environ.get("ENABLE_AUTO_TRADING", "false").lower() in ("1", "true"),
         ai_fail_open=os.environ.get("AI_FAIL_OPEN", "false").lower() in ("1", "true"),
         sl_tp_fail_open=os.environ.get("SL_TP_FAIL_OPEN", "false").lower() in ("1", "true"),
-        enable_short_trading=os.environ.get("ENABLE_SHORT_TRADING", "true").lower() in ("1", "true"),
-        risk_per_trade=float(os.environ.get("V43_RISK_PER_TRADE", "0.015")),
+        enable_short_trading=os.environ.get("ENABLE_SHORT_TRADING", "false").lower() in ("1", "true"),
+        risk_per_trade=float(os.environ.get("V43_RISK_PER_TRADE", "0.01")),
         scan_interval=float(os.environ.get("SCAN_INTERVAL", "1.0")),
         write_queue_maxsize=int(os.environ.get("WRITE_QUEUE_MAXSIZE", "500")),
         write_workers=int(os.environ.get("WRITE_WORKERS", "2")),

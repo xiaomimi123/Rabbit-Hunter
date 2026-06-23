@@ -107,8 +107,8 @@ DEFAULTS = {
     "v5_max_extensions":          3,
     "v5_rsi_reverse_short":       65.0,
     "v5_rsi_reverse_long":        35.0,
-    "v5_risk_per_trade":          0.015,
-    "v5_leverage":                10,
+    "v5_risk_per_trade":          0.01,
+    "v5_leverage":                5,
     "v5_soft_target_minutes":     15,
     "v5_strategy_mode":             "trend_aligned",   # "trend_aligned" | "and_strict"
     "v5_trend_rsi_short_threshold": 60.0,

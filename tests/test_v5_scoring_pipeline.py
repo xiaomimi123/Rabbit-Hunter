@@ -16,6 +16,16 @@ def fresh_db():
     return tmp.name
 
 
+def _enable_short_in_config(monkeypatch):
+    """宪法 §5 起 enable_short_trading 默认 False;
+    需要走 SHORT 的 pipeline 测试显式打开,绕过 SHORT_DISABLED gate。"""
+    import scripts.config as _cfg_mod
+    monkeypatch.setattr(
+        _cfg_mod, "_config_instance",
+        _cfg_mod.TradingConfig(enable_short_trading=True),
+    )
+
+
 @pytest.mark.asyncio
 async def test_strong_signal_writes_trade_scores_v5_and_paper_trade(fresh_db, monkeypatch):
     """构造一个必然触发 SHORT 的输入 → 验证 paper_trades + trade_scores_v5 各写一行。"""
@@ -23,6 +33,7 @@ async def test_strong_signal_writes_trade_scores_v5_and_paper_trade(fresh_db, mo
     monkeypatch.setenv("V5_RSI_OVERBOUGHT", "60")
     monkeypatch.setenv("DB_PATH", fresh_db)
     monkeypatch.setenv("V5_USE_SYMBOL_WHITELIST", "false")  # 测试用的 TEST/USDT 不在白名单
+    _enable_short_in_config(monkeypatch)
 
     rising_then_drop = [100 + i * 2 for i in range(40)] + [180, 178, 176]
     klines_15m = _build_klines(rising_then_drop)
@@ -141,6 +152,7 @@ def test_shadow_ai_infra_error_passes_through_and_opens_paper_trade(monkeypatch)
     monkeypatch.setenv("V5_RSI_OVERBOUGHT", "60")
     monkeypatch.setenv("DB_PATH", tmp.name)
     monkeypatch.setenv("V5_USE_SYMBOL_WHITELIST", "false")
+    _enable_short_in_config(monkeypatch)
 
     from scripts.local_db import init_local_db
     init_local_db(tmp.name)
@@ -201,6 +213,7 @@ def test_live_ai_infra_error_still_rejects_unless_fail_open(monkeypatch):
     monkeypatch.setenv("V5_RSI_OVERBOUGHT", "60")
     monkeypatch.setenv("DB_PATH", tmp.name)
     monkeypatch.setenv("V5_USE_SYMBOL_WHITELIST", "false")
+    _enable_short_in_config(monkeypatch)
 
     from scripts.local_db import init_local_db
     init_local_db(tmp.name)
@@ -241,6 +254,67 @@ def test_live_ai_infra_error_still_rejects_unless_fail_open(monkeypatch):
     assert scores[0][0] == "AI_REJECTED"   # LIVE 默认 fail-closed
     assert scores[0][1] == 0
     assert trades[0] == 0
+
+
+def test_short_decision_blocked_when_enable_short_trading_is_false(monkeypatch):
+    """宪法 §5:enable_short_trading=False(默认)→ SHORT 决策必被 SHORT_DISABLED 拦。
+
+    回归测试:历史上 ENABLE_SHORT_TRADING 是死开关(config 定义但无人读),
+    导致即使设 false 也照常做空。此测试确保 scorer 主动检查此开关。
+    """
+    import asyncio
+    import sqlite3
+    import tempfile
+    from unittest.mock import MagicMock, AsyncMock
+
+    tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+    tmp.close()
+    monkeypatch.setenv("V5_STRATEGY_MODE", "and_strict")
+    monkeypatch.setenv("V5_RSI_OVERBOUGHT", "60")
+    monkeypatch.setenv("DB_PATH", tmp.name)
+    monkeypatch.setenv("V5_USE_SYMBOL_WHITELIST", "false")
+    # 注意:不调用 _enable_short_in_config —— 走默认 enable_short_trading=False
+
+    from scripts.local_db import init_local_db
+    init_local_db(tmp.name)
+
+    # 触发 SHORT 的 fixture
+    rising_then_drop = [100 + i * 2 for i in range(40)] + [180, 178, 176]
+    klines_15m = _build_klines(rising_then_drop)
+    klines_4h = _build_klines([100 + i * 1.5 for i in range(40)])
+
+    # 把 config 单例显式 reset 成默认 dataclass(防 cross-test pollution)
+    import scripts.config as _cfg_mod
+    monkeypatch.setattr(_cfg_mod, "_config_instance", _cfg_mod.TradingConfig())
+
+    from v5_types import AIResult, EnrichedItem
+    fake_ai = MagicMock()
+    fake_ai.decide = AsyncMock(side_effect=AssertionError("SHORT gate 应在 AI 调用前拦截"))
+
+    from scripts.tasks.scorer import process_enriched_v5
+    paper_pm = MagicMock(side_effect=AssertionError("不应开仓"))
+    enriched = EnrichedItem(
+        symbol="TEST/USDT", current_price=176.0, delta_15m_pct=-0.034,
+        volume_24h_usdt=50_000_000, klines_15m=klines_15m, klines_4h=klines_4h,
+    )
+
+    asyncio.run(process_enriched_v5(
+        enriched=enriched, ai=fake_ai, paper_pm=paper_pm, live_pm=None,
+        mode="SHADOW", db_path=tmp.name, balance_usdt=100_000.0,
+    ))
+
+    conn = sqlite3.connect(tmp.name)
+    scores = conn.execute(
+        "SELECT block_reason, executed, side FROM trade_scores_v5"
+    ).fetchall()
+    trades = conn.execute("SELECT COUNT(*) FROM paper_trades").fetchone()
+    conn.close()
+
+    assert len(scores) == 1
+    assert scores[0][0] == "SHORT_DISABLED"
+    assert scores[0][1] == 0     # executed = 0
+    assert scores[0][2] == "SHORT"
+    assert trades[0] == 0         # 无开仓
 
 
 def test_disabled_auto_trading_writes_block_reason_no_paper_trade(monkeypatch):
