@@ -68,7 +68,7 @@ def _fetch_balance() -> float:
     """SHADOW 模式直接返回 PAPER_INITIAL_BALANCE_USDT — 不 init exchange trader
     (避免每次 scoring 都打一堆 fetch_balance / load_markets 失败的日志)。
     LIVE 模式才真正去拉真实余额。"""
-    if _system_mode() != "LIVE":
+    if _resolve_mode_db() != "LIVE":
         return _PAPER_BALANCE
     try:
         trader = _get_live_trader()
