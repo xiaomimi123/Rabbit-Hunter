@@ -18,9 +18,10 @@ from scripts.v5_symbol_whitelist import (
 # Unit tests — whitelist module
 # ---------------------------------------------------------------------------
 
-def test_whitelist_size_is_19():
+def test_whitelist_size_is_25():
     # 2026-06: MATIC removed (delisted from OKX as Polygon rebranded to POL)
-    assert len(V5_TOP20_WHITELIST) == 19
+    # 2026-06-26: +6 加密主流(WLD/PEPE/AAVE/HYPE/ZEC/IP),OKX SWAP 当前 100M+
+    assert len(V5_TOP20_WHITELIST) == 25
 
 
 def test_matic_no_longer_in_whitelist():
@@ -32,9 +33,16 @@ def test_whitelist_includes_majors():
         assert s in V5_TOP20_WHITELIST
 
 
-def test_whitelist_excludes_known_meme():
-    """这些币应该被过滤掉。"""
-    for s in ("BEATUSDT", "HUSDT", "BSBUSDT", "MEGAUSDT", "JTOUSDT", "SPCXUSDT", "LABUSDT"):
+def test_whitelist_includes_new_2026_06_26_additions():
+    """2026-06-26 加入的 6 个 OKX SWAP 100M+ 主流加密币。"""
+    for s in ("WLDUSDT", "PEPEUSDT", "AAVEUSDT", "HYPEUSDT", "ZECUSDT", "IPUSDT"):
+        assert s in V5_TOP20_WHITELIST
+
+
+def test_whitelist_excludes_known_meme_and_rwa():
+    """这些 RWA / 美股代币化 / meme 应该被过滤掉。"""
+    for s in ("BEATUSDT", "HUSDT", "BSBUSDT", "MEGAUSDT", "JTOUSDT", "SPCXUSDT", "LABUSDT",
+              "SOXLUSDT", "SKHYNIXUSDT", "SNDKUSDT", "MUUSDT", "XAUUSDT", "XAGUSDT"):
         assert s not in V5_TOP20_WHITELIST
 
 
