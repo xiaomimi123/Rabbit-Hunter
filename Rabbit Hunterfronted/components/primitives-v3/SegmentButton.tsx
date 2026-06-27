@@ -20,10 +20,10 @@ export function SegmentButton({
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        'rounded-xl px-3 py-1.5 text-sm transition disabled:cursor-not-allowed disabled:opacity-40',
+        'rounded-sm px-3 py-1.5 text-xs uppercase tracking-wider2 transition disabled:cursor-not-allowed disabled:opacity-40',
         active
-          ? 'bg-indigo-500 text-white shadow-lg shadow-indigo-500/20'
-          : 'border border-zinc-800 bg-zinc-950 text-zinc-300 hover:border-zinc-700 hover:text-zinc-100',
+          ? 'bg-brass-soft text-brass border border-brass/40'
+          : 'border border-hairline bg-bg-deep text-ivory-70 hover:border-hairline-strong hover:text-ivory',
         className,
       )}
     >

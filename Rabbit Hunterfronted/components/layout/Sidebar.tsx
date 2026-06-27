@@ -18,14 +18,14 @@ const NAV: NavItem[] = [
 
 export function Sidebar() {
   return (
-    <aside className="flex flex-col w-[240px] border-r border-zinc-800 bg-zinc-950/95 px-4 py-6 sticky top-0 h-screen overflow-y-auto">
+    <aside className="flex flex-col w-[240px] border-r border-hairline bg-bg-base/95 px-4 py-6 sticky top-0 h-screen overflow-y-auto">
       <div className="mb-8 flex items-center gap-3 px-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-indigo-500/15 text-indigo-300">
+        <div className="flex h-10 w-10 items-center justify-center rounded-sm border border-brass/40 bg-brass-soft text-brass">
           <Bot className="h-5 w-5" />
         </div>
         <div>
-          <div className="font-semibold text-zinc-50">猎兔者R</div>
-          <div className="text-xs text-zinc-500">v6.0 · SHADOW</div>
+          <div className="font-semibold text-ivory">猎兔者R</div>
+          <div className="text-[10px] uppercase tracking-wider2 text-ivory-40 font-mono">v6.0 · SHADOW</div>
         </div>
       </div>
 
@@ -36,10 +36,10 @@ export function Sidebar() {
             to={to}
             className={({ isActive }) =>
               cn(
-                'flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left text-sm transition',
+                'flex w-full items-center gap-3 rounded-sm px-3 py-2.5 text-left text-sm transition',
                 isActive
-                  ? 'bg-indigo-500/15 text-indigo-200'
-                  : 'text-zinc-400 hover:bg-zinc-900 hover:text-zinc-100',
+                  ? 'border border-brass/40 bg-brass-soft text-brass'
+                  : 'border border-transparent text-ivory-70 hover:bg-bg-elevated hover:text-ivory',
               )
             }
           >
@@ -49,14 +49,14 @@ export function Sidebar() {
         ))}
       </nav>
 
-      <div className="mt-6 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-3 text-xs text-zinc-500">
-        <div className="mb-1 font-medium text-zinc-300">深链入口</div>
-        <div className="flex flex-col gap-1 text-zinc-400">
-          <NavLink to="/portfolio" className="hover:text-indigo-300">投资组合</NavLink>
-          <NavLink to="/reliability" className="hover:text-indigo-300">执行可靠性</NavLink>
-          <NavLink to="/knowledge" className="hover:text-indigo-300">知识层</NavLink>
-          <NavLink to="/manual" className="hover:text-indigo-300">手动开单</NavLink>
-          <NavLink to="/glossary" className="hover:text-indigo-300">术语词典</NavLink>
+      <div className="mt-6 rounded-sm border border-hairline bg-bg-surface/60 p-3 text-xs">
+        <div className="mb-1 font-medium uppercase tracking-wider2 text-[10px] text-ivory-40">深链入口</div>
+        <div className="flex flex-col gap-1 text-ivory-70">
+          <NavLink to="/portfolio" className="hover:text-brass">投资组合</NavLink>
+          <NavLink to="/reliability" className="hover:text-brass">执行可靠性</NavLink>
+          <NavLink to="/knowledge" className="hover:text-brass">知识层</NavLink>
+          <NavLink to="/manual" className="hover:text-brass">手动开单</NavLink>
+          <NavLink to="/glossary" className="hover:text-brass">术语词典</NavLink>
         </div>
       </div>
     </aside>

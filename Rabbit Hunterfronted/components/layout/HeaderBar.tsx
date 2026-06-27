@@ -42,33 +42,33 @@ export function HeaderBar({ wsConnected }: Props) {
     : 0;
 
   return (
-    <header className="sticky top-0 z-20 border-b border-zinc-800 bg-zinc-950/90 px-6 py-4 backdrop-blur">
+    <header className="sticky top-0 z-20 border-b border-hairline bg-bg-base/90 px-6 py-4 backdrop-blur">
       <div className="flex flex-wrap items-center justify-between gap-4">
         {symbolAware ? (
         <div className="flex flex-wrap items-center gap-3">
           <select
             value={selectedSymbol}
             onChange={(e) => setSelectedSymbol(e.target.value)}
-            className="rounded-2xl border border-zinc-700 bg-zinc-950 px-4 py-2 text-sm text-zinc-100 outline-none focus:border-indigo-500"
+            className="rounded-sm border border-hairline-strong bg-bg-deep px-4 py-2 text-sm font-mono text-ivory outline-none focus:border-brass transition"
           >
             {SYMBOLS.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/70 px-4 py-2">
-            <div className="text-xs text-zinc-500">当前价格</div>
-            <div className="text-lg font-semibold text-zinc-50 tabular-nums">
+          <div className="rounded-sm border border-hairline bg-bg-surface px-4 py-2">
+            <div className="text-[10px] uppercase tracking-wider2 text-ivory-40">当前价格</div>
+            <div className="font-mono text-lg font-semibold text-ivory tabular-nums">
               {lastPrice > 0 ? lastPrice.toFixed(lastPrice >= 1 ? 2 : 6) : '—'}
             </div>
           </div>
           <div
             className={cn(
-              'rounded-2xl border px-4 py-2',
+              'rounded-sm border px-4 py-2',
               pct >= 0
-                ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300'
-                : 'border-rose-500/20 bg-rose-500/10 text-rose-300',
+                ? 'border-sage/40 bg-sage-soft text-sage'
+                : 'border-oxblood/40 bg-oxblood-soft text-oxblood',
             )}
           >
-            <div className="text-xs text-zinc-500">15m</div>
-            <div className="text-lg font-semibold tabular-nums">
+            <div className="text-[10px] uppercase tracking-wider2 text-ivory-40">15m</div>
+            <div className="font-mono text-lg font-semibold tabular-nums">
               {pct >= 0 ? '+' : ''}{pct.toFixed(2)}%
             </div>
           </div>
@@ -77,35 +77,35 @@ export function HeaderBar({ wsConnected }: Props) {
 
         <div className="flex flex-wrap items-center gap-3">
           {mode && (
-            <div className="rounded-2xl border border-zinc-800 bg-zinc-900/70 px-4 py-2">
-              <div className="text-xs text-zinc-500">系统模式</div>
+            <div className="rounded-sm border border-hairline bg-bg-surface px-4 py-2">
+              <div className="text-[10px] uppercase tracking-wider2 text-ivory-40">系统模式</div>
               <div className={cn(
-                'font-medium',
-                mode === 'LIVE' ? 'text-rose-300' : 'text-amber-300',
+                'font-mono font-medium',
+                mode === 'LIVE' ? 'text-oxblood' : 'text-brass',
               )}>
-                {mode === 'LIVE' ? '⬤ LIVE' : '◐ SHADOW'}
+                {mode === 'LIVE' ? '● LIVE' : '◐ SHADOW'}
               </div>
             </div>
           )}
           {provider && (
-            <div className="rounded-2xl border border-zinc-800 bg-zinc-900/70 px-4 py-2">
-              <div className="text-xs text-zinc-500">AI 提供方</div>
-              <div className="font-medium text-indigo-300">{provider}</div>
+            <div className="rounded-sm border border-hairline bg-bg-surface px-4 py-2">
+              <div className="text-[10px] uppercase tracking-wider2 text-ivory-40">AI 提供方</div>
+              <div className="font-mono font-medium text-ink">{provider}</div>
             </div>
           )}
           <div
             className={cn(
-              'rounded-2xl border px-4 py-2',
+              'rounded-sm border px-4 py-2',
               wsConnected
-                ? 'border-emerald-500/20 bg-emerald-500/10'
-                : 'border-rose-500/20 bg-rose-500/10',
+                ? 'border-sage/40 bg-sage-soft'
+                : 'border-oxblood/40 bg-oxblood-soft',
             )}
             title={wsConnected ? 'WebSocket 已连接' : 'WebSocket 离线'}
           >
-            <div className="text-xs text-zinc-500">WS</div>
+            <div className="text-[10px] uppercase tracking-wider2 text-ivory-40">WS</div>
             <div className={cn(
-              'font-medium inline-flex items-center gap-1.5',
-              wsConnected ? 'text-emerald-300' : 'text-rose-300',
+              'font-mono font-medium inline-flex items-center gap-1.5',
+              wsConnected ? 'text-sage' : 'text-oxblood',
             )}>
               {wsConnected ? <Wifi className="h-3.5 w-3.5" /> : <WifiOff className="h-3.5 w-3.5" />}
               {wsConnected ? '在线' : '离线'}
@@ -115,7 +115,7 @@ export function HeaderBar({ wsConnected }: Props) {
             type="button"
             onClick={() => qc.invalidateQueries()}
             title="刷新所有数据"
-            className="rounded-2xl border border-zinc-700 p-2 text-zinc-300 transition hover:border-indigo-500 hover:text-white"
+            className="rounded-sm border border-hairline-strong p-2 text-ivory-70 transition hover:border-brass hover:text-ivory"
           >
             <RefreshCw className="h-4 w-4" />
           </button>

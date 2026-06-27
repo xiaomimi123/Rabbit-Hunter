@@ -222,8 +222,12 @@ def test_macd_reversal_long_never_returns_short(monkeypatch):
 
 
 def test_macd_reversal_long_does_not_affect_default_mode(monkeypatch):
-    """没设 V5_STRATEGY_MODE → 走 trend_aligned default,与新 mode 隔离。"""
-    monkeypatch.delenv("V5_STRATEGY_MODE", raising=False)
+    """显式设 V5_STRATEGY_MODE=trend_aligned → 走 default,与新 mode 隔离。
+
+    注:不能用 delenv 然后 fallback DB,因 system_settings 的 v5_strategy_mode
+    在生产环境可能已被前端切换。env 优先于 DB,所以显式 setenv 才能保证测试稳定。
+    """
+    monkeypatch.setenv("V5_STRATEGY_MODE", "trend_aligned")
     # trend_aligned 标准输入: 4h MACD>0 + RSI<40 应触发 LONG
     closes = [100.0 + i for i in range(35)]
     d = decide(

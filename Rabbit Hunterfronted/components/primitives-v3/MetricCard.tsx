@@ -12,18 +12,18 @@ interface Props {
 export function MetricCard({ label, value, hint, trend, className }: Props) {
   return (
     <div className={cardClassName(cn('p-4', className))}>
-      <div className="text-sm text-zinc-400">{label}</div>
+      <div className="text-[10px] uppercase tracking-wider2 text-ivory-40">{label}</div>
       <div
         className={cn(
-          'mt-3 text-2xl font-semibold tabular-nums',
-          trend === 'up' && 'text-emerald-400',
-          trend === 'down' && 'text-rose-400',
-          (!trend || trend === 'neutral') && 'text-zinc-50',
+          'mt-3 font-mono text-2xl font-semibold tabular-nums',
+          trend === 'up' && 'text-sage',
+          trend === 'down' && 'text-oxblood',
+          (!trend || trend === 'neutral') && 'text-ivory',
         )}
       >
         {value}
       </div>
-      {hint && <div className="mt-2 text-xs text-zinc-500">{hint}</div>}
+      {hint && <div className="mt-2 text-xs text-ivory-40 font-mono">{hint}</div>}
     </div>
   );
 }

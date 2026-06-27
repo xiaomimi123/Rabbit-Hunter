@@ -14,9 +14,9 @@ export function FormField({
 }) {
   return (
     <label className={cn('flex flex-col gap-1.5', className)}>
-      <span className="text-xs text-zinc-400">{label}</span>
+      <span className="text-[10px] uppercase tracking-wider2 text-ivory-40">{label}</span>
       {children}
-      {hint && <span className="text-[11px] text-zinc-500">{hint}</span>}
+      {hint && <span className="text-[11px] text-ivory-40">{hint}</span>}
     </label>
   );
 }
@@ -29,7 +29,7 @@ export function TextInput({
     <input
       {...props}
       className={cn(
-        'rounded-2xl border border-zinc-700 bg-zinc-950 px-3 py-2 font-mono text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-indigo-500 focus:outline-none',
+        'rounded-md border border-hairline-strong bg-bg-deep px-3 py-2 font-mono text-sm text-ivory placeholder:text-ivory-40 focus:border-brass focus:outline-none transition',
         className,
       )}
     />
@@ -46,7 +46,7 @@ export function PrimaryButton({
       type="button"
       {...props}
       className={cn(
-        'rounded-2xl bg-indigo-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-400 disabled:cursor-not-allowed disabled:bg-indigo-900',
+        'rounded-md border border-brass bg-brass-soft px-4 py-2 text-sm font-medium uppercase tracking-wider2 text-brass transition hover:bg-brass hover:text-bg-base disabled:cursor-not-allowed disabled:opacity-40',
         className,
       )}
     >
@@ -65,7 +65,7 @@ export function SecondaryButton({
       type="button"
       {...props}
       className={cn(
-        'rounded-2xl border border-zinc-700 bg-zinc-950 px-4 py-2 text-sm text-zinc-200 transition hover:border-indigo-500 hover:text-indigo-200 disabled:cursor-not-allowed disabled:opacity-40',
+        'rounded-md border border-hairline-strong bg-bg-deep px-4 py-2 text-sm text-ivory-70 transition hover:border-brass hover:text-ivory disabled:cursor-not-allowed disabled:opacity-40',
         className,
       )}
     >
@@ -84,7 +84,7 @@ export function DangerButton({
       type="button"
       {...props}
       className={cn(
-        'rounded-2xl border border-rose-500/30 bg-rose-500/10 px-4 py-2 text-sm text-rose-300 transition hover:border-rose-500 hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-40',
+        'rounded-md border border-oxblood/40 bg-oxblood-soft px-4 py-2 text-sm text-oxblood transition hover:border-oxblood hover:bg-oxblood hover:text-ivory disabled:cursor-not-allowed disabled:opacity-40',
         className,
       )}
     >
