@@ -48,6 +48,7 @@ from scripts.v5_indicator_engine import _ema, calculate_atr
 
 
 Variant = Literal["A", "B", "C"]
+ExitStrategy = Literal["baseline", "vegas_full", "vegas_sl_only"]
 
 
 # ─────────────────────────────────────────────────────────────
@@ -73,6 +74,15 @@ class ExperimentConfig:
     max_hold_minutes: int = 8 * 60       # 同 backtest MVP
     cache_root: str = "data/backtest_cache"
     cost: CostConfig = field(default_factory=lambda: COST_REALISTIC)
+    # 出场实验 — 锁死定义(不调):
+    #   baseline       — SL 1.5×ATR / TP 2.5×ATR (固定倍数,基准)
+    #   vegas_full     — SL=lower×0.998, TP=upper (纯结构位)
+    #   vegas_sl_only  — SL=lower×0.998, TP=entry+2.5×ATR (混合)
+    # 维加斯通道: 4h EMA(144) + EMA(169),entry 时刻取值,持仓期间不 trailing
+    exit_strategy: ExitStrategy = "baseline"
+    vegas_fast_ema: int = 144
+    vegas_slow_ema: int = 169
+    vegas_sl_buffer_pct: float = 0.002   # 下沿 × (1 - 0.002)
     # 变量二: cross strength threshold
     cross_threshold_pct: float = 0.0     # B/C variant: 要求 (DIF-DEA)/|DEA| ≥ 此值
     a_proximity_pct: float = 0.20        # A variant: gap < 此 × 近 20 根 abs(dif) 均值
@@ -90,6 +100,9 @@ class TradeEntry:
     atr_at_entry: float
     macd_dif_at_signal: float
     macd_dea_at_signal: float
+    # 维加斯通道 (仅 vegas_* exit_strategy 用到,baseline 留 None)
+    vegas_lower: Optional[float] = None
+    vegas_upper: Optional[float] = None
     exit_ts: Optional[int] = None
     exit_price: Optional[float] = None
     exit_reason: Optional[str] = None
@@ -206,14 +219,43 @@ DETECTORS = {
 # ─────────────────────────────────────────────────────────────
 
 
+def _vegas_channel_at(klines_4h: List[List[float]], sig_idx: int,
+                       fast: int = 144, slow: int = 169) -> Optional[Tuple[float, float]]:
+    """sig_idx 处的维加斯通道 (lower, upper) — 用到该 bar 为止的 closes 算 EMA。
+
+    需要 max(fast, slow) + 一些起步样本。返回 None 表示 4h 数据不足。
+    """
+    if sig_idx + 1 < slow + 30:   # 留够样本让 EMA 收敛
+        return None
+    closes_up_to = [float(k[4]) for k in klines_4h[: sig_idx + 1]]
+    ema_fast = _ema(closes_up_to, fast)
+    ema_slow = _ema(closes_up_to, slow)
+    if not ema_fast or not ema_slow:
+        return None
+    f, s = ema_fast[-1], ema_slow[-1]
+    return (min(f, s), max(f, s))
+
+
 def execute_trades(
     symbol: str,
+    klines_4h: List[List[float]],
     klines_15m: List[List[float]],
     signals: List[Tuple[int, float, float]],
     cfg: ExperimentConfig,
 ) -> List[TradeEntry]:
-    """对每个 4h 信号,在下一根 15m 收盘进,用 OHLC-touch 模拟 SL/TP 出场,扣成本。"""
+    """对每个 4h 信号,在下一根 15m 收盘进,用 OHLC-touch 模拟 SL/TP 出场,扣成本。
+
+    根据 cfg.exit_strategy 选 SL/TP 公式:
+      baseline       — SL/TP = 1.5/2.5 × ATR
+      vegas_full     — SL = lower × (1 - buffer), TP = upper
+      vegas_sl_only  — SL = lower × (1 - buffer), TP = 2.5 × ATR
+
+    vegas_* 模式下若 entry ≤ lower 或 entry ≥ upper → skip (out of channel)。
+    """
     trades: List[TradeEntry] = []
+    # 4h ts → 索引,加速 vegas channel 计算
+    ts_to_idx = {int(k[0]): i for i, k in enumerate(klines_4h)}
+
     for sig_ts, dif_val, dea_val in signals:
         # 在 15m 上找 ≥ sig_ts 的第一根作为 entry bar
         idx = None
@@ -235,10 +277,43 @@ def execute_trades(
             atr = calculate_atr(atr_window, period=cfg.atr_period)
         except ValueError:
             continue
-        sl_distance = cfg.sl_atr_mult * atr
-        tp_distance = cfg.tp_atr_mult * atr
-        sl_price = entry_price - sl_distance      # LONG only
-        tp_price = entry_price + tp_distance
+
+        # 维加斯通道 — 仅当 exit_strategy 需要时算
+        vegas_lower: Optional[float] = None
+        vegas_upper: Optional[float] = None
+        if cfg.exit_strategy != "baseline":
+            sig_idx_4h = ts_to_idx.get(int(sig_ts))
+            if sig_idx_4h is None:
+                continue   # 4h 信号 ts 找不到对应索引(理论上不该发生)
+            ch = _vegas_channel_at(klines_4h, sig_idx_4h,
+                                    fast=cfg.vegas_fast_ema,
+                                    slow=cfg.vegas_slow_ema)
+            if ch is None:
+                continue   # 4h 数据不够算 EMA169
+            vegas_lower, vegas_upper = ch
+            # entry 必须在通道内 / 通道上方一点(下沿之上),否则 V1/V2 不适用
+            if entry_price <= vegas_lower:
+                continue
+            # V1 (vegas_full) 还要求 TP=upper > entry,否则无意义
+            if cfg.exit_strategy == "vegas_full" and entry_price >= vegas_upper:
+                continue
+
+        # 计算 SL/TP
+        if cfg.exit_strategy == "baseline":
+            sl_price = entry_price - cfg.sl_atr_mult * atr
+            tp_price = entry_price + cfg.tp_atr_mult * atr
+        elif cfg.exit_strategy == "vegas_full":
+            sl_price = vegas_lower * (1.0 - cfg.vegas_sl_buffer_pct)  # type: ignore[operator]
+            tp_price = vegas_upper                                     # type: ignore[assignment]
+        elif cfg.exit_strategy == "vegas_sl_only":
+            sl_price = vegas_lower * (1.0 - cfg.vegas_sl_buffer_pct)  # type: ignore[operator]
+            tp_price = entry_price + cfg.tp_atr_mult * atr
+        else:
+            raise ValueError(f"unknown exit_strategy: {cfg.exit_strategy}")
+
+        # safety: SL/TP 顺序 LONG 需 sl<entry<tp
+        if not (sl_price < entry_price < tp_price):
+            continue
 
         klines_after = klines_15m[idx + 1:]
         exit_ts, exit_price, exit_reason, gross_r = simulate_exit(
@@ -262,7 +337,7 @@ def execute_trades(
         trades.append(TradeEntry(
             symbol=symbol,
             side="LONG",
-            setup_type=f"macd_cross_variant_{cfg.variant}",
+            setup_type=f"macd_cross_variant_{cfg.variant}_exit_{cfg.exit_strategy}",
             entry_ts=entry_ts,
             entry_price=entry_price,
             sl_price=sl_price,
@@ -270,6 +345,8 @@ def execute_trades(
             atr_at_entry=atr,
             macd_dif_at_signal=dif_val,
             macd_dea_at_signal=dea_val,
+            vegas_lower=vegas_lower,
+            vegas_upper=vegas_upper,
             exit_ts=exit_ts,
             exit_price=exit_price,
             exit_reason=exit_reason,
@@ -364,7 +441,7 @@ def run_walkforward(cfg: ExperimentConfig) -> dict:
             skipped.append(symbol)
             continue
         signals = detector(klines_4h, cfg)
-        sym_trades = execute_trades(symbol, klines_15m, signals, cfg)
+        sym_trades = execute_trades(symbol, klines_4h, klines_15m, signals, cfg)
         all_trades.extend(sym_trades)
         print(
             f"[EXP]   {symbol}: 4h sigs={len(signals)} → closed trades={len(sym_trades)}",
@@ -433,6 +510,12 @@ def main():
     p.add_argument("--step-days", type=int, default=14)
     p.add_argument("--cost-preset", choices=["optimistic", "realistic", "pessimistic"],
                    default="realistic")
+    p.add_argument("--exit-strategy",
+                   choices=["baseline", "vegas_full", "vegas_sl_only"],
+                   default="baseline",
+                   help="出场规则: baseline=1.5/2.5×ATR; "
+                        "vegas_full=SL 通道下沿/TP 通道上沿; "
+                        "vegas_sl_only=SL 通道下沿/TP 2.5×ATR (混合)")
     p.add_argument("--cross-threshold-pct", type=float, default=0.0,
                    help="变量二: B/C variant 交叉强度阈值 (dif-dea)/|dea| ≥ 此值")
     p.add_argument("--a-proximity-pct", type=float, default=0.20,
@@ -459,6 +542,7 @@ def main():
         cost=cost,
         cross_threshold_pct=args.cross_threshold_pct,
         a_proximity_pct=args.a_proximity_pct,
+        exit_strategy=args.exit_strategy,
     )
 
     result = run_walkforward(cfg)

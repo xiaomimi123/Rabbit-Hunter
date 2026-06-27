@@ -1,0 +1,187 @@
+{
+  "variant": "B",
+  "config": {
+    "variant": "B",
+    "start_iso": "2026-03-02T00:00:00Z",
+    "end_iso": "2026-06-26T00:00:00Z",
+    "symbols": [
+      "APTUSDT",
+      "ARBUSDT",
+      "ATOMUSDT",
+      "AVAXUSDT",
+      "BNBUSDT",
+      "DOGEUSDT",
+      "DOTUSDT",
+      "FILUSDT",
+      "LINKUSDT",
+      "LTCUSDT",
+      "NEARUSDT",
+      "PEPEUSDT",
+      "SOLUSDT",
+      "UNIUSDT",
+      "WLDUSDT",
+      "XRPUSDT",
+      "ZECUSDT"
+    ],
+    "train_days": 60,
+    "oos_days": 14,
+    "step_days": 14,
+    "macd_fast": 12,
+    "macd_slow": 26,
+    "macd_signal": 9,
+    "sl_atr_mult": 1.5,
+    "tp_atr_mult": 2.5,
+    "atr_period": 14,
+    "max_hold_minutes": 480,
+    "cache_root": "data/backtest_cache",
+    "exit_strategy": "vegas_full",
+    "vegas_fast_ema": 144,
+    "vegas_slow_ema": 169,
+    "vegas_sl_buffer_pct": 0.002,
+    "cross_threshold_pct": 0.0,
+    "a_proximity_pct": 0.2,
+    "cost_config": {
+      "maker_fee_rate": 0.0002,
+      "taker_fee_rate": 0.0005,
+      "slippage_pct": 0.0005,
+      "maker_ratio": 0.5,
+      "effective_fee_per_side": 0.00035
+    }
+  },
+  "windows": [
+    {
+      "train_start": "2026-03-02T00:00:00+00:00",
+      "train_end": "2026-05-01T00:00:00+00:00",
+      "oos_start": "2026-05-01T00:00:00+00:00",
+      "oos_end": "2026-05-15T00:00:00+00:00"
+    },
+    {
+      "train_start": "2026-03-02T00:00:00+00:00",
+      "train_end": "2026-05-15T00:00:00+00:00",
+      "oos_start": "2026-05-15T00:00:00+00:00",
+      "oos_end": "2026-05-29T00:00:00+00:00"
+    },
+    {
+      "train_start": "2026-03-02T00:00:00+00:00",
+      "train_end": "2026-05-29T00:00:00+00:00",
+      "oos_start": "2026-05-29T00:00:00+00:00",
+      "oos_end": "2026-06-12T00:00:00+00:00"
+    },
+    {
+      "train_start": "2026-03-02T00:00:00+00:00",
+      "train_end": "2026-06-12T00:00:00+00:00",
+      "oos_start": "2026-06-12T00:00:00+00:00",
+      "oos_end": "2026-06-26T00:00:00+00:00"
+    }
+  ],
+  "skipped_symbols": [],
+  "all_trades_n": 6,
+  "oos_n": 3,
+  "oos_gross": {
+    "n": 3,
+    "win_rate": 0.3333333333333333,
+    "avg_r": -0.36306152156950294,
+    "total_r": -1.0891845647085088,
+    "pf": 0.45540771764574567,
+    "max_dd_r": -1.0891845647085088
+  },
+  "oos_net": {
+    "n": 3,
+    "win_rate": 0.3333333333333333,
+    "avg_r": -0.8324280742726987,
+    "total_r": -2.497284222818096,
+    "pf": 0.20566112468429523,
+    "max_dd_r": -2.497284222818096
+  },
+  "by_symbol_net": {
+    "LTCUSDT": {
+      "n": 1,
+      "win_rate": 0.0,
+      "avg_r": -1.7827603025964016,
+      "total_r": -1.7827603025964016,
+      "pf": 0.0,
+      "max_dd_r": -1.7827603025964016
+    },
+    "NEARUSDT": {
+      "n": 1,
+      "win_rate": 1.0,
+      "avg_r": 0.6465682316215369,
+      "total_r": 0.6465682316215369,
+      "pf": null,
+      "max_dd_r": 0.0
+    },
+    "UNIUSDT": {
+      "n": 1,
+      "win_rate": 0.0,
+      "avg_r": -1.361092151843231,
+      "total_r": -1.361092151843231,
+      "pf": 0.0,
+      "max_dd_r": -1.361092151843231
+    }
+  },
+  "oos_entries": [
+    {
+      "symbol": "LTCUSDT",
+      "side": "LONG",
+      "setup_type": "macd_cross_variant_B_exit_vegas_full",
+      "entry_ts": 1777752000000,
+      "entry_price": 55.22,
+      "sl_price": 55.10007312112198,
+      "tp_price": 55.275618314850334,
+      "atr_at_entry": 0.0921428571428576,
+      "macd_dif_at_signal": -0.07005743962361066,
+      "macd_dea_at_signal": -0.07120419572600792,
+      "vegas_lower": 55.21049410934066,
+      "vegas_upper": 55.275618314850334,
+      "exit_ts": 1777754700000,
+      "exit_price": 55.10007312112198,
+      "exit_reason": "SL_HIT",
+      "gross_r": -1.0,
+      "net_r": -1.7827603025964016,
+      "fee_cost_r": 0.32231306577498897,
+      "slippage_cost_r": 0.4604472368214128
+    },
+    {
+      "symbol": "NEARUSDT",
+      "side": "LONG",
+      "setup_type": "macd_cross_variant_B_exit_vegas_full",
+      "entry_ts": 1781985600000,
+      "entry_price": 2.154,
+      "sl_price": 2.140142521286342,
+      "tp_price": 2.1666216055066227,
+      "atr_at_entry": 0.014785714285714275,
+      "macd_dif_at_signal": -0.023227599502972485,
+      "macd_dea_at_signal": -0.02525792046747296,
+      "vegas_lower": 2.144431384054451,
+      "vegas_upper": 2.1666216055066227,
+      "exit_ts": 1781989200000,
+      "exit_price": 2.1666216055066227,
+      "exit_reason": "TP_HIT",
+      "gross_r": 0.9108154352914913,
+      "net_r": 0.6465682316215369,
+      "fee_cost_r": 0.108807672099393,
+      "slippage_cost_r": 0.15543953157056142
+    },
+    {
+      "symbol": "UNIUSDT",
+      "side": "LONG",
+      "setup_type": "macd_cross_variant_B_exit_vegas_full",
+      "entry_ts": 1782360000000,
+      "entry_price": 2.925,
+      "sl_price": 2.911229277001404,
+      "tp_price": 2.9322814857552224,
+      "atr_at_entry": 0.017142857142857126,
+      "macd_dif_at_signal": -0.027353452507281162,
+      "macd_dea_at_signal": -0.031722361095216436,
+      "vegas_lower": 2.917063403809022,
+      "vegas_upper": 2.9322814857552224,
+      "exit_ts": 1782361800000,
+      "exit_price": 2.911229277001404,
+      "exit_reason": "SL_HIT",
+      "gross_r": -1.0,
+      "net_r": -1.361092151843231,
+      "fee_cost_r": 0.14868500370015397,
+      "slippage_cost_r": 0.21240714814307712
+    }
+  ]
+}
