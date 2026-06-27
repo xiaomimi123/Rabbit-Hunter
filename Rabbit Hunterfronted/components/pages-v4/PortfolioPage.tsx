@@ -41,7 +41,7 @@ export function PortfolioPage() {
           <button
             type="button"
             onClick={() => navigate('/manual')}
-            className="inline-flex items-center gap-1.5 rounded-2xl bg-indigo-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-400"
+            className="inline-flex items-center gap-1.5 rounded-2xl bg-brass px-4 py-2 text-sm font-medium text-white transition hover:bg-brass"
           >
             <Hand className="h-4 w-4" /> 手动开单
           </button>
@@ -60,12 +60,12 @@ export function PortfolioPage() {
       <div className="grid gap-6 xl:grid-cols-2">
         <Card title="当前持仓" subtitle={`${positions.length} 个`} className="!p-0" bodyClassName="!p-0">
           {active.isLoading ? <div className="p-6"><LoadingSkeleton message="拉取持仓…" /></div> : positions.length === 0 ? (
-            <div className="px-4 py-10 text-center text-sm text-zinc-500">当前无持仓</div>
+            <div className="px-4 py-10 text-center text-sm text-ivory-40">当前无持仓</div>
           ) : (
             <div className="overflow-x-auto max-h-[420px] overflow-y-auto">
               <table className="w-full text-sm">
-                <thead className="sticky top-0 bg-zinc-900/95">
-                  <tr className="border-b border-zinc-800 text-left text-[11px] uppercase tracking-wider text-zinc-500">
+                <thead className="sticky top-0 bg-bg-surface/95">
+                  <tr className="border-b border-hairline text-left text-[11px] uppercase tracking-wider text-ivory-40">
                     <th className="py-2.5 pl-5 pr-2">币种</th>
                     <th className="py-2.5 px-2">方向</th>
                     <th className="py-2.5 px-2 text-right">入场</th>
@@ -74,19 +74,19 @@ export function PortfolioPage() {
                     <th className="py-2.5 pl-2 pr-5 text-right">PnL</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-zinc-800/60">
+                <tbody className="divide-y divide-hairline/60">
                   {positions.map(p => (
-                    <tr key={p.id} className="hover:bg-zinc-900/40 cursor-pointer" onClick={() => navigate(`/chart/${p.symbol}`)}>
-                      <td className="py-2.5 pl-5 pr-2 font-mono font-medium text-zinc-100">{p.symbol}</td>
+                    <tr key={p.id} className="hover:bg-bg-surface/40 cursor-pointer" onClick={() => navigate(`/chart/${p.symbol}`)}>
+                      <td className="py-2.5 pl-5 pr-2 font-mono font-medium text-ivory">{p.symbol}</td>
                       <td className="py-2.5 px-2">
                         <StatusPill tone={p.side === 'LONG' ? 'emerald' : 'rose'} icon={p.side === 'LONG' ? <TrendingUp className="h-2.5 w-2.5" /> : <TrendingDown className="h-2.5 w-2.5" />}>{p.side}</StatusPill>
                       </td>
-                      <td className="py-2.5 px-2 text-right font-mono tabular-nums text-zinc-300">{p.entry_price?.toFixed(4)}</td>
-                      <td className="py-2.5 px-2 text-right font-mono tabular-nums text-rose-300">{p.sl_price?.toFixed(4)}</td>
-                      <td className="py-2.5 px-2 text-right font-mono tabular-nums text-emerald-300">{p.tp_price?.toFixed(4)}</td>
+                      <td className="py-2.5 px-2 text-right font-mono tabular-nums text-ivory-70">{p.entry_price?.toFixed(4)}</td>
+                      <td className="py-2.5 px-2 text-right font-mono tabular-nums text-oxblood">{p.sl_price?.toFixed(4)}</td>
+                      <td className="py-2.5 px-2 text-right font-mono tabular-nums text-sage">{p.tp_price?.toFixed(4)}</td>
                       <td className={cn(
                         'py-2.5 pl-2 pr-5 text-right font-mono tabular-nums',
-                        (p.pnl_pct ?? 0) >= 0 ? 'text-emerald-300' : 'text-rose-300',
+                        (p.pnl_pct ?? 0) >= 0 ? 'text-sage' : 'text-oxblood',
                       )}>
                         {(p.pnl_pct ?? 0) >= 0 ? '+' : ''}{(p.pnl_pct ?? 0).toFixed(2)}%
                       </td>
@@ -100,12 +100,12 @@ export function PortfolioPage() {
 
         <Card title="最近已实现 PnL" subtitle={`最近 ${Math.min(closed.length, 20)} 笔`} className="!p-0" bodyClassName="!p-0">
           {closed.length === 0 ? (
-            <div className="px-4 py-10 text-center text-sm text-zinc-500">暂无已平仓订单</div>
+            <div className="px-4 py-10 text-center text-sm text-ivory-40">暂无已平仓订单</div>
           ) : (
             <div className="overflow-x-auto max-h-[420px] overflow-y-auto">
               <table className="w-full text-sm">
-                <thead className="sticky top-0 bg-zinc-900/95">
-                  <tr className="border-b border-zinc-800 text-left text-[11px] uppercase tracking-wider text-zinc-500">
+                <thead className="sticky top-0 bg-bg-surface/95">
+                  <tr className="border-b border-hairline text-left text-[11px] uppercase tracking-wider text-ivory-40">
                     <th className="py-2.5 pl-5 pr-2">时间</th>
                     <th className="py-2.5 px-2">币种</th>
                     <th className="py-2.5 px-2">原因</th>
@@ -113,23 +113,23 @@ export function PortfolioPage() {
                     <th className="py-2.5 pl-2 pr-5 text-right">USDT</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-zinc-800/60">
+                <tbody className="divide-y divide-hairline/60">
                   {closed.slice(0, 20).map(p => (
-                    <tr key={p.id} className="hover:bg-zinc-900/40">
-                      <td className="py-2.5 pl-5 pr-2 font-mono text-xs text-zinc-400">
+                    <tr key={p.id} className="hover:bg-bg-surface/40">
+                      <td className="py-2.5 pl-5 pr-2 font-mono text-xs text-ivory-70">
                         {p.exit_time ? new Date(p.exit_time).toLocaleString('zh-CN', { hour12: false }).slice(5) : '—'}
                       </td>
-                      <td className="py-2.5 px-2 font-mono text-zinc-100">{p.symbol}</td>
-                      <td className="py-2.5 px-2"><span className="text-xs text-zinc-400">{p.exit_reason ?? '—'}</span></td>
+                      <td className="py-2.5 px-2 font-mono text-ivory">{p.symbol}</td>
+                      <td className="py-2.5 px-2"><span className="text-xs text-ivory-70">{p.exit_reason ?? '—'}</span></td>
                       <td className={cn(
                         'py-2.5 px-2 text-right font-mono tabular-nums',
-                        (p.pnl_pct ?? 0) >= 0 ? 'text-emerald-300' : 'text-rose-300',
+                        (p.pnl_pct ?? 0) >= 0 ? 'text-sage' : 'text-oxblood',
                       )}>
                         {(p.pnl_pct ?? 0) >= 0 ? '+' : ''}{(p.pnl_pct ?? 0).toFixed(2)}%
                       </td>
                       <td className={cn(
                         'py-2.5 pl-2 pr-5 text-right font-mono tabular-nums',
-                        (p.pnl_usdt ?? 0) >= 0 ? 'text-emerald-300' : 'text-rose-300',
+                        (p.pnl_usdt ?? 0) >= 0 ? 'text-sage' : 'text-oxblood',
                       )}>
                         {(p.pnl_usdt ?? 0) >= 0 ? '+' : ''}{(p.pnl_usdt ?? 0).toFixed(2)}
                       </td>
@@ -146,7 +146,7 @@ export function PortfolioPage() {
         title="收益分析"
         subtitle="累计权益曲线 + 历史明细"
         actions={
-          <div className="flex gap-1 rounded-xl border border-zinc-800 p-0.5">
+          <div className="flex gap-1 rounded-xl border border-hairline p-0.5">
             {(['overview', 'history'] as Tab[]).map(t => (
               <SegmentButton key={t} active={tab === t} onClick={() => setTab(t)}>
                 {t === 'overview' ? '概览' : '历史'}
@@ -164,19 +164,19 @@ export function PortfolioPage() {
               <MiniMetric label="最大单笔亏" value={`${Math.min(...closed.map(p => p.pnl_pct ?? 0), 0).toFixed(2)}%`} tone="rose" />
             </div>
             <div>
-              <div className="text-xs uppercase tracking-wider text-zinc-500 mb-2">权益曲线</div>
+              <div className="text-xs uppercase tracking-wider text-ivory-40 mb-2">权益曲线</div>
               {equityCurve.length > 1 ? (
                 <Sparkline values={equityCurve} width={900} height={180} />
               ) : (
-                <div className="py-10 text-center text-sm text-zinc-500">数据不足以绘制曲线</div>
+                <div className="py-10 text-center text-sm text-ivory-40">数据不足以绘制曲线</div>
               )}
             </div>
           </div>
         ) : (
           <div className="overflow-x-auto max-h-[480px] overflow-y-auto">
             <table className="w-full text-sm">
-              <thead className="sticky top-0 bg-zinc-900/95">
-                <tr className="border-b border-zinc-800 text-left text-[11px] uppercase tracking-wider text-zinc-500">
+              <thead className="sticky top-0 bg-bg-surface/95">
+                <tr className="border-b border-hairline text-left text-[11px] uppercase tracking-wider text-ivory-40">
                   <th className="py-2 px-2">时间</th>
                   <th className="py-2 px-2">币种</th>
                   <th className="py-2 px-2">方向</th>
@@ -188,24 +188,24 @@ export function PortfolioPage() {
                   <th className="py-2 px-2"></th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-zinc-800/60">
+              <tbody className="divide-y divide-hairline/60">
                 {closed.map(p => {
                   const mins = p.entry_time && p.exit_time ? Math.round((new Date(p.exit_time).getTime() - new Date(p.entry_time).getTime()) / 60_000) : 0;
                   return (
-                    <tr key={p.id} className="hover:bg-zinc-900/40">
-                      <td className="py-2 px-2 font-mono text-xs text-zinc-400">{p.exit_time ? new Date(p.exit_time).toLocaleString('zh-CN', { hour12: false }) : '—'}</td>
-                      <td className="py-2 px-2 font-mono text-zinc-100">{p.symbol}</td>
+                    <tr key={p.id} className="hover:bg-bg-surface/40">
+                      <td className="py-2 px-2 font-mono text-xs text-ivory-70">{p.exit_time ? new Date(p.exit_time).toLocaleString('zh-CN', { hour12: false }) : '—'}</td>
+                      <td className="py-2 px-2 font-mono text-ivory">{p.symbol}</td>
                       <td className="py-2 px-2"><StatusPill tone={p.side === 'LONG' ? 'emerald' : 'rose'}>{p.side}</StatusPill></td>
-                      <td className="py-2 px-2 text-right font-mono tabular-nums text-zinc-300">{p.entry_price?.toFixed(4)}</td>
-                      <td className="py-2 px-2 text-right font-mono tabular-nums text-zinc-300">{p.exit_price?.toFixed(4)}</td>
-                      <td className={cn('py-2 px-2 text-right font-mono tabular-nums', (p.pnl_pct ?? 0) >= 0 ? 'text-emerald-300' : 'text-rose-300')}>{(p.pnl_pct ?? 0) >= 0 ? '+' : ''}{(p.pnl_pct ?? 0).toFixed(2)}%</td>
-                      <td className={cn('py-2 px-2 text-right font-mono tabular-nums', (p.pnl_usdt ?? 0) >= 0 ? 'text-emerald-300' : 'text-rose-300')}>{(p.pnl_usdt ?? 0) >= 0 ? '+' : ''}{(p.pnl_usdt ?? 0).toFixed(2)}</td>
-                      <td className="py-2 px-2 text-right font-mono tabular-nums text-zinc-400">{mins}min</td>
+                      <td className="py-2 px-2 text-right font-mono tabular-nums text-ivory-70">{p.entry_price?.toFixed(4)}</td>
+                      <td className="py-2 px-2 text-right font-mono tabular-nums text-ivory-70">{p.exit_price?.toFixed(4)}</td>
+                      <td className={cn('py-2 px-2 text-right font-mono tabular-nums', (p.pnl_pct ?? 0) >= 0 ? 'text-sage' : 'text-oxblood')}>{(p.pnl_pct ?? 0) >= 0 ? '+' : ''}{(p.pnl_pct ?? 0).toFixed(2)}%</td>
+                      <td className={cn('py-2 px-2 text-right font-mono tabular-nums', (p.pnl_usdt ?? 0) >= 0 ? 'text-sage' : 'text-oxblood')}>{(p.pnl_usdt ?? 0) >= 0 ? '+' : ''}{(p.pnl_usdt ?? 0).toFixed(2)}</td>
+                      <td className="py-2 px-2 text-right font-mono tabular-nums text-ivory-70">{mins}min</td>
                       <td className="py-2 px-2">
                         <button
                           type="button"
                           onClick={() => navigate(`/chart/${p.symbol}?eventId=${p.id}`)}
-                          className="rounded-lg border border-zinc-700 p-1.5 text-zinc-400 transition hover:border-indigo-500 hover:text-indigo-300"
+                          className="rounded-lg border border-hairline-strong p-1.5 text-ivory-70 transition hover:border-brass hover:text-brass"
                         >
                           <LineIcon className="h-3.5 w-3.5" />
                         </button>
@@ -224,9 +224,9 @@ export function PortfolioPage() {
 
 function MiniMetric({ label, value, tone }: { label: string; value: string; tone?: 'emerald' | 'rose' }) {
   return (
-    <div className="rounded-2xl border border-zinc-800 bg-zinc-950/60 px-3 py-2.5">
-      <div className="text-[10px] uppercase tracking-wider text-zinc-500">{label}</div>
-      <div className={cn('mt-1 font-mono text-lg font-semibold tabular-nums', tone === 'emerald' ? 'text-emerald-300' : tone === 'rose' ? 'text-rose-300' : 'text-zinc-100')}>{value}</div>
+    <div className="rounded-2xl border border-hairline bg-bg-base/60 px-3 py-2.5">
+      <div className="text-[10px] uppercase tracking-wider text-ivory-40">{label}</div>
+      <div className={cn('mt-1 font-mono text-lg font-semibold tabular-nums', tone === 'emerald' ? 'text-sage' : tone === 'rose' ? 'text-oxblood' : 'text-ivory')}>{value}</div>
     </div>
   );
 }

@@ -65,13 +65,13 @@ export function DiagnosticsPage() {
       <div className="grid gap-6 xl:grid-cols-[1.5fr_420px]">
         <Card title="信号扫描追踪" subtitle="点击行查看 AI 决策步骤" className="!p-0" bodyClassName="!p-0">
           {signals.isLoading ? <div className="p-6"><LoadingSkeleton message="拉取信号…" /></div> : sigList.length === 0 ? (
-            <div className="px-4 py-10 text-center text-sm text-zinc-500">无追踪</div>
+            <div className="px-4 py-10 text-center text-sm text-ivory-40">无追踪</div>
           ) : (
             <>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
-                  <thead className="bg-zinc-950/80">
-                    <tr className="border-b border-zinc-800 text-left text-[11px] uppercase tracking-wider text-zinc-500">
+                  <thead className="bg-bg-base/80">
+                    <tr className="border-b border-hairline text-left text-[11px] uppercase tracking-wider text-ivory-40">
                       <th className="py-2.5 pl-5 pr-2">时间</th>
                       <th className="py-2.5 px-2">币种</th>
                       <th className="py-2.5 px-2">方向</th>
@@ -80,14 +80,14 @@ export function DiagnosticsPage() {
                       <th className="py-2.5 pl-2 pr-5">结果</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-zinc-800/60">
+                  <tbody className="divide-y divide-hairline/60">
                     {visibleSigs.map(s => (
                       <tr
                         key={s.id}
                         onClick={() => setSelectedTraceId(s.id)}
                         className={cn(
                           'cursor-pointer transition',
-                          selectedTraceId === s.id ? 'bg-indigo-500/10 text-indigo-100' : 'hover:bg-zinc-900/40',
+                          selectedTraceId === s.id ? 'bg-brass-soft text-indigo-100' : 'hover:bg-bg-surface/40',
                         )}
                       >
                         <td className="py-2 pl-5 pr-2 font-mono text-xs">{new Date(s.created_at).toLocaleTimeString('zh-CN', { hour12: false })}</td>
@@ -97,20 +97,20 @@ export function DiagnosticsPage() {
                         <td className="py-2 px-2 text-right font-mono tabular-nums">{s.macd_hist_15m.toFixed(4)}</td>
                         <td className="py-2 pl-2 pr-5">
                           {s.executed === 1 ? <StatusPill tone="emerald">执行</StatusPill>
-                            : s.block_reason ? <span className="text-xs text-zinc-400">{blockReasonZh(s.block_reason)}</span>
-                            : <span className="text-xs text-zinc-600">—</span>}
+                            : s.block_reason ? <span className="text-xs text-ivory-70">{blockReasonZh(s.block_reason)}</span>
+                            : <span className="text-xs text-ivory-40">—</span>}
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-              <div className="border-t border-zinc-800 flex items-center justify-between px-5 py-3 text-xs text-zinc-400">
+              <div className="border-t border-hairline flex items-center justify-between px-5 py-3 text-xs text-ivory-70">
                 <span>每页 10 条 · 共 {sigList.length} 条</span>
                 <div className="flex items-center gap-2">
-                  <button type="button" disabled={page <= 1} onClick={() => setPage(p => p - 1)} className="rounded-lg border border-zinc-700 px-3 py-1 disabled:opacity-40 disabled:cursor-not-allowed hover:border-indigo-500">上一页</button>
+                  <button type="button" disabled={page <= 1} onClick={() => setPage(p => p - 1)} className="rounded-lg border border-hairline-strong px-3 py-1 disabled:opacity-40 disabled:cursor-not-allowed hover:border-brass">上一页</button>
                   <span>{page} / {pages}</span>
-                  <button type="button" disabled={page >= pages} onClick={() => setPage(p => p + 1)} className="rounded-lg border border-zinc-700 px-3 py-1 disabled:opacity-40 disabled:cursor-not-allowed hover:border-indigo-500">下一页</button>
+                  <button type="button" disabled={page >= pages} onClick={() => setPage(p => p + 1)} className="rounded-lg border border-hairline-strong px-3 py-1 disabled:opacity-40 disabled:cursor-not-allowed hover:border-brass">下一页</button>
                 </div>
               </div>
             </>
@@ -126,15 +126,15 @@ export function DiagnosticsPage() {
               <Step name="风险闸门" status={selectedTrace.block_reason && !selectedTrace.block_reason.startsWith('AI_') && !selectedTrace.block_reason.startsWith('NOT_') ? 'fail' : 'pass'} detail={selectedTrace.block_reason ? blockReasonZh(selectedTrace.block_reason) : '通过所有门'} />
               <Step name="入场" status={selectedTrace.executed === 1 ? 'pass' : 'skip'} detail={selectedTrace.executed === 1 ? `paper trade #${selectedTrace.position_id ?? '—'}` : '未入场'} />
               {matchedDecision && (
-                <div className="rounded-2xl border border-zinc-800 bg-zinc-950/60 p-3">
-                  <div className="text-xs uppercase tracking-wider text-zinc-500 mb-2">关联 AI 决策</div>
-                  <div className="text-xs text-zinc-300">置信 {Math.round((matchedDecision.confidence ?? 0) * 100)}% · top1 距 {matchedDecision.top1_distance?.toFixed(2) ?? '—'}</div>
-                  <div className="text-xs text-zinc-400 mt-1 leading-relaxed">{matchedDecision.reasoning.slice(0, 200)}</div>
+                <div className="rounded-2xl border border-hairline bg-bg-base/60 p-3">
+                  <div className="text-xs uppercase tracking-wider text-ivory-40 mb-2">关联 AI 决策</div>
+                  <div className="text-xs text-ivory-70">置信 {Math.round((matchedDecision.confidence ?? 0) * 100)}% · top1 距 {matchedDecision.top1_distance?.toFixed(2) ?? '—'}</div>
+                  <div className="text-xs text-ivory-70 mt-1 leading-relaxed">{matchedDecision.reasoning.slice(0, 200)}</div>
                 </div>
               )}
             </div>
           ) : (
-            <div className="text-sm text-zinc-500 text-center py-6">点击左侧行</div>
+            <div className="text-sm text-ivory-40 text-center py-6">点击左侧行</div>
           )}
         </Card>
       </div>
@@ -152,8 +152,8 @@ export function DiagnosticsPage() {
         <Card title="影子订单" subtitle={`${positions.length} 持仓 + ${closedList.length} 已平仓`} className="!p-0" bodyClassName="!p-0">
           <div className="overflow-x-auto max-h-[480px] overflow-y-auto">
             <table className="w-full text-sm">
-              <thead className="sticky top-0 bg-zinc-950/80">
-                <tr className="border-b border-zinc-800 text-left text-[11px] uppercase tracking-wider text-zinc-500">
+              <thead className="sticky top-0 bg-bg-base/80">
+                <tr className="border-b border-hairline text-left text-[11px] uppercase tracking-wider text-ivory-40">
                   <th className="py-2.5 pl-5 pr-2">时间</th>
                   <th className="py-2.5 px-2">币种</th>
                   <th className="py-2.5 px-2">方向</th>
@@ -161,7 +161,7 @@ export function DiagnosticsPage() {
                   <th className="py-2.5 pl-2 pr-5 text-right">PnL</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-zinc-800/60">
+              <tbody className="divide-y divide-hairline/60">
                 {allShadow.map(o => {
                   const closed = o.exit_time != null;
                   return (
@@ -170,14 +170,14 @@ export function DiagnosticsPage() {
                       onClick={() => setSelectedShadowOrderId(o.id)}
                       className={cn(
                         'cursor-pointer transition',
-                        selectedShadowOrderId === o.id ? 'bg-indigo-500/10 text-indigo-100' : 'hover:bg-zinc-900/40',
+                        selectedShadowOrderId === o.id ? 'bg-brass-soft text-indigo-100' : 'hover:bg-bg-surface/40',
                       )}
                     >
-                      <td className="py-2.5 pl-5 pr-2 font-mono text-xs text-zinc-400">{closed ? new Date(o.exit_time!).toLocaleString('zh-CN', { hour12: false }).slice(5) : new Date(o.entry_time!).toLocaleString('zh-CN', { hour12: false }).slice(5)}</td>
-                      <td className="py-2.5 px-2 font-mono text-zinc-100">{o.symbol}</td>
+                      <td className="py-2.5 pl-5 pr-2 font-mono text-xs text-ivory-70">{closed ? new Date(o.exit_time!).toLocaleString('zh-CN', { hour12: false }).slice(5) : new Date(o.entry_time!).toLocaleString('zh-CN', { hour12: false }).slice(5)}</td>
+                      <td className="py-2.5 px-2 font-mono text-ivory">{o.symbol}</td>
                       <td className="py-2.5 px-2"><StatusPill tone={o.side === 'LONG' ? 'emerald' : 'rose'}>{o.side}</StatusPill></td>
                       <td className="py-2.5 px-2"><StatusPill tone={closed ? 'zinc' : 'indigo'}>{closed ? 'CLOSED' : 'OPEN'}</StatusPill></td>
-                      <td className={cn('py-2.5 pl-2 pr-5 text-right font-mono tabular-nums', (o.pnl_pct ?? 0) >= 0 ? 'text-emerald-300' : 'text-rose-300')}>
+                      <td className={cn('py-2.5 pl-2 pr-5 text-right font-mono tabular-nums', (o.pnl_pct ?? 0) >= 0 ? 'text-sage' : 'text-oxblood')}>
                         {(o.pnl_pct ?? 0) >= 0 ? '+' : ''}{(o.pnl_pct ?? 0).toFixed(2)}%
                       </td>
                     </tr>
@@ -202,14 +202,14 @@ export function DiagnosticsPage() {
                 <KV label="PnL USDT" value={`${(selectedShadowOrder.pnl_usdt ?? 0).toFixed(2)}`} tone={(selectedShadowOrder.pnl_usdt ?? 0) >= 0 ? 'emerald' : 'rose'} />
               </div>
               {selectedShadowOrder.exit_reason && (
-                <div className="rounded-2xl border border-zinc-800 bg-zinc-950/60 p-3">
-                  <div className="text-xs uppercase tracking-wider text-zinc-500 mb-1">退出原因</div>
-                  <div className="text-sm text-zinc-200">{selectedShadowOrder.exit_reason}</div>
+                <div className="rounded-2xl border border-hairline bg-bg-base/60 p-3">
+                  <div className="text-xs uppercase tracking-wider text-ivory-40 mb-1">退出原因</div>
+                  <div className="text-sm text-ivory">{selectedShadowOrder.exit_reason}</div>
                 </div>
               )}
             </div>
           ) : (
-            <div className="text-sm text-zinc-500 text-center py-6">点击左侧行</div>
+            <div className="text-sm text-ivory-40 text-center py-6">点击左侧行</div>
           )}
         </Card>
       </div>
@@ -219,24 +219,24 @@ export function DiagnosticsPage() {
 
 function Step({ name, status, detail }: { name: string; status: 'pass' | 'fail' | 'skip'; detail: string }) {
   return (
-    <div className="rounded-2xl border border-zinc-800 bg-zinc-950/60 p-3">
+    <div className="rounded-2xl border border-hairline bg-bg-base/60 p-3">
       <div className="flex items-center gap-2 mb-1">
-        <span className="text-sm font-medium text-zinc-100">{name}</span>
+        <span className="text-sm font-medium text-ivory">{name}</span>
         <StatusPill tone={status === 'pass' ? 'emerald' : status === 'fail' ? 'rose' : 'zinc'} className="ml-auto">{status === 'pass' ? '通过' : status === 'fail' ? '失败' : '跳过'}</StatusPill>
       </div>
-      <div className="text-xs text-zinc-400 leading-relaxed">{detail}</div>
+      <div className="text-xs text-ivory-70 leading-relaxed">{detail}</div>
     </div>
   );
 }
 
 function KV({ label, value, tone }: { label: string; value: any; tone?: 'emerald' | 'rose' }) {
   return (
-    <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 px-3 py-2">
-      <div className="text-[10px] uppercase tracking-wider text-zinc-500">{label}</div>
+    <div className="rounded-xl border border-hairline bg-bg-base/60 px-3 py-2">
+      <div className="text-[10px] uppercase tracking-wider text-ivory-40">{label}</div>
       <div className={cn('font-mono text-sm tabular-nums',
-        tone === 'emerald' && 'text-emerald-300',
-        tone === 'rose' && 'text-rose-300',
-        !tone && 'text-zinc-100',
+        tone === 'emerald' && 'text-sage',
+        tone === 'rose' && 'text-oxblood',
+        !tone && 'text-ivory',
       )}>{value ?? '—'}</div>
     </div>
   );

@@ -28,7 +28,7 @@ export function SettingsPage() {
 
   if (query.isLoading) return <LoadingSkeleton message="拉取设置…" />;
   const s = query.data;
-  if (!s) return <div className="text-sm text-zinc-500">无数据</div>;
+  if (!s) return <div className="text-sm text-ivory-40">无数据</div>;
 
   const params = strategy.query.data?.params ?? [];
   const dirtyCount = Object.keys(dirty).length;
@@ -58,10 +58,10 @@ export function SettingsPage() {
             </FormField>
           </div>
           <div className="mt-4 flex flex-wrap items-center gap-3">
-            <span className="text-sm text-zinc-400">
-              活跃:<span className="text-indigo-300 ml-1">{s.active_ai_provider ?? '无'}</span>
-              <span className="text-zinc-600 mx-2">·</span>
-              <span className="text-zinc-200">{s.active_chat_model}</span>
+            <span className="text-sm text-ivory-70">
+              活跃:<span className="text-ink ml-1">{s.active_ai_provider ?? '无'}</span>
+              <span className="text-ivory-40 mx-2">·</span>
+              <span className="text-ivory">{s.active_chat_model}</span>
             </span>
             <div className="ml-auto flex gap-2">
               <SecondaryButton
@@ -114,10 +114,10 @@ export function SettingsPage() {
             <CheckboxRow checked={s.enable_auto_trading} onChange={c => patch.mutate({ enable_auto_trading: c })} label="启用自动交易" hint="关闭后扫描仍跑,但不会真正开仓" />
           </div>
 
-          <div className="mt-5 flex items-center gap-3 rounded-2xl border border-zinc-800 bg-zinc-950/60 p-4">
+          <div className="mt-5 flex items-center gap-3 rounded-2xl border border-hairline bg-bg-base/60 p-4">
             <div className="flex-1">
-              <div className="text-xs uppercase tracking-wider text-zinc-500 mb-1">系统模式</div>
-              <div className={cn('font-mono text-sm font-semibold', s.system_mode === 'LIVE' ? 'text-rose-300' : 'text-amber-300')}>
+              <div className="text-xs uppercase tracking-wider text-ivory-40 mb-1">系统模式</div>
+              <div className={cn('font-mono text-sm font-semibold', s.system_mode === 'LIVE' ? 'text-oxblood' : 'text-brass')}>
                 {s.system_mode === 'LIVE' ? '⬤ LIVE — 真实资金' : '◐ SHADOW — 模拟开仓'}
               </div>
             </div>
@@ -143,18 +143,18 @@ export function SettingsPage() {
           </div>
         }
       >
-        <div className="divide-y divide-zinc-800/60">
+        <div className="divide-y divide-hairline/60">
           {params.map(p => {
             const eff = effective(p.key, p.value);
             const changed = eff !== p.value;
             return (
               <div key={p.key} className="grid grid-cols-1 md:grid-cols-12 items-center gap-3 py-3">
                 <div className="md:col-span-3">
-                  <div className="flex items-center gap-1.5 font-mono text-sm text-zinc-100">
-                    {changed && <span className="text-indigo-400">●</span>}
+                  <div className="flex items-center gap-1.5 font-mono text-sm text-ivory">
+                    {changed && <span className="text-ink">●</span>}
                     {p.key}
                   </div>
-                  <div className="text-xs text-zinc-500 mt-0.5">{p.description}</div>
+                  <div className="text-xs text-ivory-40 mt-0.5">{p.description}</div>
                 </div>
                 <div className="md:col-span-6">
                   <Slider value={eff} min={p.min} max={p.max} step={(p.max - p.min) / 100}
@@ -164,7 +164,7 @@ export function SettingsPage() {
                   <NumberInput value={eff} min={p.min} max={p.max} step={(p.max - p.min) / 100}
                                onChange={(v) => setDirty(d => ({ ...d, [p.key]: v }))} />
                 </div>
-                <div className={cn('md:col-span-1 text-right text-xs', changed ? 'text-indigo-300' : 'text-zinc-500')}>{p.unit}</div>
+                <div className={cn('md:col-span-1 text-right text-xs', changed ? 'text-ink' : 'text-ivory-40')}>{p.unit}</div>
               </div>
             );
           })}
@@ -184,7 +184,7 @@ export function SettingsPage() {
             <button
               type="button"
               onClick={() => { patch.mutate({ system_mode: 'LIVE' }); setConfirmLive(false); }}
-              className="rounded-2xl border border-rose-500 bg-rose-500/15 px-4 py-2 text-sm text-rose-200 transition hover:bg-rose-500 hover:text-zinc-50"
+              className="rounded-2xl border border-oxblood bg-oxblood-soft px-4 py-2 text-sm text-oxblood transition hover:bg-oxblood hover:text-ivory"
             >
               确认切到 LIVE
             </button>
@@ -197,11 +197,11 @@ export function SettingsPage() {
 
 function CheckboxRow({ checked, onChange, label, hint }: { checked: boolean; onChange: (c: boolean) => void; label: string; hint?: string }) {
   return (
-    <label className="flex items-start gap-3 rounded-2xl border border-zinc-800 bg-zinc-950/60 px-4 py-3 cursor-pointer hover:border-zinc-700 transition">
+    <label className="flex items-start gap-3 rounded-2xl border border-hairline bg-bg-base/60 px-4 py-3 cursor-pointer hover:border-hairline-strong transition">
       <input type="checkbox" checked={checked} onChange={e => onChange(e.target.checked)} className="accent-indigo-500 mt-1 h-4 w-4" />
       <div className="flex-1">
-        <div className={cn('text-sm', checked ? 'text-zinc-100' : 'text-zinc-300')}>{label}</div>
-        {hint && <div className="text-xs text-zinc-500 mt-0.5">{hint}</div>}
+        <div className={cn('text-sm', checked ? 'text-ivory' : 'text-ivory-70')}>{label}</div>
+        {hint && <div className="text-xs text-ivory-40 mt-0.5">{hint}</div>}
       </div>
     </label>
   );

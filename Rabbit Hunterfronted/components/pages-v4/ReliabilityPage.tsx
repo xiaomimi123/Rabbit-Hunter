@@ -72,7 +72,7 @@ export function ReliabilityPage() {
             <Iron label="进化仓位系数" value={`[${c.evolution_size_mult_min}, ${c.evolution_size_mult_max}]`} hint="AI 修正窗口" />
             <Iron label="M8 决策门槛" value={`n ≥ ${c.min_sample_size_for_decision}`} hint="setup 可信样本数" />
           </div>
-        ) : <div className="text-sm text-zinc-500">拉取宪法中…</div>}
+        ) : <div className="text-sm text-ivory-40">拉取宪法中…</div>}
       </Card>
 
       {ils && (
@@ -97,7 +97,7 @@ export function ReliabilityPage() {
           </div>
           {c && c.default_disabled_setups.length > 0 && (
             <div className="mt-4">
-              <div className="text-xs uppercase tracking-wider text-zinc-500 mb-2">默认禁用 setup(文档 §4 + M8 剪枝)</div>
+              <div className="text-xs uppercase tracking-wider text-ivory-40 mb-2">默认禁用 setup(文档 §4 + M8 剪枝)</div>
               <div className="flex flex-wrap gap-2">
                 {c.default_disabled_setups.map(s => (
                   <StatusPill key={s} tone="rose">{s}</StatusPill>
@@ -117,12 +117,12 @@ export function ReliabilityPage() {
       <div className="grid gap-6 xl:grid-cols-2">
         <Card title="订单生命周期" subtitle={`最近 ${lifecycleRows.length} 个事件`} className="!p-0" bodyClassName="!p-0">
           {lifecycleRows.length === 0 ? (
-            <div className="px-4 py-10 text-center text-sm text-zinc-500">无订单事件</div>
+            <div className="px-4 py-10 text-center text-sm text-ivory-40">无订单事件</div>
           ) : (
             <div className="overflow-x-auto max-h-[480px] overflow-y-auto">
               <table className="w-full text-sm">
-                <thead className="sticky top-0 bg-zinc-900/95">
-                  <tr className="border-b border-zinc-800 text-left text-[11px] uppercase tracking-wider text-zinc-500">
+                <thead className="sticky top-0 bg-bg-surface/95">
+                  <tr className="border-b border-hairline text-left text-[11px] uppercase tracking-wider text-ivory-40">
                     <th className="py-2.5 pl-5 pr-2">时间</th>
                     <th className="py-2.5 px-2">币种</th>
                     <th className="py-2.5 px-2">方向</th>
@@ -130,21 +130,21 @@ export function ReliabilityPage() {
                     <th className="py-2.5 pl-2 pr-5">来源</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-zinc-800/60">
+                <tbody className="divide-y divide-hairline/60">
                   {lifecycleRows.map(r => (
-                    <tr key={r.id} className="hover:bg-zinc-900/40">
-                      <td className="py-2.5 pl-5 pr-2 font-mono text-xs text-zinc-400 whitespace-nowrap">
+                    <tr key={r.id} className="hover:bg-bg-surface/40">
+                      <td className="py-2.5 pl-5 pr-2 font-mono text-xs text-ivory-70 whitespace-nowrap">
                         {r.time ? new Date(r.time).toLocaleString('zh-CN', { hour12: false }).slice(5) : '—'}
                       </td>
-                      <td className="py-2.5 px-2 font-mono text-zinc-100">{r.symbol}</td>
+                      <td className="py-2.5 px-2 font-mono text-ivory">{r.symbol}</td>
                       <td className="py-2.5 px-2"><StatusPill tone={r.side === 'LONG' ? 'emerald' : 'rose'}>{r.side}</StatusPill></td>
                       <td className="py-2.5 px-2">
                         <span className={cn(
                           'text-xs',
-                          r.action === 'OPEN' ? 'text-indigo-300' :
-                          r.action === 'TP_HIT' ? 'text-emerald-300' :
-                          r.action === 'SL_HIT' ? 'text-rose-300' :
-                          'text-amber-300',
+                          r.action === 'OPEN' ? 'text-ink' :
+                          r.action === 'TP_HIT' ? 'text-sage' :
+                          r.action === 'SL_HIT' ? 'text-oxblood' :
+                          'text-brass',
                         )}>{r.action}</span>
                       </td>
                       <td className="py-2.5 pl-2 pr-5">
@@ -163,24 +163,24 @@ export function ReliabilityPage() {
         <Card title="安全事件 / 风险信号" subtitle={`funding 极端 + WS 队列`} className="!p-0" bodyClassName="!p-0">
           <div className="overflow-x-auto max-h-[480px] overflow-y-auto">
             <table className="w-full text-sm">
-              <thead className="sticky top-0 bg-zinc-900/95">
-                <tr className="border-b border-zinc-800 text-left text-[11px] uppercase tracking-wider text-zinc-500">
+              <thead className="sticky top-0 bg-bg-surface/95">
+                <tr className="border-b border-hairline text-left text-[11px] uppercase tracking-wider text-ivory-40">
                   <th className="py-2.5 pl-5 pr-2">类型</th>
                   <th className="py-2.5 px-2">对象</th>
                   <th className="py-2.5 px-2">值</th>
                   <th className="py-2.5 pl-2 pr-5">严重性</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-zinc-800/60">
+              <tbody className="divide-y divide-hairline/60">
                 {fundingExtremes.length === 0 && wsEvents.length === 0 ? (
-                  <tr><td colSpan={4} className="px-4 py-10 text-center text-sm text-zinc-500">无安全事件</td></tr>
+                  <tr><td colSpan={4} className="px-4 py-10 text-center text-sm text-ivory-40">无安全事件</td></tr>
                 ) : (
                   <>
                     {fundingExtremes.slice(0, 20).map(f => (
-                      <tr key={f.symbol} className="hover:bg-zinc-900/40">
-                        <td className="py-2.5 pl-5 pr-2 text-xs text-amber-300">FUNDING_EXTREME</td>
-                        <td className="py-2.5 px-2 font-mono text-zinc-100">{f.symbol}</td>
-                        <td className="py-2.5 px-2 font-mono text-xs text-zinc-400">
+                      <tr key={f.symbol} className="hover:bg-bg-surface/40">
+                        <td className="py-2.5 pl-5 pr-2 text-xs text-brass">FUNDING_EXTREME</td>
+                        <td className="py-2.5 px-2 font-mono text-ivory">{f.symbol}</td>
+                        <td className="py-2.5 px-2 font-mono text-xs text-ivory-70">
                           z={(f.zscore_30d ?? 0).toFixed(2)} · {f.extreme_direction === 'long_crowded' ? '多头拥挤' : '空头拥挤'}
                         </td>
                         <td className="py-2.5 pl-2 pr-5">
@@ -191,10 +191,10 @@ export function ReliabilityPage() {
                       </tr>
                     ))}
                     {wsEvents.slice(-10).reverse().map((e, i) => (
-                      <tr key={`ws-${i}`} className="hover:bg-zinc-900/40">
-                        <td className="py-2.5 pl-5 pr-2 text-xs text-indigo-300">{e.type}</td>
-                        <td className="py-2.5 px-2 font-mono text-zinc-100">{(e as any).symbol ?? '—'}</td>
-                        <td className="py-2.5 px-2 font-mono text-xs text-zinc-400 truncate max-w-[200px]">{JSON.stringify(e).slice(0, 80)}</td>
+                      <tr key={`ws-${i}`} className="hover:bg-bg-surface/40">
+                        <td className="py-2.5 pl-5 pr-2 text-xs text-ink">{e.type}</td>
+                        <td className="py-2.5 px-2 font-mono text-ivory">{(e as any).symbol ?? '—'}</td>
+                        <td className="py-2.5 px-2 font-mono text-xs text-ivory-70 truncate max-w-[200px]">{JSON.stringify(e).slice(0, 80)}</td>
                         <td className="py-2.5 pl-2 pr-5"><StatusPill tone="zinc">INFO</StatusPill></td>
                       </tr>
                     ))}
@@ -216,15 +216,15 @@ function Iron({ label, value, hint, tone }: {
   tone?: 'emerald' | 'rose';
 }) {
   return (
-    <div className="rounded-2xl border border-zinc-800 bg-zinc-950/60 p-3">
-      <div className="text-[10px] uppercase tracking-wider text-zinc-500">{label}</div>
+    <div className="rounded-2xl border border-hairline bg-bg-base/60 p-3">
+      <div className="text-[10px] uppercase tracking-wider text-ivory-40">{label}</div>
       <div className={cn(
         'mt-1 font-mono text-lg font-semibold tabular-nums',
-        tone === 'emerald' && 'text-emerald-300',
-        tone === 'rose' && 'text-rose-300',
-        !tone && 'text-zinc-100',
+        tone === 'emerald' && 'text-sage',
+        tone === 'rose' && 'text-oxblood',
+        !tone && 'text-ivory',
       )}>{value}</div>
-      {hint && <div className="text-[11px] text-zinc-500 mt-0.5">{hint}</div>}
+      {hint && <div className="text-[11px] text-ivory-40 mt-0.5">{hint}</div>}
     </div>
   );
 }

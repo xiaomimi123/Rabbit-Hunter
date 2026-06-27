@@ -90,14 +90,14 @@ export function KnowledgePage() {
 
       <Card title="书籍" subtitle={`${allBooks.length} 本`} className="!p-0" bodyClassName="!p-0">
         {allBooks.length === 0 ? (
-          <div className="px-4 py-10 text-center text-sm text-zinc-500">
+          <div className="px-4 py-10 text-center text-sm text-ivory-40">
             还没上传任何书。先加 1 本 Ernest Chan《Quantitative Trading》或 Carver《Systematic Trading》作为开端。
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-zinc-800 text-left text-[11px] uppercase tracking-wider text-zinc-500">
+                <tr className="border-b border-hairline text-left text-[11px] uppercase tracking-wider text-ivory-40">
                   <th className="py-3 pl-5 pr-2">标题</th>
                   <th className="py-3 px-2">作者</th>
                   <th className="py-3 px-2">来源</th>
@@ -106,19 +106,19 @@ export function KnowledgePage() {
                   <th className="py-3 pl-2 pr-5">上传时间</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-zinc-800/60">
+              <tbody className="divide-y divide-hairline/60">
                 {allBooks.map(b => (
-                  <tr key={b.id} className="hover:bg-zinc-900/40">
-                    <td className="py-2.5 pl-5 pr-2 text-zinc-100">{b.title}</td>
-                    <td className="py-2.5 px-2 text-zinc-400">{b.author ?? '—'}</td>
+                  <tr key={b.id} className="hover:bg-bg-surface/40">
+                    <td className="py-2.5 pl-5 pr-2 text-ivory">{b.title}</td>
+                    <td className="py-2.5 px-2 text-ivory-70">{b.author ?? '—'}</td>
                     <td className="py-2.5 px-2"><StatusPill tone="zinc">{b.source_type}</StatusPill></td>
-                    <td className="py-2.5 px-2 text-right font-mono tabular-nums text-zinc-400">
+                    <td className="py-2.5 px-2 text-right font-mono tabular-nums text-ivory-70">
                       {b.content_length?.toLocaleString() ?? '—'}
                     </td>
-                    <td className="py-2.5 px-2 text-right font-mono tabular-nums text-indigo-300">
+                    <td className="py-2.5 px-2 text-right font-mono tabular-nums text-ink">
                       {b.n_candidates}
                     </td>
-                    <td className="py-2.5 pl-2 pr-5 font-mono text-xs text-zinc-500">
+                    <td className="py-2.5 pl-2 pr-5 font-mono text-xs text-ivory-40">
                       {new Date(b.uploaded_at).toLocaleString('zh-CN', { hour12: false }).slice(0, 16)}
                     </td>
                   </tr>
@@ -131,7 +131,7 @@ export function KnowledgePage() {
 
       <Card title="候选规则审核工作台" subtitle={`${allCandidates.length} 条规则 · 文档 §11 第 3、4 步`}>
         {allCandidates.length === 0 ? (
-          <div className="py-10 text-center text-sm text-zinc-500">
+          <div className="py-10 text-center text-sm text-ivory-40">
             还没有候选规则。先从书里手动提一条,或者后续接入 AI 自动提取。
           </div>
         ) : (
@@ -173,10 +173,10 @@ function CandidateRow({ c, onValidate }: { c: CandidateOut; onValidate: () => vo
   else if (c.status === 'validated') icon = <FlaskConical className="h-2.5 w-2.5" />;
 
   return (
-    <div className="rounded-2xl border border-zinc-800 bg-zinc-950/60 p-4">
+    <div className="rounded-2xl border border-hairline bg-bg-base/60 p-4">
       <div className="flex items-center gap-3 flex-wrap mb-2">
-        <div className="font-mono text-sm text-zinc-100 flex-1 min-w-0">
-          <span className="text-zinc-500 mr-1">#{c.id}</span>
+        <div className="font-mono text-sm text-ivory flex-1 min-w-0">
+          <span className="text-ivory-40 mr-1">#{c.id}</span>
           {c.name}
         </div>
         <StatusPill tone={tone} icon={icon}>{label}</StatusPill>
@@ -185,40 +185,40 @@ function CandidateRow({ c, onValidate }: { c: CandidateOut; onValidate: () => vo
             ? <StatusPill tone="emerald">KPI PASS</StatusPill>
             : <StatusPill tone="rose">KPI FAIL</StatusPill>
         )}
-        <span className="text-xs text-zinc-500">{c.extracted_by}</span>
+        <span className="text-xs text-ivory-40">{c.extracted_by}</span>
       </div>
 
       {c.description && (
-        <div className="text-sm text-zinc-300 leading-relaxed mb-2">{c.description}</div>
+        <div className="text-sm text-ivory-70 leading-relaxed mb-2">{c.description}</div>
       )}
 
       <details className="text-xs">
-        <summary className="cursor-pointer text-zinc-500 hover:text-zinc-300">规则规格</summary>
-        <pre className="mt-2 rounded-xl border border-zinc-800 bg-zinc-950 p-3 overflow-x-auto text-zinc-400">
+        <summary className="cursor-pointer text-ivory-40 hover:text-ivory-70">规则规格</summary>
+        <pre className="mt-2 rounded-xl border border-hairline bg-bg-base p-3 overflow-x-auto text-ivory-70">
           {JSON.stringify(JSON.parse(c.rule_spec_json), null, 2)}
         </pre>
       </details>
 
       {c.source_quote && (
         <details className="text-xs mt-1">
-          <summary className="cursor-pointer text-zinc-500 hover:text-zinc-300">书中原文</summary>
-          <div className="mt-2 rounded-xl border-l-2 border-indigo-500 bg-indigo-500/[0.06] px-3 py-2 text-zinc-300 italic">
+          <summary className="cursor-pointer text-ivory-40 hover:text-ivory-70">书中原文</summary>
+          <div className="mt-2 rounded-xl border-l-2 border-brass bg-brass/[0.06] px-3 py-2 text-ivory-70 italic">
             {c.source_quote}
           </div>
         </details>
       )}
 
       {c.reject_reason && (
-        <div className="mt-2 text-xs text-rose-300">拒绝原因:{c.reject_reason}</div>
+        <div className="mt-2 text-xs text-oxblood">拒绝原因:{c.reject_reason}</div>
       )}
 
       {c.wf_report_path && (
-        <div className="mt-2 text-xs text-zinc-500">
-          WF 报告:<span className="text-indigo-300 font-mono">{c.wf_report_path}</span>
+        <div className="mt-2 text-xs text-ivory-40">
+          WF 报告:<span className="text-ink font-mono">{c.wf_report_path}</span>
         </div>
       )}
 
-      <div className="mt-3 flex flex-wrap gap-2 pt-3 border-t border-zinc-800">
+      <div className="mt-3 flex flex-wrap gap-2 pt-3 border-t border-hairline">
         {(c.status === 'pending' || c.status === 'validated') && (
           <SecondaryButton onClick={onValidate}>
             <FlaskConical className="h-4 w-4 inline mr-1.5" /> 重新跑 WF 验证
@@ -265,11 +265,11 @@ function AddBookModal({ open, onClose }: { open: boolean; onClose: () => void })
             onChange={e => setContent(e.target.value)}
             rows={6}
             placeholder="贴粘后会自动切块到 knowledge_chunks 表"
-            className="rounded-2xl border border-zinc-700 bg-zinc-950 px-3 py-2 font-mono text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-indigo-500 focus:outline-none"
+            className="rounded-2xl border border-hairline-strong bg-bg-base px-3 py-2 font-mono text-sm text-ivory placeholder:text-ivory-40 focus:border-brass focus:outline-none"
           />
         </FormField>
         <FormField label="备注(可选)"><TextInput value={notes} onChange={e => setNotes(e.target.value)} /></FormField>
-        <div className="flex justify-end gap-2 pt-3 border-t border-zinc-800">
+        <div className="flex justify-end gap-2 pt-3 border-t border-hairline">
           <SecondaryButton onClick={onClose}>取消</SecondaryButton>
           <PrimaryButton
             disabled={!title || add.isPending}
@@ -311,7 +311,7 @@ function AddCandidateModal({
           <select
             value={bookId}
             onChange={e => setBookId(e.target.value === '' ? '' : Number(e.target.value))}
-            className="rounded-2xl border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-indigo-500"
+            className="rounded-2xl border border-hairline-strong bg-bg-base px-3 py-2 text-sm text-ivory outline-none focus:border-brass"
           >
             <option value="">— 纯人工提案 —</option>
             {books.map(b => <option key={b.id} value={b.id}>#{b.id} {b.title}</option>)}
@@ -322,7 +322,7 @@ function AddCandidateModal({
             value={sourceQuote}
             onChange={e => setSourceQuote(e.target.value)}
             rows={3}
-            className="rounded-2xl border border-zinc-700 bg-zinc-950 px-3 py-2 font-mono text-xs text-zinc-100 placeholder:text-zinc-600 focus:border-indigo-500 focus:outline-none"
+            className="rounded-2xl border border-hairline-strong bg-bg-base px-3 py-2 font-mono text-xs text-ivory placeholder:text-ivory-40 focus:border-brass focus:outline-none"
           />
         </FormField>
         <FormField label="规则规格(JSON)">
@@ -330,11 +330,11 @@ function AddCandidateModal({
             value={specJson}
             onChange={e => { setSpecJson(e.target.value); setParseError(null); }}
             rows={8}
-            className="rounded-2xl border border-zinc-700 bg-zinc-950 px-3 py-2 font-mono text-xs text-zinc-100 focus:border-indigo-500 focus:outline-none"
+            className="rounded-2xl border border-hairline-strong bg-bg-base px-3 py-2 font-mono text-xs text-ivory focus:border-brass focus:outline-none"
           />
         </FormField>
         {parseError && <Alert tone="error">{parseError}</Alert>}
-        <div className="flex justify-end gap-2 pt-3 border-t border-zinc-800">
+        <div className="flex justify-end gap-2 pt-3 border-t border-hairline">
           <SecondaryButton onClick={onClose}>取消</SecondaryButton>
           <PrimaryButton
             disabled={!name || add.isPending}
@@ -402,14 +402,14 @@ function ValidateModal({
               <FlaskConical className="h-4 w-4" />
               <div className="text-sm">
                 已派发到后台 — 候选 #{accepted.candidate_id} 状态:
-                <span className="ml-1 font-mono text-indigo-200">{accepted.status}</span>。
+                <span className="ml-1 font-mono text-ink">{accepted.status}</span>。
                 可关闭此弹窗,候选状态会在主表自动刷新(每 30s)。
               </div>
             </div>
           </Alert>
         )}
 
-        <div className="flex justify-end gap-2 pt-3 border-t border-zinc-800">
+        <div className="flex justify-end gap-2 pt-3 border-t border-hairline">
           <SecondaryButton onClick={onClose}>关闭</SecondaryButton>
           <PrimaryButton
             disabled={validate.isPending}

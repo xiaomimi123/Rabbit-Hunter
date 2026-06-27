@@ -32,10 +32,10 @@ export function BacktestPage() {
 
       <Alert tone="info">
         <div className="text-sm leading-6">
-          报告生成走 CLI:<code className="font-mono text-indigo-200">
+          报告生成走 CLI:<code className="font-mono text-ink">
             python -m scripts.walkforward --start 2026-01-01 --end 2026-06-01 --symbols BTC/USDT,ETH/USDT --out reports/wf_btc_eth.json
           </code>
-          。可选参数:<code className="font-mono text-indigo-200">--setup-filter</code>(两个核心 setup 各自验证)、<code className="font-mono text-indigo-200">--cost-preset realistic|optimistic|pessimistic</code>。
+          。可选参数:<code className="font-mono text-ink">--setup-filter</code>(两个核心 setup 各自验证)、<code className="font-mono text-ink">--cost-preset realistic|optimistic|pessimistic</code>。
         </div>
       </Alert>
 
@@ -43,11 +43,11 @@ export function BacktestPage() {
       {!list.isLoading && reports.length === 0 && (
         <Card>
           <div className="py-10 text-center">
-            <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-zinc-800">
-              <FileJson className="h-5 w-5 text-zinc-500" />
+            <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-bg-elevated">
+              <FileJson className="h-5 w-5 text-ivory-40" />
             </div>
-            <div className="text-sm text-zinc-400">还没有 walk-forward 报告</div>
-            <div className="mt-1 text-xs text-zinc-500">先用上面的命令生成第一份</div>
+            <div className="text-sm text-ivory-70">还没有 walk-forward 报告</div>
+            <div className="mt-1 text-xs text-ivory-40">先用上面的命令生成第一份</div>
           </div>
         </Card>
       )}
@@ -84,25 +84,25 @@ function ReportCard({ r, active, onClick }: {
       className={cn(
         'rounded-2xl border px-4 py-3 text-left transition',
         active
-          ? 'border-indigo-500 bg-indigo-500/10'
-          : 'border-zinc-800 bg-zinc-950/60 hover:border-zinc-700',
+          ? 'border-brass bg-brass-soft'
+          : 'border-hairline bg-bg-base/60 hover:border-hairline-strong',
       )}
     >
       <div className="flex items-center gap-2 mb-2">
-        <div className="font-mono text-sm text-zinc-100 truncate flex-1">{r.name}</div>
+        <div className="font-mono text-sm text-ivory truncate flex-1">{r.name}</div>
         {r.kpi_passes_doc_15_2 === true && <StatusPill tone="emerald" icon={<CheckCircle className="h-2.5 w-2.5" />}>PASS</StatusPill>}
         {r.kpi_passes_doc_15_2 === false && <StatusPill tone="rose" icon={<XCircle className="h-2.5 w-2.5" />}>FAIL</StatusPill>}
       </div>
-      <div className="text-xs text-zinc-500 space-y-0.5">
+      <div className="text-xs text-ivory-40 space-y-0.5">
         <div>{r.symbols?.join(', ') ?? '—'}</div>
         <div>{r.period_start?.slice(0, 10)} → {r.period_end?.slice(0, 10)}</div>
-        {r.setup_filter && <div>setup: <span className="text-indigo-300">{r.setup_filter}</span></div>}
+        {r.setup_filter && <div>setup: <span className="text-ink">{r.setup_filter}</span></div>}
         <div>
           n={r.n_oos_trades ?? '—'} · net avg R=<span className={cn(
-            (r.net_avg_r ?? 0) >= 0 ? 'text-emerald-300' : 'text-rose-300',
+            (r.net_avg_r ?? 0) >= 0 ? 'text-sage' : 'text-oxblood',
           )}>{r.net_avg_r?.toFixed(3) ?? '—'}</span>
           {' · '}PF=<span className={cn(
-            (r.net_profit_factor ?? 0) > 1 ? 'text-emerald-300' : 'text-rose-300',
+            (r.net_profit_factor ?? 0) > 1 ? 'text-sage' : 'text-oxblood',
           )}>{r.net_profit_factor?.toFixed(2) ?? '∞'}</span>
         </div>
       </div>
@@ -152,7 +152,7 @@ function ReportDetail({ report }: { report: any }) {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-zinc-800 text-left text-[11px] uppercase tracking-wider text-zinc-500">
+              <tr className="border-b border-hairline text-left text-[11px] uppercase tracking-wider text-ivory-40">
                 <th className="py-2 px-2"></th>
                 <th className="py-2 px-2 text-right">n</th>
                 <th className="py-2 px-2 text-right">win rate</th>
@@ -162,7 +162,7 @@ function ReportDetail({ report }: { report: any }) {
                 <th className="py-2 px-2 text-right">MaxDD</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-zinc-800/60">
+            <tbody className="divide-y divide-hairline/60">
               <Row label="Gross(扣前)" s={gross} />
               <Row label="Net(扣成本后)" s={net} highlight />
             </tbody>
@@ -174,7 +174,7 @@ function ReportDetail({ report }: { report: any }) {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-zinc-800 text-left text-[11px] uppercase tracking-wider text-zinc-500">
+              <tr className="border-b border-hairline text-left text-[11px] uppercase tracking-wider text-ivory-40">
                 <th className="py-2 px-2">#</th>
                 <th className="py-2 px-2">训练段</th>
                 <th className="py-2 px-2">OOS 段</th>
@@ -182,14 +182,14 @@ function ReportDetail({ report }: { report: any }) {
                 <th className="py-2 px-2 text-right">平仓</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-zinc-800/60">
+            <tbody className="divide-y divide-hairline/60">
               {report.windows.map((w: any, i: number) => (
-                <tr key={i} className="hover:bg-zinc-900/40">
-                  <td className="py-2 px-2 font-mono text-xs text-zinc-500">{i + 1}</td>
-                  <td className="py-2 px-2 font-mono text-xs text-zinc-400">
+                <tr key={i} className="hover:bg-bg-surface/40">
+                  <td className="py-2 px-2 font-mono text-xs text-ivory-40">{i + 1}</td>
+                  <td className="py-2 px-2 font-mono text-xs text-ivory-70">
                     {w.train_start.slice(0, 10)} → {w.train_end.slice(0, 10)}
                   </td>
-                  <td className="py-2 px-2 font-mono text-xs text-zinc-300">
+                  <td className="py-2 px-2 font-mono text-xs text-ivory-70">
                     {w.oos_start.slice(0, 10)} → {w.oos_end.slice(0, 10)}
                   </td>
                   <td className="py-2 px-2 text-right font-mono tabular-nums">{w.n_entries}</td>
@@ -203,12 +203,12 @@ function ReportDetail({ report }: { report: any }) {
 
       <div className="grid gap-4 md:grid-cols-3">
         <FeatureCard
-          icon={<FlaskConical className="h-5 w-5 text-indigo-300" />}
+          icon={<FlaskConical className="h-5 w-5 text-ink" />}
           title="窗口策略"
           desc={`训练 ${report.config.train_days}d · OOS ${report.config.oos_days}d · 步长 ${report.config.step_days}d`}
         />
         <FeatureCard
-          icon={<Terminal className="h-5 w-5 text-emerald-300" />}
+          icon={<Terminal className="h-5 w-5 text-sage" />}
           title="成本档位"
           desc={
             report.config.cost_config
@@ -217,7 +217,7 @@ function ReportDetail({ report }: { report: any }) {
           }
         />
         <FeatureCard
-          icon={<FileJson className="h-5 w-5 text-amber-300" />}
+          icon={<FileJson className="h-5 w-5 text-brass" />}
           title="setup filter"
           desc={report.config.setup_filter ? `仅统计 ${report.config.setup_filter}` : '全部 setup 混合'}
         />
@@ -230,26 +230,26 @@ function Row({ label, s, highlight }: { label: string; s: any; highlight?: boole
   // 后端在没 net 数据时返回 {} — s 不是 null 但所有字段是 undefined。
   // 必须 require s.n 是个正整数才能渲染数字行。
   if (!s || typeof s.n !== 'number' || s.n === 0) {
-    return <tr><td colSpan={7} className="py-3 text-center text-zinc-500 text-sm">{label}: 无数据</td></tr>;
+    return <tr><td colSpan={7} className="py-3 text-center text-ivory-40 text-sm">{label}: 无数据</td></tr>;
   }
   const fix = (v: any, d: number) => (typeof v === 'number' ? v.toFixed(d) : '—');
   return (
-    <tr className={highlight ? 'bg-indigo-500/[0.06]' : ''}>
-      <td className="py-2.5 px-2 font-medium text-zinc-100">{label}</td>
+    <tr className={highlight ? 'bg-brass/[0.06]' : ''}>
+      <td className="py-2.5 px-2 font-medium text-ivory">{label}</td>
       <td className="py-2.5 px-2 text-right font-mono tabular-nums">{s.n}</td>
       <td className="py-2.5 px-2 text-right font-mono tabular-nums">{fix((s.win_rate ?? 0) * 100, 0)}%</td>
       <td className={cn(
         'py-2.5 px-2 text-right font-mono tabular-nums',
-        (s.avg_r ?? 0) >= 0 ? 'text-emerald-300' : 'text-rose-300',
+        (s.avg_r ?? 0) >= 0 ? 'text-sage' : 'text-oxblood',
       )}>{fix(s.avg_r, 3)}</td>
       <td className={cn(
         'py-2.5 px-2 text-right font-mono tabular-nums',
-        (s.total_r ?? 0) >= 0 ? 'text-emerald-300' : 'text-rose-300',
+        (s.total_r ?? 0) >= 0 ? 'text-sage' : 'text-oxblood',
       )}>{fix(s.total_r, 2)}</td>
       <td className="py-2.5 px-2 text-right font-mono tabular-nums">
         {s.profit_factor != null ? s.profit_factor.toFixed(2) : '∞'}
       </td>
-      <td className="py-2.5 px-2 text-right font-mono tabular-nums text-rose-300">
+      <td className="py-2.5 px-2 text-right font-mono tabular-nums text-oxblood">
         {fix(s.max_drawdown_r, 2)}
       </td>
     </tr>
@@ -258,9 +258,9 @@ function Row({ label, s, highlight }: { label: string; s: any; highlight?: boole
 
 function FeatureCard({ icon, title, desc }: { icon: React.ReactNode; title: string; desc: string }) {
   return (
-    <div className="rounded-3xl border border-zinc-800 bg-zinc-900/70 p-5 shadow-[0_24px_80px_rgba(0,0,0,0.25)]">
-      <div className="flex items-center gap-2 mb-3">{icon}<div className="font-medium text-zinc-100">{title}</div></div>
-      <div className="text-sm text-zinc-400 leading-relaxed">{desc}</div>
+    <div className="rounded-3xl border border-hairline bg-bg-surface/70 p-5 shadow-[0_24px_80px_rgba(0,0,0,0.25)]">
+      <div className="flex items-center gap-2 mb-3">{icon}<div className="font-medium text-ivory">{title}</div></div>
+      <div className="text-sm text-ivory-70 leading-relaxed">{desc}</div>
     </div>
   );
 }

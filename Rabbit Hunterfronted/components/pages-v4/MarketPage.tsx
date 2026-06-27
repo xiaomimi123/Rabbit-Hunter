@@ -43,7 +43,7 @@ export function MarketPage() {
           {klines.isLoading || events.isLoading ? (
             <LoadingSkeleton message="拉取 K 线…" />
           ) : (klines.data?.klines.length ?? 0) === 0 ? (
-            <div className="py-10 text-center text-sm text-zinc-500">无 K 线</div>
+            <div className="py-10 text-center text-sm text-ivory-40">无 K 线</div>
           ) : (
             <IndicatorOverlayChart
               klines={klines.data?.klines ?? []}
@@ -64,7 +64,7 @@ export function MarketPage() {
                   <Metric label="z-score 30d" value={(symbolFunding.zscore_30d ?? 0).toFixed(2)} tone={Math.abs(symbolFunding.zscore_30d ?? 0) >= 2 ? 'rose' : 'zinc'} />
                 </div>
                 <div>
-                  <div className="text-[10px] uppercase tracking-wider text-zinc-500 mb-2">拥挤状态</div>
+                  <div className="text-[10px] uppercase tracking-wider text-ivory-40 mb-2">拥挤状态</div>
                   <StatusPill tone={
                     symbolFunding.extreme_direction === 'long_crowded' ? 'rose' :
                     symbolFunding.extreme_direction === 'short_crowded' ? 'emerald' :
@@ -75,25 +75,25 @@ export function MarketPage() {
                       : '中性'}
                   </StatusPill>
                 </div>
-                <div className="text-xs text-zinc-500">
+                <div className="text-xs text-ivory-40">
                   样本 n={symbolFunding.sample_size_30d} · 极端阈值 |z|≥2
                 </div>
               </div>
             ) : (
-              <div className="py-6 text-center text-sm text-zinc-500">{selectedSymbol} 无 funding 数据</div>
+              <div className="py-6 text-center text-sm text-ivory-40">{selectedSymbol} 无 funding 数据</div>
             )}
           </Card>
 
           <Card title="本币最近信号" subtitle={`最近 ${symbolSignals.length} 条`}>
             {symbolSignals.length === 0 ? (
-              <div className="py-6 text-center text-sm text-zinc-500">{selectedSymbol} 无信号</div>
+              <div className="py-6 text-center text-sm text-ivory-40">{selectedSymbol} 无信号</div>
             ) : (
               <div className="space-y-2">
                 {symbolSignals.map(s => (
-                  <div key={s.id} className="flex items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-950/60 px-3 py-2">
-                    <span className="font-mono text-xs text-zinc-400">{new Date(s.created_at).toLocaleTimeString('zh-CN', { hour12: false })}</span>
+                  <div key={s.id} className="flex items-center gap-3 rounded-xl border border-hairline bg-bg-base/60 px-3 py-2">
+                    <span className="font-mono text-xs text-ivory-70">{new Date(s.created_at).toLocaleTimeString('zh-CN', { hour12: false })}</span>
                     <StatusPill tone={s.side === 'LONG' ? 'emerald' : s.side === 'SHORT' ? 'rose' : 'zinc'}>{s.side ?? '—'}</StatusPill>
-                    <span className={cn('font-mono text-xs tabular-nums ml-auto', s.delta_15m_pct >= 0 ? 'text-emerald-300' : 'text-rose-300')}>
+                    <span className={cn('font-mono text-xs tabular-nums ml-auto', s.delta_15m_pct >= 0 ? 'text-sage' : 'text-oxblood')}>
                       {(s.delta_15m_pct * 100).toFixed(2)}%
                     </span>
                     {s.executed === 1 && <StatusPill tone="emerald">已入仓</StatusPill>}
@@ -110,12 +110,12 @@ export function MarketPage() {
 
 function Metric({ label, value, tone }: { label: string; value: string; tone?: 'emerald' | 'rose' | 'zinc' }) {
   return (
-    <div className="rounded-2xl border border-zinc-800 bg-zinc-950/60 px-3 py-2">
-      <div className="text-[10px] uppercase tracking-wider text-zinc-500">{label}</div>
+    <div className="rounded-2xl border border-hairline bg-bg-base/60 px-3 py-2">
+      <div className="text-[10px] uppercase tracking-wider text-ivory-40">{label}</div>
       <div className={cn('mt-1 font-mono text-lg font-semibold tabular-nums',
-        tone === 'emerald' && 'text-emerald-300',
-        tone === 'rose' && 'text-rose-300',
-        (!tone || tone === 'zinc') && 'text-zinc-100',
+        tone === 'emerald' && 'text-sage',
+        tone === 'rose' && 'text-oxblood',
+        (!tone || tone === 'zinc') && 'text-ivory',
       )}>{value}</div>
     </div>
   );
