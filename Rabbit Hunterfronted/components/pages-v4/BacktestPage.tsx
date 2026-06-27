@@ -1,266 +1,239 @@
+/**
+ * BacktestPage — V3 重写 (2026-06-27)。
+ *
+ * Walk-forward 报告列表 + 选中报告的 KPI 摘要 + entries 展开。
+ */
 import { useState, useEffect } from 'react';
-import { CheckCircle, XCircle, FlaskConical, Terminal, FileJson } from 'lucide-react';
+import { CheckCircle, XCircle, FlaskConical } from 'lucide-react';
 import {
-  useWalkforwardReports, useWalkforwardReport, WFReportListItem,
+  useWalkforwardReports,
+  useWalkforwardReport,
 } from '../../hooks/api/useV5Walkforward';
-import { SectionTitle } from '../primitives-v3/SectionTitle';
-import { MetricCard } from '../primitives-v3/MetricCard';
-import { Card } from '../primitives-v3/Card';
-import { StatusPill } from '../primitives-v3/StatusPill';
-import { Alert } from '../primitives-v3/Alert';
-import { LoadingSkeleton } from '../primitives/LoadingSkeleton';
-import { cn } from '../primitives-v3/cn';
+
+function Card({ children, className = '', pad0 = false }: { children: React.ReactNode; className?: string; pad0?: boolean }) {
+  return (
+    <section className={`rounded-[10px] border border-line-soft bg-panel ${pad0 ? 'p-0 overflow-hidden' : 'p-4'} ${className}`}>
+      {children}
+    </section>
+  );
+}
+
+function MetricCard({ label, value, sub, valueColor = 'text-v3text' }: {
+  label: string; value: React.ReactNode; sub?: React.ReactNode; valueColor?: string;
+}) {
+  return (
+    <Card>
+      <div className="text-[11px] uppercase tracking-[0.07em] text-v3faint">{label}</div>
+      <div className={`mt-2 font-semibold leading-none font-mono text-[22px] ${valueColor}`}>{value}</div>
+      {sub && <div className="mt-1.5 text-[11px] text-v3muted">{sub}</div>}
+    </Card>
+  );
+}
+
+function Badge({ tone, children }: { tone: 'ok' | 'fail' | 'mute' | 'amber'; children: React.ReactNode }) {
+  const map = {
+    ok:    'text-gain bg-gain/10 border border-gain/30',
+    fail:  'text-loss bg-loss/10 border border-loss/30',
+    amber: 'text-amber bg-amber-soft border border-amber/30',
+    mute:  'text-v3muted bg-[#1a232d] border border-line',
+  };
+  return (
+    <span className={`text-[10.5px] px-1.5 py-0.5 rounded font-semibold tracking-[0.02em] ${map[tone]}`}>
+      {children}
+    </span>
+  );
+}
 
 export function BacktestPage() {
   const list = useWalkforwardReports();
   const [selected, setSelected] = useState<string | null>(null);
   const report = useWalkforwardReport(selected);
 
+  // 首次自动选第一个
   useEffect(() => {
-    const r = list.data?.reports[0]?.name;
-    if (r && !selected) setSelected(r);
+    if (!selected && list.data?.reports?.length) {
+      setSelected(list.data.reports[0].name);
+    }
   }, [list.data, selected]);
 
   const reports = list.data?.reports ?? [];
 
   return (
-    <div className="space-y-6">
-      <SectionTitle
-        title="策略验证"
-        subtitle="M6 walk-forward 报告 · 扣成本 net 视图 · 文档 §15 KPI 判定"
-      />
-
-      <Alert tone="info">
-        <div className="text-sm leading-6">
-          报告生成走 CLI:<code className="font-mono text-ink">
-            python -m scripts.walkforward --start 2026-01-01 --end 2026-06-01 --symbols BTC/USDT,ETH/USDT --out reports/wf_btc_eth.json
-          </code>
-          。可选参数:<code className="font-mono text-ink">--setup-filter</code>(两个核心 setup 各自验证)、<code className="font-mono text-ink">--cost-preset realistic|optimistic|pessimistic</code>。
-        </div>
-      </Alert>
-
-      {list.isLoading && <LoadingSkeleton message="拉取报告列表…" />}
-      {!list.isLoading && reports.length === 0 && (
-        <Card>
-          <div className="py-10 text-center">
-            <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-bg-elevated">
-              <FileJson className="h-5 w-5 text-ivory-40" />
+    <div className="px-6 pb-10 pt-5">
+      <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-3.5">
+        {/* ── 报告列表 ─────────────────────────────────────── */}
+        <Card pad0>
+          <div className="flex items-center justify-between px-4 pt-4 pb-2">
+            <h3 className="text-xs font-medium text-v3muted uppercase tracking-[0.06em]">报告列表</h3>
+            <span className="text-[10px] text-v3faint font-mono">{reports.length}</span>
+          </div>
+          {reports.length === 0 ? (
+            <div className="py-10 text-center text-sm text-v3faint">无报告 (尝试跑 scripts/walkforward.py)</div>
+          ) : (
+            <div className="max-h-[700px] overflow-y-auto">
+              {reports.map((r) => {
+                const isActive = r.name === selected;
+                const pf = r.net_profit_factor;
+                const passed = r.kpi_passes_doc_15_2;
+                return (
+                  <button
+                    key={r.name}
+                    onClick={() => setSelected(r.name)}
+                    className={`w-full text-left px-4 py-3 border-b border-line-soft transition hover:bg-raised ${isActive ? 'bg-raised' : ''}`}
+                  >
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <span className="font-mono text-[12px] text-v3text truncate flex-1">{r.name.replace(/\.json$/, '')}</span>
+                      {passed === true && <Badge tone="ok">PASS</Badge>}
+                      {passed === false && <Badge tone="fail">FAIL</Badge>}
+                      {passed == null && <Badge tone="mute">—</Badge>}
+                    </div>
+                    <div className="flex items-center gap-3 text-[11px] font-mono text-v3muted">
+                      <span>n={r.n_oos_trades ?? '—'}</span>
+                      <span className={pf != null && pf >= 1.5 ? 'text-gain' : pf != null && pf >= 1 ? 'text-amber' : 'text-loss'}>
+                        PF {pf != null ? pf.toFixed(2) : '—'}
+                      </span>
+                    </div>
+                    {(r.period_start || r.setup_filter) && (
+                      <div className="mt-1 text-[10px] text-v3faint truncate">
+                        {r.period_start?.slice(0, 10)} → {r.period_end?.slice(0, 10)}
+                        {r.setup_filter && <> · {r.setup_filter}</>}
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
             </div>
-            <div className="text-sm text-ivory-70">还没有 walk-forward 报告</div>
-            <div className="mt-1 text-xs text-ivory-40">先用上面的命令生成第一份</div>
-          </div>
+          )}
         </Card>
-      )}
 
-      {reports.length > 0 && (
-        <Card title="可用报告" subtitle={`共 ${reports.length} 份`}>
-          <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-            {reports.map(r => (
-              <ReportCard
-                key={r.name}
-                r={r}
-                active={selected === r.name}
-                onClick={() => setSelected(r.name)}
-              />
-            ))}
-          </div>
-        </Card>
-      )}
-
-      {report.data && (
-        <ReportDetail report={report.data} />
-      )}
+        {/* ── 选中报告详情 ─────────────────────────────────── */}
+        <div>
+          {!selected ? (
+            <Card className="py-20 text-center">
+              <FlaskConical className="h-8 w-8 text-v3faint mx-auto mb-3" />
+              <div className="text-sm text-v3muted">从左侧选一份报告查看</div>
+            </Card>
+          ) : !report.data ? (
+            <Card className="py-20 text-center text-sm text-v3faint">加载中…</Card>
+          ) : (
+            <ReportDetail data={report.data} />
+          )}
+        </div>
+      </div>
     </div>
   );
 }
 
-function ReportCard({ r, active, onClick }: {
-  r: WFReportListItem; active: boolean; onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        'rounded-2xl border px-4 py-3 text-left transition',
-        active
-          ? 'border-brass bg-brass-soft'
-          : 'border-hairline bg-bg-base/60 hover:border-hairline-strong',
-      )}
-    >
-      <div className="flex items-center gap-2 mb-2">
-        <div className="font-mono text-sm text-ivory truncate flex-1">{r.name}</div>
-        {r.kpi_passes_doc_15_2 === true && <StatusPill tone="emerald" icon={<CheckCircle className="h-2.5 w-2.5" />}>PASS</StatusPill>}
-        {r.kpi_passes_doc_15_2 === false && <StatusPill tone="rose" icon={<XCircle className="h-2.5 w-2.5" />}>FAIL</StatusPill>}
-      </div>
-      <div className="text-xs text-ivory-40 space-y-0.5">
-        <div>{r.symbols?.join(', ') ?? '—'}</div>
-        <div>{r.period_start?.slice(0, 10)} → {r.period_end?.slice(0, 10)}</div>
-        {r.setup_filter && <div>setup: <span className="text-ink">{r.setup_filter}</span></div>}
-        <div>
-          n={r.n_oos_trades ?? '—'} · net avg R=<span className={cn(
-            (r.net_avg_r ?? 0) >= 0 ? 'text-sage' : 'text-oxblood',
-          )}>{r.net_avg_r?.toFixed(3) ?? '—'}</span>
-          {' · '}PF=<span className={cn(
-            (r.net_profit_factor ?? 0) > 1 ? 'text-sage' : 'text-oxblood',
-          )}>{r.net_profit_factor?.toFixed(2) ?? '∞'}</span>
-        </div>
-      </div>
-    </button>
-  );
-}
-
-function ReportDetail({ report }: { report: any }) {
-  const kpi = report.pass_doc_kpi;
-  const gross = report.oos_summary;
-  const net = report.oos_summary_net;
+function ReportDetail({ data }: { data: any }) {
+  const summary = data.summary_net ?? data.summary_gross ?? {};
+  const passed = data.pass_doc_kpi?.kpi_passes_doc_15_2;
+  const pf = summary.profit_factor;
+  const entries = data.oos_combined_entries ?? data.entries ?? [];
 
   return (
-    <>
-      <SectionTitle
-        title={`报告详情:${(report.config.symbols ?? []).join(' / ')}${report.config.setup_filter ? ' · ' + report.config.setup_filter : ''}`}
-        subtitle={`${report.config.start_iso?.slice(0, 10)} → ${report.config.end_iso?.slice(0, 10)} · ${report.windows.length} 窗口`}
-        action={
-          kpi.kpi_passes_doc_15_2
-            ? <StatusPill tone="emerald" icon={<CheckCircle className="h-3 w-3" />}>文档 §15 KPI #2 PASS</StatusPill>
-            : <StatusPill tone="rose" icon={<XCircle className="h-3 w-3" />}>FAIL</StatusPill>
-        }
-      />
-
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <MetricCard label="OOS 笔数" value={String(kpi.n_oos_trades)} hint="纯样本外" />
+    <div>
+      {/* 4 KPI */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3.5">
         <MetricCard
-          label="net avg R"
-          value={kpi.net_avg_r.toFixed(3)}
-          trend={kpi.net_avg_r > 0 ? 'up' : 'down'}
-          hint={`gross ${kpi.gross_avg_r.toFixed(3)}`}
+          label="Profit Factor"
+          value={pf != null ? pf.toFixed(2) : '—'}
+          valueColor={pf != null && pf >= 1.5 ? 'text-gain' : pf != null && pf >= 1 ? 'text-amber' : 'text-loss'}
+          sub={passed === true ? <span className="text-gain">KPI PASS</span> : passed === false ? <span className="text-loss">KPI FAIL</span> : null}
         />
         <MetricCard
-          label="net PF"
-          value={kpi.net_profit_factor != null ? kpi.net_profit_factor.toFixed(2) : '∞'}
-          trend={(kpi.net_profit_factor ?? 9) > 1 ? 'up' : 'down'}
-          hint={kpi.gross_profit_factor != null ? `gross ${kpi.gross_profit_factor.toFixed(2)}` : 'gross ∞'}
+          label="样本数 n"
+          value={summary.n ?? '—'}
+          sub={<span className="text-v3faint">OOS only</span>}
         />
         <MetricCard
-          label="net MaxDD"
-          value={`${(net.max_drawdown_r ?? 0).toFixed(2)} R`}
-          hint={`win rate ${Math.round((net.win_rate ?? 0) * 100)}%`}
+          label="平均 R"
+          value={summary.avg_r != null ? `${summary.avg_r >= 0 ? '+' : ''}${summary.avg_r.toFixed(3)}` : '—'}
+          valueColor={summary.avg_r >= 0 ? 'text-gain' : 'text-loss'}
+        />
+        <MetricCard
+          label="胜率"
+          value={summary.win_rate != null ? `${Math.round(summary.win_rate * 100)}%` : '—'}
         />
       </div>
 
-      <Card title="扣前 / 扣后对照" subtitle="文档 §8 写实成本表">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-hairline text-left text-[11px] uppercase tracking-wider text-ivory-40">
-                <th className="py-2 px-2"></th>
-                <th className="py-2 px-2 text-right">n</th>
-                <th className="py-2 px-2 text-right">win rate</th>
-                <th className="py-2 px-2 text-right">avg R</th>
-                <th className="py-2 px-2 text-right">total R</th>
-                <th className="py-2 px-2 text-right">PF</th>
-                <th className="py-2 px-2 text-right">MaxDD</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-hairline/60">
-              <Row label="Gross(扣前)" s={gross} />
-              <Row label="Net(扣成本后)" s={net} highlight />
-            </tbody>
-          </table>
+      {/* 配置信息 */}
+      <Card className="mb-3.5">
+        <h3 className="text-xs font-medium text-v3muted uppercase tracking-[0.06em] mb-3">配置</h3>
+        <div className="grid grid-cols-2 gap-y-2 gap-x-6 text-[12px]">
+          <div className="flex justify-between border-b border-line-soft pb-1.5">
+            <span className="text-v3muted">期间</span>
+            <span className="font-mono text-v3text text-[11px]">
+              {(data.config?.period_start ?? data.period_start)?.slice(0, 10)} → {(data.config?.period_end ?? data.period_end)?.slice(0, 10)}
+            </span>
+          </div>
+          <div className="flex justify-between border-b border-line-soft pb-1.5">
+            <span className="text-v3muted">Train/OOS/Step</span>
+            <span className="font-mono text-v3text">
+              {data.config?.train_days ?? '—'}/{data.config?.oos_days ?? '—'}/{data.config?.step_days ?? '—'}
+            </span>
+          </div>
+          <div className="flex justify-between border-b border-line-soft pb-1.5">
+            <span className="text-v3muted">Symbols</span>
+            <span className="font-mono text-v3text text-[11px]">
+              {(data.config?.symbols ?? []).length} 个
+            </span>
+          </div>
+          <div className="flex justify-between border-b border-line-soft pb-1.5">
+            <span className="text-v3muted">Setup filter</span>
+            <span className="font-mono text-v3text text-[11px]">
+              {data.config?.setup_filter ?? '所有'}
+            </span>
+          </div>
         </div>
       </Card>
 
-      <Card title="窗口明细" subtitle={`${report.windows.length} 个滚动窗口`}>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-hairline text-left text-[11px] uppercase tracking-wider text-ivory-40">
-                <th className="py-2 px-2">#</th>
-                <th className="py-2 px-2">训练段</th>
-                <th className="py-2 px-2">OOS 段</th>
-                <th className="py-2 px-2 text-right">入场</th>
-                <th className="py-2 px-2 text-right">平仓</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-hairline/60">
-              {report.windows.map((w: any, i: number) => (
-                <tr key={i} className="hover:bg-bg-surface/40">
-                  <td className="py-2 px-2 font-mono text-xs text-ivory-40">{i + 1}</td>
-                  <td className="py-2 px-2 font-mono text-xs text-ivory-70">
-                    {w.train_start.slice(0, 10)} → {w.train_end.slice(0, 10)}
-                  </td>
-                  <td className="py-2 px-2 font-mono text-xs text-ivory-70">
-                    {w.oos_start.slice(0, 10)} → {w.oos_end.slice(0, 10)}
-                  </td>
-                  <td className="py-2 px-2 text-right font-mono tabular-nums">{w.n_entries}</td>
-                  <td className="py-2 px-2 text-right font-mono tabular-nums">{w.n_closed}</td>
+      {/* Entries 列表 */}
+      <Card pad0>
+        <div className="flex items-center justify-between px-4 pt-4 pb-2">
+          <h3 className="text-xs font-medium text-v3muted uppercase tracking-[0.06em]">
+            OOS Trade Entries
+          </h3>
+          <span className="text-[10px] text-v3faint font-mono">{entries.length} 笔</span>
+        </div>
+        {entries.length === 0 ? (
+          <div className="py-8 text-center text-sm text-v3faint">无 entries</div>
+        ) : (
+          <div className="max-h-[400px] overflow-y-auto">
+            <table className="w-full font-mono text-[12px]">
+              <thead className="text-[10px] uppercase tracking-[0.06em] text-v3faint sticky top-0 bg-panel">
+                <tr className="border-b border-line-soft">
+                  <th className="px-3 py-2 text-left font-normal">入场</th>
+                  <th className="px-3 py-2 text-left font-normal">标的</th>
+                  <th className="px-3 py-2 text-left font-normal">Setup</th>
+                  <th className="px-3 py-2 text-right font-normal">Net R</th>
+                  <th className="px-3 py-2 text-left font-normal">出场</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-line-soft">
+                {entries.slice(0, 200).map((e: any, i: number) => {
+                  const r = e.net_realized_r ?? e.realized_r ?? 0;
+                  const isWin = r > 0;
+                  return (
+                    <tr key={i} className="text-v3text">
+                      <td className="px-3 py-2 text-v3faint text-[11px]">
+                        {e.entry_ts ? new Date(e.entry_ts).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'}
+                      </td>
+                      <td className="px-3 py-2">{(e.symbol ?? '').replace('USDT', '')}</td>
+                      <td className="px-3 py-2 text-v3muted text-[11px] truncate max-w-[200px]">
+                        {e.setup_type ?? '—'}
+                      </td>
+                      <td className={`px-3 py-2 text-right ${isWin ? 'text-gain' : 'text-loss'}`}>
+                        {isWin ? '+' : ''}{r.toFixed(2)}
+                      </td>
+                      <td className="px-3 py-2 text-v3faint text-[11px]">{e.exit_reason ?? '—'}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </Card>
-
-      <div className="grid gap-4 md:grid-cols-3">
-        <FeatureCard
-          icon={<FlaskConical className="h-5 w-5 text-ink" />}
-          title="窗口策略"
-          desc={`训练 ${report.config.train_days}d · OOS ${report.config.oos_days}d · 步长 ${report.config.step_days}d`}
-        />
-        <FeatureCard
-          icon={<Terminal className="h-5 w-5 text-sage" />}
-          title="成本档位"
-          desc={
-            report.config.cost_config
-              ? `fee ${(report.config.cost_config.maker_fee_rate * 100).toFixed(3)}% maker / ${(report.config.cost_config.taker_fee_rate * 100).toFixed(3)}% taker · slip ${(report.config.cost_config.slippage_pct * 100).toFixed(3)}%`
-              : '—'
-          }
-        />
-        <FeatureCard
-          icon={<FileJson className="h-5 w-5 text-brass" />}
-          title="setup filter"
-          desc={report.config.setup_filter ? `仅统计 ${report.config.setup_filter}` : '全部 setup 混合'}
-        />
-      </div>
-    </>
-  );
-}
-
-function Row({ label, s, highlight }: { label: string; s: any; highlight?: boolean }) {
-  // 后端在没 net 数据时返回 {} — s 不是 null 但所有字段是 undefined。
-  // 必须 require s.n 是个正整数才能渲染数字行。
-  if (!s || typeof s.n !== 'number' || s.n === 0) {
-    return <tr><td colSpan={7} className="py-3 text-center text-ivory-40 text-sm">{label}: 无数据</td></tr>;
-  }
-  const fix = (v: any, d: number) => (typeof v === 'number' ? v.toFixed(d) : '—');
-  return (
-    <tr className={highlight ? 'bg-brass/[0.06]' : ''}>
-      <td className="py-2.5 px-2 font-medium text-ivory">{label}</td>
-      <td className="py-2.5 px-2 text-right font-mono tabular-nums">{s.n}</td>
-      <td className="py-2.5 px-2 text-right font-mono tabular-nums">{fix((s.win_rate ?? 0) * 100, 0)}%</td>
-      <td className={cn(
-        'py-2.5 px-2 text-right font-mono tabular-nums',
-        (s.avg_r ?? 0) >= 0 ? 'text-sage' : 'text-oxblood',
-      )}>{fix(s.avg_r, 3)}</td>
-      <td className={cn(
-        'py-2.5 px-2 text-right font-mono tabular-nums',
-        (s.total_r ?? 0) >= 0 ? 'text-sage' : 'text-oxblood',
-      )}>{fix(s.total_r, 2)}</td>
-      <td className="py-2.5 px-2 text-right font-mono tabular-nums">
-        {s.profit_factor != null ? s.profit_factor.toFixed(2) : '∞'}
-      </td>
-      <td className="py-2.5 px-2 text-right font-mono tabular-nums text-oxblood">
-        {fix(s.max_drawdown_r, 2)}
-      </td>
-    </tr>
-  );
-}
-
-function FeatureCard({ icon, title, desc }: { icon: React.ReactNode; title: string; desc: string }) {
-  return (
-    <div className="rounded-3xl border border-hairline bg-bg-surface/70 p-5 shadow-[0_24px_80px_rgba(0,0,0,0.25)]">
-      <div className="flex items-center gap-2 mb-3">{icon}<div className="font-medium text-ivory">{title}</div></div>
-      <div className="text-sm text-ivory-70 leading-relaxed">{desc}</div>
     </div>
   );
 }

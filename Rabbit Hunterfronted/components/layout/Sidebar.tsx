@@ -1,27 +1,28 @@
 import { NavLink } from 'react-router-dom';
 import {
   LayoutGrid, TrendingUp, Brain, Settings,
+  PieChart, History, FlaskConical, BookOpen,
 } from 'lucide-react';
 import { cn } from '../primitives-v3/cn';
 import { ModeIndicator } from './ModeIndicator';
 
 interface NavItem { to: string; label: string; Icon: any }
 
-// V3 — 4 主流程导航 (按 UI 原型)
+// V3 — 8 项主导航 (4 主流程 + 4 数据/分析,2026-06-27)
 const NAV: NavItem[] = [
-  { to: '/overview', label: '总览',     Icon: LayoutGrid },
-  { to: '/market',   label: '市场数据', Icon: TrendingUp },
-  { to: '/learning', label: 'AI 学习',  Icon: Brain },
-  { to: '/settings', label: '设置',     Icon: Settings },
+  { to: '/overview',  label: '总览',     Icon: LayoutGrid },
+  { to: '/market',    label: '市场数据', Icon: TrendingUp },
+  { to: '/learning',  label: 'AI 学习',  Icon: Brain },
+  { to: '/portfolio', label: '投资组合', Icon: PieChart },
+  { to: '/history',   label: '交易历史', Icon: History },
+  { to: '/backtest',  label: '回测验证', Icon: FlaskConical },
+  { to: '/knowledge', label: '知识层',   Icon: BookOpen },
+  { to: '/settings',  label: '设置',     Icon: Settings },
 ];
 
-// 深链 — 辅助页面,仍可访问但不在主流程
+// 深链 — 低频辅助页面
 const DEEP_LINKS = [
   { to: '/dashboard',   label: '中控仪表 (V2)' },
-  { to: '/portfolio',   label: '投资组合' },
-  { to: '/history',     label: '交易历史' },
-  { to: '/backtest',    label: '策略验证' },
-  { to: '/knowledge',   label: '知识层' },
   { to: '/audit',       label: '反思审计' },
   { to: '/diagnostics', label: 'AI 诊断' },
   { to: '/reliability', label: '执行可靠性' },
