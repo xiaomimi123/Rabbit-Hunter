@@ -61,13 +61,45 @@ export default {
           watch: '#C9A14B',
           trade: '#6B8568',
         },
+        // V3 — 2026 UI 原型落地: 更冷蓝黑底 + 三档 panel + amber 签名
+        ink: '#0F141B',
+        panel: '#161D27',
+        panel2: '#1C2530',
+        raised: '#212C39',
+        line: '#28333F',
+        'line-soft': '#202A35',
+        v3text: '#E8EBF0',           // 避免和默认 text-* 冲突
+        v3muted: '#8B95A6',
+        v3faint: '#5A6473',
+        amber: {
+          DEFAULT: '#E0A23C',
+          dim: '#9C7330',
+          soft: 'rgba(224, 162, 60, 0.10)',
+        },
+        gain: {
+          DEFAULT: '#46B98A',
+          soft: 'rgba(70, 185, 138, 0.12)',
+        },
+        loss: {
+          DEFAULT: '#E06A52',
+          soft: 'rgba(224, 106, 82, 0.12)',
+        },
+        info: {
+          DEFAULT: '#5B9BD5',
+          soft: 'rgba(91, 155, 213, 0.12)',
+        },
+        violet: {
+          DEFAULT: '#9B7EDE',
+          soft: 'rgba(155, 126, 222, 0.12)',
+        },
       },
       fontFamily: {
-        display: ['system-ui', '-apple-system', 'BlinkMacSystemFont', '"PingFang SC"', '"Helvetica Neue"', '"Microsoft YaHei"', '"Noto Sans SC"', 'sans-serif'],
-        body: ['system-ui', '-apple-system', 'BlinkMacSystemFont', '"PingFang SC"', '"Helvetica Neue"', '"Microsoft YaHei"', '"Noto Sans SC"', 'sans-serif'],
-        mono: ['"Fira Code"', '"JetBrains Mono"', 'ui-monospace', 'monospace'],
+        // V3 (2026 原型): Space Grotesk + JetBrains Mono;原系统栈作 fallback
+        display: ['"Space Grotesk"', 'system-ui', '-apple-system', 'BlinkMacSystemFont', '"PingFang SC"', '"Helvetica Neue"', '"Microsoft YaHei"', '"Noto Sans SC"', 'sans-serif'],
+        body: ['"Space Grotesk"', 'system-ui', '-apple-system', 'BlinkMacSystemFont', '"PingFang SC"', '"Helvetica Neue"', '"Microsoft YaHei"', '"Noto Sans SC"', 'sans-serif'],
+        mono: ['"JetBrains Mono"', '"Fira Code"', 'ui-monospace', 'monospace'],
         cn: ['"PingFang SC"', '"Microsoft YaHei"', '"Noto Sans SC"', 'system-ui', 'sans-serif'],
-        sans: ['system-ui', '-apple-system', '"PingFang SC"', '"Noto Sans SC"', 'sans-serif'],
+        sans: ['"Space Grotesk"', 'system-ui', '-apple-system', '"PingFang SC"', '"Noto Sans SC"', 'sans-serif'],
       },
       letterSpacing: {
         wider2: '0.18em',

@@ -1,208 +1,238 @@
-import { useEffect, useState } from 'react';
-import { AlertTriangle, CheckCircle, XCircle } from 'lucide-react';
+/**
+ * SettingsPage — UI 原型 2026-06-27 落地版本。
+ *
+ * 4 个区: AI 接入 / OKX 交易所 / 交易模式 (LIVE 二次确认) / 风控参数 (宪法锁)
+ */
+import { useState } from 'react';
+import { Settings as SettingsIcon, TrendingUp, AlertTriangle, ShieldCheck } from 'lucide-react';
 import { useV5Settings } from '../../hooks/api/useV5Settings';
-import { useV5StrategyConfig } from '../../hooks/api/useV5StrategyConfig';
-import { LoadingSkeleton } from '../primitives/LoadingSkeleton';
-import { Modal } from '../primitives/Modal';
-import { SectionTitle } from '../primitives-v3/SectionTitle';
-import { Card } from '../primitives-v3/Card';
-import { StatusPill } from '../primitives-v3/StatusPill';
-import { FormField, TextInput, PrimaryButton, SecondaryButton } from '../primitives-v3/FormField';
-import { Alert } from '../primitives-v3/Alert';
-import { Slider } from '../primitives/Slider';
-import { NumberInput } from '../primitives/NumberInput';
-import { cn } from '../primitives-v3/cn';
 
-export function SettingsPage() {
-  const { query, patch, testAi } = useV5Settings();
-  const strategy = useV5StrategyConfig();
-  const [confirmLive, setConfirmLive] = useState(false);
-  const [deepseekKey, setDeepseekKey] = useState('');
-  const [openaiKey, setOpenaiKey] = useState('');
-  const [savedAt, setSavedAt] = useState<number | null>(null);
-  const [testResult, setTestResult] = useState<import('../../types').TestAIResponse | null>(null);
-  const [testedAt, setTestedAt] = useState<number | null>(null);
-  const [dirty, setDirty] = useState<Record<string, number>>({});
-
-  useEffect(() => { setDirty({}); }, [strategy.query.data]);
-
-  if (query.isLoading) return <LoadingSkeleton message="拉取设置…" />;
-  const s = query.data;
-  if (!s) return <div className="text-sm text-ivory-40">无数据</div>;
-
-  const params = strategy.query.data?.params ?? [];
-  const dirtyCount = Object.keys(dirty).length;
-  const effective = (key: string, current: number) =>
-    Object.prototype.hasOwnProperty.call(dirty, key) ? dirty[key] : current;
-
+function Section({ icon, title, danger, children }: {
+  icon: React.ReactNode; title: string; danger?: boolean; children: React.ReactNode;
+}) {
   return (
-    <div className="space-y-6">
-      <SectionTitle
-        title="系统设置"
-        subtitle="凭据保存和自动交易运行参数"
-        action={
-          <StatusPill tone={s.system_mode === 'LIVE' ? 'rose' : 'amber'}>
-            {s.system_mode === 'LIVE' ? '⬤ LIVE' : '◐ SHADOW'}
-          </StatusPill>
-        }
-      />
-
-      <div className="grid gap-6 xl:grid-cols-[1.2fr_1fr]">
-        <Card title="凭据" subtitle="OKX + AI 提供方">
-          <div className="grid gap-4 md:grid-cols-2">
-            <FormField label="DeepSeek API Key">
-              <TextInput type="password" placeholder={s.deepseek_api_key_masked || '未配置'} value={deepseekKey} onChange={e => setDeepseekKey(e.target.value)} />
-            </FormField>
-            <FormField label="OpenAI API Key">
-              <TextInput type="password" placeholder={s.openai_api_key_masked || '未配置'} value={openaiKey} onChange={e => setOpenaiKey(e.target.value)} />
-            </FormField>
-          </div>
-          <div className="mt-4 flex flex-wrap items-center gap-3">
-            <span className="text-sm text-ivory-70">
-              活跃:<span className="text-ink ml-1">{s.active_ai_provider ?? '无'}</span>
-              <span className="text-ivory-40 mx-2">·</span>
-              <span className="text-ivory">{s.active_chat_model}</span>
-            </span>
-            <div className="ml-auto flex gap-2">
-              <SecondaryButton
-                disabled={testAi.isPending}
-                onClick={() => testAi.mutate(
-                  {
-                    ...(deepseekKey ? { deepseek_api_key: deepseekKey } : {}),
-                    ...(openaiKey ? { openai_api_key: openaiKey } : {}),
-                  },
-                  {
-                    onSuccess: (r) => { setTestResult(r); setTestedAt(Date.now()); },
-                    onError: () => { setTestResult(null); setTestedAt(Date.now()); },
-                  },
-                )}
-              >
-                {testAi.isPending ? '测试中…' : '测试连接'}
-              </SecondaryButton>
-              <PrimaryButton
-                disabled={patch.isPending || (!deepseekKey && !openaiKey)}
-                onClick={() => patch.mutate(
-                  {
-                    ...(deepseekKey ? { deepseek_api_key: deepseekKey } : {}),
-                    ...(openaiKey ? { openai_api_key: openaiKey } : {}),
-                  },
-                  { onSuccess: () => { setDeepseekKey(''); setOpenaiKey(''); setSavedAt(Date.now()); } },
-                )}
-              >
-                {patch.isPending ? '保存中…' : '保存'}
-              </PrimaryButton>
-            </div>
-          </div>
-          {savedAt && Date.now() - savedAt < 4000 && <Alert tone="success" className="mt-4">✓ 已保存,新 key 已写入</Alert>}
-          {testedAt && Date.now() - testedAt < 8000 && testResult && (
-            <Alert tone={testResult.ok ? 'success' : 'error'} className="mt-4">
-              <div className="flex items-start gap-2">
-                {testResult.ok ? <CheckCircle className="h-4 w-4 mt-0.5" /> : <XCircle className="h-4 w-4 mt-0.5" />}
-                <div>
-                  {testResult.message}
-                  {testResult.provider && <span className="ml-2 opacity-75">· {testResult.provider}/{testResult.model}</span>}
-                </div>
-              </div>
-            </Alert>
-          )}
-        </Card>
-
-        <Card title="自动交易参数" subtitle="安全旋钮 + 模式切换">
-          <div className="space-y-3">
-            <CheckboxRow checked={s.ai_fail_open} onChange={c => patch.mutate({ ai_fail_open: c })} label="AI 不可用时 fail-open" hint="LIVE 默认 fail-closed,勾选 = 允许跳过 AI" />
-            <CheckboxRow checked={s.sl_tp_fail_open} onChange={c => patch.mutate({ sl_tp_fail_open: c })} label="SL/TP 异常 fail-open" hint="止损/止盈计算异常时允许通过" />
-            <CheckboxRow checked={s.enable_auto_trading} onChange={c => patch.mutate({ enable_auto_trading: c })} label="启用自动交易" hint="关闭后扫描仍跑,但不会真正开仓" />
-          </div>
-
-          <div className="mt-5 flex items-center gap-3 rounded-2xl border border-hairline bg-bg-base/60 p-4">
-            <div className="flex-1">
-              <div className="text-xs uppercase tracking-wider text-ivory-40 mb-1">系统模式</div>
-              <div className={cn('font-mono text-sm font-semibold', s.system_mode === 'LIVE' ? 'text-oxblood' : 'text-brass')}>
-                {s.system_mode === 'LIVE' ? '⬤ LIVE — 真实资金' : '◐ SHADOW — 模拟开仓'}
-              </div>
-            </div>
-            <SecondaryButton onClick={() => {
-              if (s.system_mode === 'SHADOW') setConfirmLive(true);
-              else patch.mutate({ system_mode: 'SHADOW' });
-            }}>
-              切到 {s.system_mode === 'SHADOW' ? 'LIVE' : 'SHADOW'}
-            </SecondaryButton>
-          </div>
-        </Card>
+    <section className="rounded-[10px] border border-line-soft bg-panel p-5">
+      <div className={`flex items-center gap-2 mb-4 text-[11px] uppercase tracking-[0.08em] font-semibold ${danger ? 'text-loss' : 'text-amber'}`}>
+        {icon}<span>{title}</span>
       </div>
+      <div className="flex flex-col">{children}</div>
+    </section>
+  );
+}
 
-      <Card
-        title="策略参数"
-        subtitle="拖动滑条或直接输入,带 ● 标记为本次修改"
-        actions={
-          <div className="flex gap-2">
-            <SecondaryButton onClick={() => setDirty({})} disabled={dirtyCount === 0}>撤销</SecondaryButton>
-            <PrimaryButton disabled={!dirtyCount || strategy.patch.isPending} onClick={() => strategy.patch.mutate(dirty)}>
-              {strategy.patch.isPending ? '保存中…' : `保存 (${dirtyCount})`}
-            </PrimaryButton>
-          </div>
-        }
-      >
-        <div className="divide-y divide-hairline/60">
-          {params.map(p => {
-            const eff = effective(p.key, p.value);
-            const changed = eff !== p.value;
-            return (
-              <div key={p.key} className="grid grid-cols-1 md:grid-cols-12 items-center gap-3 py-3">
-                <div className="md:col-span-3">
-                  <div className="flex items-center gap-1.5 font-mono text-sm text-ivory">
-                    {changed && <span className="text-ink">●</span>}
-                    {p.key}
-                  </div>
-                  <div className="text-xs text-ivory-40 mt-0.5">{p.description}</div>
-                </div>
-                <div className="md:col-span-6">
-                  <Slider value={eff} min={p.min} max={p.max} step={(p.max - p.min) / 100}
-                          onChange={(v) => setDirty(d => ({ ...d, [p.key]: v }))} />
-                </div>
-                <div className="md:col-span-2">
-                  <NumberInput value={eff} min={p.min} max={p.max} step={(p.max - p.min) / 100}
-                               onChange={(v) => setDirty(d => ({ ...d, [p.key]: v }))} />
-                </div>
-                <div className={cn('md:col-span-1 text-right text-xs', changed ? 'text-ink' : 'text-ivory-40')}>{p.unit}</div>
-              </div>
-            );
-          })}
-        </div>
-      </Card>
-
-      <Modal open={confirmLive} onClose={() => setConfirmLive(false)} title="切换到 LIVE 模式">
-        <div className="space-y-4">
-          <Alert tone="error">
-            <div className="flex items-start gap-2">
-              <AlertTriangle className="h-4 w-4 mt-0.5" />
-              <div>LIVE 模式将使用真实资金开仓。请确认账户余额和当前活仓状态。</div>
-            </div>
-          </Alert>
-          <div className="flex justify-end gap-3">
-            <SecondaryButton onClick={() => setConfirmLive(false)}>取消</SecondaryButton>
-            <button
-              type="button"
-              onClick={() => { patch.mutate({ system_mode: 'LIVE' }); setConfirmLive(false); }}
-              className="rounded-2xl border border-oxblood bg-oxblood-soft px-4 py-2 text-sm text-oxblood transition hover:bg-oxblood hover:text-ivory"
-            >
-              确认切到 LIVE
-            </button>
-          </div>
-        </div>
-      </Modal>
+function Field({ title, hint, control, locked }: {
+  title: string; hint?: string; control: React.ReactNode; locked?: boolean;
+}) {
+  return (
+    <div className={`flex items-center justify-between gap-4 py-3 border-b border-line-soft last:border-b-0 ${locked ? 'opacity-60' : ''}`}>
+      <div className="min-w-0">
+        <div className="text-[13px] text-v3text">{title}</div>
+        {hint && <div className="text-[11px] text-v3faint mt-0.5">{hint}</div>}
+      </div>
+      <div className="shrink-0">{control}</div>
     </div>
   );
 }
 
-function CheckboxRow({ checked, onChange, label, hint }: { checked: boolean; onChange: (c: boolean) => void; label: string; hint?: string }) {
+function Pill({ tone, children }: { tone: 'ok' | 'warn' | 'off'; children: React.ReactNode }) {
+  const cls = tone === 'ok'
+    ? 'text-gain bg-gain/10 border-gain/30'
+    : tone === 'warn'
+    ? 'text-amber bg-amber-soft border-amber/30'
+    : 'text-v3faint bg-[#1a232d] border-line';
   return (
-    <label className="flex items-start gap-3 rounded-2xl border border-hairline bg-bg-base/60 px-4 py-3 cursor-pointer hover:border-hairline-strong transition">
-      <input type="checkbox" checked={checked} onChange={e => onChange(e.target.checked)} className="accent-indigo-500 mt-1 h-4 w-4" />
-      <div className="flex-1">
-        <div className={cn('text-sm', checked ? 'text-ivory' : 'text-ivory-70')}>{label}</div>
-        {hint && <div className="text-xs text-ivory-40 mt-0.5">{hint}</div>}
+    <span className={`text-[10.5px] px-2 py-0.5 rounded border font-semibold tracking-[0.02em] ${cls}`}>
+      {children}
+    </span>
+  );
+}
+
+function Toggle({ on, onClick, tone = 'amber', disabled }: {
+  on: boolean; onClick: () => void; tone?: 'amber' | 'loss'; disabled?: boolean;
+}) {
+  const bg = on ? (tone === 'loss' ? 'bg-loss' : 'bg-amber') : 'bg-line';
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={`relative w-[42px] h-[22px] rounded-full transition disabled:opacity-50 disabled:cursor-not-allowed ${bg}`}
+    >
+      <span className={`absolute top-[2px] h-[18px] w-[18px] rounded-full bg-v3text transition-transform ${on ? 'translate-x-[22px]' : 'translate-x-[2px]'}`} />
+    </button>
+  );
+}
+
+function TextInput({ value, type = 'text', onChange, placeholder, disabled }: {
+  value: string | number; type?: 'text' | 'password';
+  onChange?: (v: string) => void; placeholder?: string; disabled?: boolean;
+}) {
+  return (
+    <input
+      type={type}
+      value={value}
+      onChange={(e) => onChange?.(e.target.value)}
+      placeholder={placeholder}
+      disabled={disabled}
+      className="rounded-md border border-line bg-[#0E141A] px-3 py-1.5 font-mono text-[12px] text-v3text placeholder:text-v3faint focus:border-amber focus:outline-none transition w-[200px] disabled:opacity-60"
+    />
+  );
+}
+
+function LiveConfirmModal({ onCancel, onConfirm }: { onCancel: () => void; onConfirm: () => void }) {
+  const [text, setText] = useState('');
+  const canConfirm = text === 'CONFIRM';
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 backdrop-blur-sm">
+      <div className="w-full max-w-md mx-6 rounded-lg border border-loss/40 bg-panel2 p-6 shadow-2xl">
+        <div className="flex items-center gap-2 mb-3 text-loss">
+          <AlertTriangle className="h-5 w-5" />
+          <h3 className="text-base font-semibold">切换到 LIVE 实盘交易</h3>
+        </div>
+        <p className="text-[13px] text-v3text leading-[1.6] mb-4">
+          切到 LIVE 后,新信号会用 OKX <b className="text-loss">真实账户</b>下单。请确认:
+        </p>
+        <ul className="text-[12px] text-v3muted leading-[1.7] mb-4 pl-5 list-disc">
+          <li>已设 OKX API key/secret/passphrase</li>
+          <li>已检查风控参数 (单笔风险 / 杠杆 / 熔断)</li>
+          <li>已用 paper 验证过当前策略 ≥ 30 笔</li>
+        </ul>
+        <div className="mb-4">
+          <div className="text-[11px] text-v3muted mb-1.5">
+            输入 <code className="text-amber font-mono">CONFIRM</code> 确认切换:
+          </div>
+          <input
+            type="text"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder="CONFIRM"
+            className="w-full rounded-md border border-line bg-ink px-3 py-2 font-mono text-sm text-v3text focus:border-loss focus:outline-none"
+            autoFocus
+          />
+        </div>
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="px-4 py-2 rounded-md border border-line text-v3muted text-sm hover:border-v3text hover:text-v3text transition"
+          >
+            取消
+          </button>
+          <button
+            type="button"
+            disabled={!canConfirm}
+            onClick={onConfirm}
+            className={`px-4 py-2 rounded-md text-sm font-semibold transition ${
+              canConfirm ? 'bg-loss text-v3text hover:bg-loss/80' : 'bg-loss/30 text-v3faint cursor-not-allowed'
+            }`}
+          >
+            切换到 LIVE
+          </button>
+        </div>
       </div>
-    </label>
+    </div>
+  );
+}
+
+export function SettingsPage() {
+  const { query, patch } = useV5Settings();
+  const settings = query.data;
+  const [showLiveModal, setShowLiveModal] = useState(false);
+  const [openaiKey, setOpenaiKey] = useState('');
+  const [deepseekKey, setDeepseekKey] = useState('');
+  const [okxKey, setOkxKey] = useState('');
+  const [okxSecret, setOkxSecret] = useState('');
+  const [okxPassphrase, setOkxPassphrase] = useState('');
+
+  const isLive = settings?.system_mode === 'LIVE';
+  const autoOn = settings?.enable_auto_trading ?? false;
+
+  const handleLiveToggle = () => {
+    if (isLive) {
+      patch.mutate({ system_mode: 'SHADOW' } as any);
+    } else {
+      setShowLiveModal(true);
+    }
+  };
+
+  return (
+    <div className="px-6 pb-10 pt-5">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5">
+        <div className="flex flex-col gap-3.5">
+          <Section icon={<SettingsIcon className="h-3.5 w-3.5" />} title="AI 接入">
+            <Field title="OpenAI Assistant" hint="主决策 · GPT-4o · 二次判断与反思"
+              control={<Pill tone={settings?.active_ai_provider === 'openai' ? 'ok' : 'off'}>
+                {settings?.active_ai_provider === 'openai' ? '已激活' : '未启用'}</Pill>} />
+            <Field title="OpenAI API Key" hint={`已存: ${settings?.openai_api_key_masked || '(空)'}`}
+              control={<TextInput type="password" value={openaiKey} onChange={setOpenaiKey} placeholder="sk-..." />} />
+            <Field title="DeepSeek 备用" hint="主模型故障时兜底"
+              control={<Toggle on={settings?.deepseek_enabled ?? false}
+                onClick={() => patch.mutate({ deepseek_enabled: !settings?.deepseek_enabled } as any)} />} />
+            <Field title="DeepSeek API Key" hint={`已存: ${settings?.deepseek_api_key_masked || '(空)'}`}
+              control={<TextInput type="password" value={deepseekKey} onChange={setDeepseekKey} placeholder="sk-..." />} />
+            <Field title="AI 故障时下单 (fail-open)" hint="关闭 = AI 不可用时拒绝交易 (推荐 fail-closed)"
+              control={<Toggle on={settings?.ai_fail_open ?? false}
+                onClick={() => patch.mutate({ ai_fail_open: !settings?.ai_fail_open } as any)} />} />
+          </Section>
+
+          <Section icon={<TrendingUp className="h-3.5 w-3.5" />} title="OKX 交易所">
+            <Field title="连接状态" hint="永续合约 · 密钥仅存本地"
+              control={<Pill tone={settings?.exchange === 'okx' ? 'ok' : 'off'}>
+                {settings?.exchange === 'okx' ? '已连接' : '未配置'}</Pill>} />
+            <Field title="API Key"
+              control={<TextInput type="password" value={okxKey} onChange={setOkxKey} placeholder="OKX key" />} />
+            <Field title="Secret"
+              control={<TextInput type="password" value={okxSecret} onChange={setOkxSecret} placeholder="OKX secret" />} />
+            <Field title="Passphrase"
+              control={<TextInput type="password" value={okxPassphrase} onChange={setOkxPassphrase} placeholder="passphrase" />} />
+          </Section>
+        </div>
+
+        <div className="flex flex-col gap-3.5">
+          <Section icon={<AlertTriangle className="h-3.5 w-3.5" />} title="交易模式 · 高风险" danger>
+            <Field title="实盘自动交易 (LIVE)"
+              hint={`当前: ${isLive ? 'LIVE 真钱' : 'SHADOW 纸面'}`}
+              control={
+                <div className="flex items-center gap-3">
+                  <Pill tone={isLive ? 'warn' : 'ok'}>{isLive ? 'LIVE' : 'SHADOW'}</Pill>
+                  <Toggle on={isLive} onClick={handleLiveToggle} tone="loss" />
+                </div>
+              } />
+            <Field title="启动信号扫描"
+              hint="关闭 = 不开新仓 (LIVE 也不开)"
+              control={<Toggle on={autoOn}
+                onClick={() => patch.mutate({ enable_auto_trading: !autoOn } as any)} />} />
+            <Field title="纸面初始资金" hint="SHADOW 模拟账户起始"
+              control={<TextInput value="10,000 USDT" disabled />} />
+            <Field title="做空 (VULTURE)" hint="宪法 §6 · 默认关闭"
+              control={<Toggle on={false} onClick={() => {}} disabled />} locked />
+          </Section>
+
+          <Section icon={<ShieldCheck className="h-3.5 w-3.5" />} title="风控参数 · 宪法约束">
+            <Field title="单笔风险" hint="宪法 §1 · 硬上限 1%"
+              control={<TextInput value="1.0 %" disabled />} locked />
+            <Field title="日内熔断" hint="宪法 §3 · 锁定"
+              control={<TextInput value="-3.0 %" disabled />} locked />
+            <Field title="杠杆上限" hint="宪法 §4 · 系统再反推压低"
+              control={<TextInput value="5x" disabled />} locked />
+            <Field title="同时活仓上限" hint="v5_max_concurrent"
+              control={<TextInput value="3" />} />
+            <Field title="SL/TP 失败保留仓" hint="关闭 = SL/TP 挂单失败立即平仓回滚"
+              control={<Toggle on={settings?.sl_tp_fail_open ?? false}
+                onClick={() => patch.mutate({ sl_tp_fail_open: !settings?.sl_tp_fail_open } as any)} />} />
+          </Section>
+        </div>
+      </div>
+
+      {showLiveModal && (
+        <LiveConfirmModal
+          onCancel={() => setShowLiveModal(false)}
+          onConfirm={() => {
+            patch.mutate({ system_mode: 'LIVE' } as any);
+            setShowLiveModal(false);
+          }}
+        />
+      )}
+    </div>
   );
 }

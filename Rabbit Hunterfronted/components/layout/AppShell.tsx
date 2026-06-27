@@ -13,7 +13,7 @@ function wsUrl(): string {
 export function AppShell() {
   const status = useV5WebSocket(wsUrl());
   return (
-    <div className="min-h-screen bg-bg-base text-ivory">
+    <div className="min-h-screen bg-ink text-v3text">
       <div className="grid min-h-screen lg:grid-cols-[240px_1fr]">
         <Sidebar />
         <main className="min-w-0">

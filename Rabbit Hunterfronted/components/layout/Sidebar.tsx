@@ -1,63 +1,102 @@
 import { NavLink } from 'react-router-dom';
 import {
-  LayoutDashboard, Database, History,
-  FlaskConical, Brain, Settings, Bot,
+  LayoutGrid, TrendingUp, Brain, Settings,
 } from 'lucide-react';
 import { cn } from '../primitives-v3/cn';
+import { ModeIndicator } from './ModeIndicator';
 
 interface NavItem { to: string; label: string; Icon: any }
 
+// V3 — 4 主流程导航 (按 UI 原型)
 const NAV: NavItem[] = [
-  { to: '/dashboard',  label: '仪表盘',   Icon: LayoutDashboard },
-  { to: '/collect',    label: '采集数据', Icon: Database },
-  { to: '/history',    label: '交易历史', Icon: History },
-  { to: '/backtest',   label: '策略验证', Icon: FlaskConical },
-  { to: '/learning',   label: 'AI 学习',  Icon: Brain },
-  { to: '/settings',   label: '系统设置', Icon: Settings },
+  { to: '/overview', label: '总览',     Icon: LayoutGrid },
+  { to: '/market',   label: '市场数据', Icon: TrendingUp },
+  { to: '/learning', label: 'AI 学习',  Icon: Brain },
+  { to: '/settings', label: '设置',     Icon: Settings },
+];
+
+// 深链 — 辅助页面,仍可访问但不在主流程
+const DEEP_LINKS = [
+  { to: '/dashboard',   label: '中控仪表 (V2)' },
+  { to: '/portfolio',   label: '投资组合' },
+  { to: '/history',     label: '交易历史' },
+  { to: '/backtest',    label: '策略验证' },
+  { to: '/knowledge',   label: '知识层' },
+  { to: '/audit',       label: '反思审计' },
+  { to: '/diagnostics', label: 'AI 诊断' },
+  { to: '/reliability', label: '执行可靠性' },
+  { to: '/collect',     label: '数据采集' },
+  { to: '/manual',      label: '手动开单' },
+  { to: '/glossary',    label: '术语词典' },
 ];
 
 export function Sidebar() {
   return (
-    <aside className="flex flex-col w-[240px] border-r border-hairline bg-bg-base/95 px-4 py-6 sticky top-0 h-screen overflow-y-auto">
-      <div className="mb-8 flex items-center gap-3 px-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-sm border border-brass/40 bg-brass-soft text-brass">
-          <Bot className="h-5 w-5" />
+    <aside className="flex flex-col w-[212px] shrink-0 border-r border-line-soft bg-[#0C1117] px-3 py-[18px] sticky top-0 h-screen overflow-y-auto">
+      {/* Brand */}
+      <div className="mb-1.5 flex items-center gap-2.5 px-2 pb-[18px]">
+        <div className="flex h-7 w-7 items-center justify-center rounded-[7px] border-[1.5px] border-amber text-amber font-bold text-[15px]">
+          兔
         </div>
         <div>
-          <div className="font-semibold text-ivory">猎兔者R</div>
-          <div className="text-[10px] uppercase tracking-wider2 text-ivory-40 font-mono">v6.0 · SHADOW</div>
+          <div className="font-semibold text-[15px] tracking-[0.01em] text-v3text">Rabbit Hunter</div>
+          <div className="text-[10.5px] uppercase tracking-[0.08em] text-v3faint">私人中控</div>
         </div>
       </div>
 
-      <nav className="flex-1 space-y-1">
+      {/* Main nav — 4 主流程 */}
+      <nav className="mt-1.5 flex flex-col gap-[3px]">
         {NAV.map(({ to, label, Icon }) => (
           <NavLink
             key={to}
             to={to}
             className={({ isActive }) =>
               cn(
-                'flex w-full items-center gap-3 rounded-sm px-3 py-2.5 text-left text-sm transition',
+                'flex items-center gap-[11px] px-[11px] py-2.5 rounded-lg text-[13.5px] font-medium transition',
                 isActive
-                  ? 'border border-brass/40 bg-brass-soft text-brass'
-                  : 'border border-transparent text-ivory-70 hover:bg-bg-elevated hover:text-ivory',
+                  ? 'bg-[#19222D] text-v3text shadow-[inset_2px_0_0_var(--tw-shadow-color)] shadow-amber'
+                  : 'text-v3muted hover:bg-[#141B23] hover:text-v3text',
               )
             }
           >
-            <Icon className="h-4 w-4" />
-            <span>{label}</span>
+            {({ isActive }) => (
+              <>
+                <Icon className={cn('h-[17px] w-[17px] shrink-0', isActive ? 'text-amber opacity-100' : 'opacity-85')} />
+                <span>{label}</span>
+              </>
+            )}
           </NavLink>
         ))}
       </nav>
 
-      <div className="mt-6 rounded-sm border border-hairline bg-bg-surface/60 p-3 text-xs">
-        <div className="mb-1 font-medium uppercase tracking-wider2 text-[10px] text-ivory-40">深链入口</div>
-        <div className="flex flex-col gap-1 text-ivory-70">
-          <NavLink to="/portfolio" className="hover:text-brass">投资组合</NavLink>
-          <NavLink to="/reliability" className="hover:text-brass">执行可靠性</NavLink>
-          <NavLink to="/knowledge" className="hover:text-brass">知识层</NavLink>
-          <NavLink to="/manual" className="hover:text-brass">手动开单</NavLink>
-          <NavLink to="/glossary" className="hover:text-brass">术语词典</NavLink>
+      {/* 深链区 */}
+      <details className="mt-4 group">
+        <summary className="cursor-pointer list-none px-[11px] py-2 text-[10px] uppercase tracking-[0.08em] text-v3faint hover:text-v3muted transition select-none">
+          深链 ▾
+        </summary>
+        <div className="mt-1 flex flex-col gap-0.5">
+          {DEEP_LINKS.map(({ to, label }) => (
+            <NavLink
+              key={to}
+              to={to}
+              className={({ isActive }) =>
+                cn(
+                  'px-[14px] py-1.5 text-[12px] transition',
+                  isActive
+                    ? 'text-amber'
+                    : 'text-v3muted hover:text-v3text',
+                )
+              }
+            >
+              {label}
+            </NavLink>
+          ))}
         </div>
+      </details>
+
+      {/* 底部签名: 模式指示器 */}
+      <div className="mt-auto pt-2.5 px-1">
+        <ModeIndicator />
       </div>
     </aside>
   );

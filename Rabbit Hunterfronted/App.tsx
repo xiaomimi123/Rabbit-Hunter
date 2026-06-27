@@ -1,8 +1,10 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AppShell } from './components/layout/AppShell';
+import { OverviewPage } from './components/pages-v4/OverviewPage';
 import { DashboardPage } from './components/pages-v4/DashboardPage';
 import { CollectPage } from './components/pages-v4/CollectPage';
 import { LearningPage } from './components/pages-v4/LearningPage';
+import { AILearningPage } from './components/pages-v4/AILearningPage';
 import { PortfolioPage } from './components/pages-v4/PortfolioPage';
 import { MarketPage } from './components/pages-v4/MarketPage';
 import { HistoryPage } from './components/pages-v4/HistoryPage';
@@ -20,11 +22,13 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+        <Route path="/" element={<Navigate to="/overview" replace />} />
         <Route element={<AppShell />}>
+          <Route path="/overview"    element={<OverviewPage />} />
           <Route path="/dashboard"   element={<DashboardPage />} />
           <Route path="/collect"     element={<CollectPage />} />
-          <Route path="/learning"    element={<LearningPage />} />
+          <Route path="/learning"    element={<AILearningPage />} />
+          <Route path="/learning-v2" element={<LearningPage />} />
           <Route path="/settings"    element={<SettingsPage />} />
           <Route path="/portfolio"   element={<PortfolioPage />} />
           <Route path="/market"      element={<MarketPage />} />
