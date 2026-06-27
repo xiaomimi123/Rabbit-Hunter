@@ -94,11 +94,11 @@ export function V5ManualOrderPage() {
       {step === 3 && (
         <Card>
           <div className="py-10 text-center">
-            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/15">
-              <CheckCircle className="h-7 w-7 text-emerald-300" />
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-sage-soft">
+              <CheckCircle className="h-7 w-7 text-sage" />
             </div>
-            <p className="text-2xl font-semibold text-emerald-300">模拟开仓成功</p>
-            <p className="mt-2 text-sm text-zinc-400">即将跳转到活仓监控…</p>
+            <p className="text-2xl font-semibold text-sage">模拟开仓成功</p>
+            <p className="mt-2 text-sm text-ivory-70">即将跳转到活仓监控…</p>
           </div>
         </Card>
       )}
@@ -118,22 +118,22 @@ function StepIndicator({ current }: { current: Step }) {
         <div key={s.id} className="flex items-center gap-3 flex-1">
           <div className={cn(
             'flex h-10 w-10 items-center justify-center rounded-2xl font-mono text-base font-medium',
-            current === s.id && 'bg-indigo-500 text-white shadow-lg shadow-indigo-500/30',
-            current > s.id && 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/40',
-            current < s.id && 'border border-zinc-800 bg-zinc-950 text-zinc-500',
+            current === s.id && 'bg-brass text-bg-base shadow-lg shadow-brass/30',
+            current > s.id && 'bg-sage-soft text-sage border border-sage/40',
+            current < s.id && 'border border-hairline bg-bg-base text-ivory-40',
           )}>
             {current > s.id ? '✓' : s.id}
           </div>
           <span className={cn(
             'text-sm',
-            current === s.id && 'text-indigo-300',
-            current > s.id && 'text-emerald-300',
-            current < s.id && 'text-zinc-500',
+            current === s.id && 'text-ink',
+            current > s.id && 'text-sage',
+            current < s.id && 'text-ivory-40',
           )}>
             {s.label}
           </span>
           {i < steps.length - 1 && (
-            <div className={cn('flex-1 h-px mx-2', current > s.id ? 'bg-emerald-500/40' : 'bg-zinc-800')} />
+            <div className={cn('flex-1 h-px mx-2', current > s.id ? 'bg-sage-soft' : 'bg-bg-elevated')} />
           )}
         </div>
       ))}
@@ -156,7 +156,7 @@ function Step1({ symbol, onSymbolChange, side, onSideChange, size, onSizeChange,
           <TextInput value={symbol} onChange={e => onSymbolChange(e.target.value)} />
         </FormField>
         <FormField label="方向">
-          <div className="flex rounded-2xl border border-zinc-800 p-1">
+          <div className="flex rounded-2xl border border-hairline p-1">
             {(['LONG', 'SHORT'] as Side[]).map(opt => (
               <button
                 key={opt}
@@ -166,9 +166,9 @@ function Step1({ symbol, onSymbolChange, side, onSideChange, size, onSizeChange,
                   'flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl py-2 text-sm font-medium transition',
                   side === opt
                     ? opt === 'LONG'
-                      ? 'bg-emerald-500/15 text-emerald-300'
-                      : 'bg-rose-500/15 text-rose-300'
-                    : 'text-zinc-400 hover:text-zinc-100',
+                      ? 'bg-sage-soft text-sage'
+                      : 'bg-oxblood-soft text-oxblood'
+                    : 'text-ivory-70 hover:text-ivory',
                 )}
               >
                 {opt === 'LONG' ? <TrendingUp className="h-3.5 w-3.5" /> : <TrendingDown className="h-3.5 w-3.5" />}
@@ -229,11 +229,11 @@ function Step2({ data, slMult, setSlMult, tpMult, setTpMult, sizeMult, setSizeMu
                   : <StatusPill tone="rose">✗ 不建议</StatusPill>
                 }
               </div>
-              <div className="text-sm text-zinc-300 leading-relaxed">{data.decision.reasoning}</div>
-              <div className="text-xs font-mono text-zinc-400 pt-2 border-t border-zinc-800">
-                SL <span className="text-rose-300">${data.risk_plan.sl_price.toFixed(4)}</span>
-                <span className="text-zinc-600 mx-2">·</span>
-                TP <span className="text-emerald-300">${data.risk_plan.tp_price.toFixed(4)}</span>
+              <div className="text-sm text-ivory-70 leading-relaxed">{data.decision.reasoning}</div>
+              <div className="text-xs font-mono text-ivory-70 pt-2 border-t border-hairline">
+                SL <span className="text-oxblood">${data.risk_plan.sl_price.toFixed(4)}</span>
+                <span className="text-ivory-40 mx-2">·</span>
+                TP <span className="text-sage">${data.risk_plan.tp_price.toFixed(4)}</span>
               </div>
             </div>
           </SubCard>
@@ -245,10 +245,10 @@ function Step2({ data, slMult, setSlMult, tpMult, setTpMult, sizeMult, setSizeMu
                   ? <StatusPill tone="emerald">✓ execute</StatusPill>
                   : <StatusPill tone="rose">✗ reject</StatusPill>
                 }
-                <span className="text-xs text-indigo-300">置信 {Math.round((data.ai_result.confidence ?? 0) * 100)}%</span>
+                <span className="text-xs text-ink">置信 {Math.round((data.ai_result.confidence ?? 0) * 100)}%</span>
               </div>
-              <div className="text-sm text-zinc-300 leading-relaxed">{data.ai_result.reasoning}</div>
-              <div className="grid grid-cols-3 gap-2 pt-2 border-t border-zinc-800">
+              <div className="text-sm text-ivory-70 leading-relaxed">{data.ai_result.reasoning}</div>
+              <div className="grid grid-cols-3 gap-2 pt-2 border-t border-hairline">
                 <MultField label="SL ×" value={slMult} min={0.5} max={3} step={0.1} onChange={setSlMult} />
                 <MultField label="TP ×" value={tpMult} min={0.5} max={5} step={0.1} onChange={setTpMult} />
                 <MultField label="Size ×" value={sizeMult} min={0.1} max={2} step={0.1} onChange={setSizeMult} />
@@ -260,12 +260,12 @@ function Step2({ data, slMult, setSlMult, tpMult, setTpMult, sizeMult, setSizeMu
 
       <Card title={<><Term k="RAG">RAG</Term> 历史相似 top-{data.rag_cases.length}</>}>
         {data.rag_cases.length === 0 ? (
-          <div className="py-6 text-center text-sm text-zinc-500">RAG 冷启动期,无相似 case</div>
+          <div className="py-6 text-center text-sm text-ivory-40">RAG 冷启动期,无相似 case</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-zinc-800 text-left text-[11px] uppercase tracking-wider text-zinc-500">
+                <tr className="border-b border-hairline text-left text-[11px] uppercase tracking-wider text-ivory-40">
                   <th className="py-2 px-2 font-medium text-right">RSI</th>
                   <th className="py-2 px-2 font-medium text-right">MACD hist</th>
                   <th className="py-2 px-2 font-medium">结果</th>
@@ -274,15 +274,15 @@ function Step2({ data, slMult, setSlMult, tpMult, setTpMult, sizeMult, setSizeMu
                   <th className="py-2 px-2 font-medium text-right">距离</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-zinc-800/60">
+              <tbody className="divide-y divide-hairline/60">
                 {data.rag_cases.map((c, i) => (
-                  <tr key={i} className="hover:bg-zinc-900/40">
-                    <td className="py-2 px-2 text-right font-mono tabular-nums text-zinc-300">{c.entry_rsi_15m.toFixed(1)}</td>
-                    <td className="py-2 px-2 text-right font-mono tabular-nums text-zinc-300">{c.entry_macd_hist_15m.toFixed(4)}</td>
-                    <td className={cn('py-2 px-2 font-medium', c.outcome === 'WIN' ? 'text-emerald-300' : c.outcome === 'LOSS' ? 'text-rose-300' : 'text-zinc-400')}>{c.outcome}</td>
-                    <td className={cn('py-2 px-2 text-right font-mono tabular-nums', c.pnl_pct >= 0 ? 'text-emerald-300' : 'text-rose-300')}>{(c.pnl_pct * 100).toFixed(2)}%</td>
-                    <td className="py-2 px-2 text-zinc-400">{c.exit_reason ?? '—'}</td>
-                    <td className="py-2 px-2 text-right font-mono tabular-nums text-zinc-500">{c.distance.toFixed(3)}</td>
+                  <tr key={i} className="hover:bg-bg-surface/40">
+                    <td className="py-2 px-2 text-right font-mono tabular-nums text-ivory-70">{c.entry_rsi_15m.toFixed(1)}</td>
+                    <td className="py-2 px-2 text-right font-mono tabular-nums text-ivory-70">{c.entry_macd_hist_15m.toFixed(4)}</td>
+                    <td className={cn('py-2 px-2 font-medium', c.outcome === 'WIN' ? 'text-sage' : c.outcome === 'LOSS' ? 'text-oxblood' : 'text-ivory-70')}>{c.outcome}</td>
+                    <td className={cn('py-2 px-2 text-right font-mono tabular-nums', c.pnl_pct >= 0 ? 'text-sage' : 'text-oxblood')}>{(c.pnl_pct * 100).toFixed(2)}%</td>
+                    <td className="py-2 px-2 text-ivory-70">{c.exit_reason ?? '—'}</td>
+                    <td className="py-2 px-2 text-right font-mono tabular-nums text-ivory-40">{c.distance.toFixed(3)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -290,7 +290,7 @@ function Step2({ data, slMult, setSlMult, tpMult, setTpMult, sizeMult, setSizeMu
           </div>
         )}
         {data.rag_summary && (
-          <div className="mt-3 text-sm text-zinc-300 leading-relaxed italic">{data.rag_summary}</div>
+          <div className="mt-3 text-sm text-ivory-70 leading-relaxed italic">{data.rag_summary}</div>
         )}
       </Card>
 
@@ -302,7 +302,7 @@ function Step2({ data, slMult, setSlMult, tpMult, setTpMult, sizeMult, setSizeMu
         <PrimaryButton
           disabled={executePending}
           onClick={onConfirm}
-          className="bg-emerald-500 hover:bg-emerald-400 inline-flex items-center gap-1.5"
+          className="bg-sage hover:bg-sage/80 inline-flex items-center gap-1.5"
         >
           {executePending ? '开仓中…' : '确认模拟开仓'}
           <ChevronRight className="h-4 w-4" />
@@ -314,8 +314,8 @@ function Step2({ data, slMult, setSlMult, tpMult, setTpMult, sizeMult, setSizeMu
 
 function SubCard({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div className="rounded-2xl border border-zinc-800 bg-zinc-950/60 p-4">
-      <div className="text-[10px] uppercase tracking-wider text-zinc-500 pb-2 border-b border-zinc-800 mb-3">{title}</div>
+    <div className="rounded-2xl border border-hairline bg-bg-base/60 p-4">
+      <div className="text-[10px] uppercase tracking-wider text-ivory-40 pb-2 border-b border-hairline mb-3">{title}</div>
       {children}
     </div>
   );
@@ -324,7 +324,7 @@ function SubCard({ title, children }: { title: string; children: ReactNode }) {
 function MultField({ label, value, min, max, step, onChange }: { label: string; value: number; min: number; max: number; step: number; onChange: (n: number) => void }) {
   return (
     <label className="flex flex-col gap-1">
-      <span className="text-[10px] uppercase tracking-wider text-zinc-500">{label}</span>
+      <span className="text-[10px] uppercase tracking-wider text-ivory-40">{label}</span>
       <NumberInput value={value} min={min} max={max} step={step} onChange={onChange} />
     </label>
   );

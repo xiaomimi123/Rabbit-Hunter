@@ -19,15 +19,15 @@ export function V5GlossaryPage() {
         title="术语词典"
         subtitle="field manual · 系统术语 + 中文翻译 + 用例"
         action={
-          <div className="flex items-center gap-2 rounded-2xl border border-zinc-700 bg-zinc-950 px-3 py-2">
-            <Search className="h-4 w-4 text-zinc-500" />
+          <div className="flex items-center gap-2 rounded-2xl border border-hairline-strong bg-bg-base px-3 py-2">
+            <Search className="h-4 w-4 text-ivory-40" />
             <input
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
               placeholder="搜索 SL / RSI / 胜率…"
-              className="bg-transparent text-sm text-zinc-100 outline-none placeholder:text-zinc-600 w-56"
+              className="bg-transparent text-sm text-ivory outline-none placeholder:text-ivory-40 w-56"
             />
-            <span className="text-xs text-zinc-500 whitespace-nowrap">
+            <span className="text-xs text-ivory-40 whitespace-nowrap">
               {matchedCount} / {entries.length}
             </span>
           </div>
@@ -47,13 +47,13 @@ export function V5GlossaryPage() {
                 {items.map(e => (
                   <article key={e.key} className={cardClassName('!p-4 space-y-2 !rounded-2xl')}>
                     <div className="flex items-baseline gap-3 flex-wrap">
-                      <span className="font-mono text-sm text-indigo-300">{e.key}</span>
-                      <span className="text-base text-zinc-100">{e.zh}</span>
-                      {e.en && <span className="ml-auto text-xs text-zinc-500">{e.en}</span>}
+                      <span className="font-mono text-sm text-ink">{e.key}</span>
+                      <span className="text-base text-ivory">{e.zh}</span>
+                      {e.en && <span className="ml-auto text-xs text-ivory-40">{e.en}</span>}
                     </div>
-                    <div className="text-sm text-zinc-300 leading-relaxed">{e.desc}</div>
+                    <div className="text-sm text-ivory-70 leading-relaxed">{e.desc}</div>
                     {e.example && (
-                      <div className="rounded-xl border-l-2 border-indigo-500 bg-indigo-500/[0.06] px-3 py-1.5 font-mono text-xs text-zinc-300 leading-relaxed">
+                      <div className="rounded-xl border-l-2 border-brass bg-brass/[0.06] px-3 py-1.5 font-mono text-xs text-ivory-70 leading-relaxed">
                         {e.example}
                       </div>
                     )}
@@ -66,11 +66,11 @@ export function V5GlossaryPage() {
         {f && matchedCount === 0 && (
           <Card>
             <div className="flex flex-col items-center justify-center py-10 text-center">
-              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-zinc-800">
-                <BookOpen className="h-5 w-5 text-zinc-500" />
+              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-bg-elevated">
+                <BookOpen className="h-5 w-5 text-ivory-40" />
               </div>
-              <div className="text-sm text-zinc-400">
-                未找到与 "<span className="text-indigo-300">{filter}</span>" 匹配的术语
+              <div className="text-sm text-ivory-70">
+                未找到与 "<span className="text-ink">{filter}</span>" 匹配的术语
               </div>
             </div>
           </Card>

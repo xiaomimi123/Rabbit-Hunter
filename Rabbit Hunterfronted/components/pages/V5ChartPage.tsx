@@ -41,10 +41,10 @@ export function V5ChartPage() {
         }
         action={
           <div className="text-right">
-            <div className="font-mono text-2xl font-semibold tabular-nums text-zinc-50">
+            <div className="font-mono text-2xl font-semibold tabular-nums text-ivory">
               {lastClose != null ? lastClose.toFixed(Math.abs(lastClose) >= 1 ? 4 : 6) : '—'}
             </div>
-            <div className="text-xs text-zinc-500">
+            <div className="text-xs text-ivory-40">
               {now.toLocaleTimeString('zh-CN', { hour12: false })} · UTC+8
             </div>
           </div>
@@ -58,10 +58,10 @@ export function V5ChartPage() {
       ) : klines.data?.klines.length === 0 ? (
         <Card>
           <div className="flex flex-col items-center justify-center py-12 text-center">
-            <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-zinc-800">
-              <LineChartIcon className="h-5 w-5 text-zinc-500" />
+            <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-bg-elevated">
+              <LineChartIcon className="h-5 w-5 text-ivory-40" />
             </div>
-            <div className="text-sm text-zinc-400">等待 K 线数据…</div>
+            <div className="text-sm text-ivory-70">等待 K 线数据…</div>
           </div>
         </Card>
       ) : (
