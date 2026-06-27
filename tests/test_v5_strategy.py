@@ -142,3 +142,93 @@ def test_funding_anti_pile_allows_when_funding_z_none(monkeypatch):
     d = decide(_enriched(), ind, funding_z=None)
     assert d.should_trade is True
     assert d.side == "LONG"
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# macd_reversal_long mode (Variant B from MACD entry timing experiment)
+# ──────────────────────────────────────────────────────────────────────────────
+
+def _kline_seq(closes):
+    """构造 [ts, o, h, l, c, v] 4h K 线序列,只需控制 close。"""
+    return [
+        [1_000_000 + i * 14_400_000, c, c * 1.001, c * 0.999, float(c), 1000.0]
+        for i, c in enumerate(closes)
+    ]
+
+
+def _enriched_with_klines_4h(klines_4h):
+    return EnrichedItem(
+        symbol="TEST/USDT", current_price=float(klines_4h[-1][4]),
+        delta_15m_pct=0.0, volume_24h_usdt=50_000_000,
+        klines_15m=[], klines_4h=klines_4h,
+    )
+
+
+def test_macd_reversal_long_triggers_on_below_zero_golden_cross(monkeypatch):
+    """35 根下行 + 2 根温和上扬 → L=37,在零线下方产生金叉 (经探针验证) → LONG。"""
+    monkeypatch.setenv("V5_STRATEGY_MODE", "macd_reversal_long")
+    # 35 根下行 (100 → 66) 把 MACD 两线压到 dea≈-5.7,dif≈-6.1
+    closes = [100.0 - i for i in range(35)]
+    # 2 根温和上扬,让 dif 在最后一根刚好上穿 dea (两线仍在零下)
+    closes += [67.5, 69.0]
+    d = decide(_enriched_with_klines_4h(_kline_seq(closes)), _indicators())
+    assert d.should_trade is True, f"expected LONG, got {d}"
+    assert d.side == "LONG"
+    assert "macd_reversal" in d.reasoning
+    assert "金叉" in d.reasoning
+
+
+def test_macd_reversal_long_rejects_when_no_cross(monkeypatch):
+    """单调下行,无金叉 → 拒。"""
+    monkeypatch.setenv("V5_STRATEGY_MODE", "macd_reversal_long")
+    closes = [100.0 - i * 0.5 for i in range(40)]  # 长期下行,无 cross
+    d = decide(_enriched_with_klines_4h(_kline_seq(closes)), _indicators())
+    assert d.should_trade is False
+    assert d.block_reason == "NO_4H_GOLDEN_CROSS"
+
+
+def test_macd_reversal_long_rejects_when_cross_above_zero(monkeypatch):
+    """整体上行中的小回调 → dif/dea 已在零上 → 即便有 cross 也被 CROSS_NOT_BELOW_ZERO 拒
+       (常见情况是 NO_4H_GOLDEN_CROSS,因为上行中没有刚好的 cross)。"""
+    monkeypatch.setenv("V5_STRATEGY_MODE", "macd_reversal_long")
+    # 35 根上行 + 几根小回调和反弹,MACD 全期都在零上
+    closes = [100.0 + i for i in range(35)]
+    closes += [134.0, 133.0, 134.5, 136.0]
+    d = decide(_enriched_with_klines_4h(_kline_seq(closes)), _indicators())
+    assert d.should_trade is False
+    assert d.block_reason in ("NO_4H_GOLDEN_CROSS", "CROSS_NOT_BELOW_ZERO")
+
+
+def test_macd_reversal_long_rejects_when_insufficient_klines(monkeypatch):
+    """4h 不足 35 根 → 拒。"""
+    monkeypatch.setenv("V5_STRATEGY_MODE", "macd_reversal_long")
+    closes = [100.0] * 30  # 仅 30 根
+    d = decide(_enriched_with_klines_4h(_kline_seq(closes)), _indicators())
+    assert d.should_trade is False
+    assert d.block_reason == "INSUFFICIENT_4H_KLINES"
+
+
+def test_macd_reversal_long_never_returns_short(monkeypatch):
+    """无论上行/下行/震荡,本 mode 永不返回 SHORT。"""
+    monkeypatch.setenv("V5_STRATEGY_MODE", "macd_reversal_long")
+    # 死叉场景: 上行后转跌
+    closes = [100.0 + i for i in range(30)] + [128.0, 125.0, 121.0, 117.0]
+    d = decide(_enriched_with_klines_4h(_kline_seq(closes)), _indicators())
+    # 要么 should_trade=False, 要么 side != "SHORT"
+    if d.should_trade:
+        assert d.side == "LONG"
+    # 死叉不应被识别为可交易信号
+    assert d.side != "SHORT"
+
+
+def test_macd_reversal_long_does_not_affect_default_mode(monkeypatch):
+    """没设 V5_STRATEGY_MODE → 走 trend_aligned default,与新 mode 隔离。"""
+    monkeypatch.delenv("V5_STRATEGY_MODE", raising=False)
+    # trend_aligned 标准输入: 4h MACD>0 + RSI<40 应触发 LONG
+    closes = [100.0 + i for i in range(35)]
+    d = decide(
+        _enriched_with_klines_4h(_kline_seq(closes)),
+        _indicators(rsi_15m=35.0, hist_4h=0.001),
+    )
+    # 这种 input 在 trend_aligned 下应为 LONG;只要 reasoning 含 "[trend_aligned]" 就证明走的是 default
+    assert "[trend_aligned]" in d.reasoning

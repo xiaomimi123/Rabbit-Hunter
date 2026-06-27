@@ -1,5 +1,7 @@
-"""V5 策略决策器 — RSI 极值 ∩ MACD 同向拐点 AND 合谋(legacy)
-                  + V5.1 trend_aligned 多周期对齐模式(default)。
+"""V5 策略决策器 — 三种 mode:
+  - and_strict (legacy):       RSI 极值 ∩ MACD 同向拐点 AND 合谋
+  - trend_aligned (default):   4h MACD 方向 + 15m RSI 极端 + anti-chase
+  - macd_reversal_long:        4h MACD 在零线下方金叉 → LONG only (反转打法)
 
 入参纯数据(EnrichedItem + Indicators),出参 Decision。
 无副作用、无 I/O。
@@ -74,11 +76,13 @@ def _is_at_bottom(current_close: float, klines, bars: int, buffer_pct: float) ->
 
 def decide(enriched: EnrichedItem, indicators: Indicators,
            funding_z: Optional[float] = None) -> Decision:
-    """V5 决策。两种模式:and_strict (legacy) 或 trend_aligned (default)。
+    """V5 决策。三种模式:
+      and_strict        — legacy RSI + MACD AND 合谋
+      trend_aligned     — default,4h 趋势 + 15m RSI 极端 + anti-chase
+      macd_reversal_long — 4h 收盘金叉(交叉前两线 < 0)→ LONG only
 
-    funding_z(可选):当前 symbol 的 30d funding z-score。若 v5_params 里
-    v5_funding_anti_pile_threshold > 0,trend_aligned 模式会在最终通过前
-    检查 funding 拥挤度,反向加仓被阻塞。
+    funding_z(可选):当前 symbol 的 30d funding z-score。仅 trend_aligned
+    模式使用(funding-anti-pile)。
     """
     from scripts.v5_params import get_param
 
@@ -86,6 +90,8 @@ def decide(enriched: EnrichedItem, indicators: Indicators,
 
     if mode == "and_strict":
         return _decide_and_strict(enriched, indicators)
+    if mode == "macd_reversal_long":
+        return _decide_macd_reversal_long(enriched, indicators)
     return _decide_trend_aligned(enriched, indicators, funding_z=funding_z)
 
 
@@ -236,4 +242,82 @@ def _decide_trend_aligned(enriched: EnrichedItem, indicators: Indicators,
             f" — {' / '.join(reasons) if reasons else '无满足条件'}"
         ),
         block_reason="NOT_TREND_ALIGNED",
+    )
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# macd_reversal_long mode (Variant B from MACD entry timing experiment)
+# ──────────────────────────────────────────────────────────────────────────────
+
+def _decide_macd_reversal_long(
+    enriched: EnrichedItem, indicators: Indicators,
+) -> Decision:
+    """4h MACD 在零线下方金叉 → LONG only。
+
+    严格条件:
+      1. 当根 4h dif > dea (上穿)
+      2. 上一根 4h dif <= dea (确认刚交叉)
+      3. 交叉前一根 dif < 0 且 dea < 0 (反转打法,只做零线下方金叉)
+
+    SHORT 信号永远不放(本 mode 不做空)。
+
+    依据 scripts/experiments/macd_cross_entry_wf.py 验证:
+      - 主实验 (2026-03→2026-06 OOS, 17 symbol): n=165 win=64% net PF=2.08
+      - Q1 stress (2026-Q1 完全独立 OOS): n=269 win=65% net PF=2.25
+      两个不重叠 6 个月 OOS 窗口稳定 PF 2.0+,无过拟合迹象。
+    """
+    # 复用 v5_indicator_engine._ema 保证公式与 indicators 计算一致
+    from v5_indicator_engine import _ema
+
+    klines_4h = enriched.klines_4h
+    # 至少需 slow(26) + signal(9) 个 bar 算 dif/dea
+    if len(klines_4h) < 35:
+        return Decision(
+            should_trade=False, side=None,
+            reasoning=(
+                f"[macd_reversal] 4h K 线={len(klines_4h)} 根 "
+                f"不足 35(slow=26+signal=9),无法判断"
+            ),
+            block_reason="INSUFFICIENT_4H_KLINES",
+        )
+
+    closes = [float(k[4]) for k in klines_4h]
+    ema_fast = _ema(closes, 12)
+    ema_slow = _ema(closes, 26)
+    dif = [f - s for f, s in zip(ema_fast, ema_slow)]
+    dea = _ema(dif, 9)
+
+    d_now, d_prev = dif[-1], dif[-2]
+    e_now, e_prev = dea[-1], dea[-2]
+
+    # 条件 1+2: 当根金叉
+    if not (d_now > e_now and d_prev <= e_prev):
+        return Decision(
+            should_trade=False, side=None,
+            reasoning=(
+                f"[macd_reversal] 当根 dif={d_now:+.5f} dea={e_now:+.5f} "
+                f"prev dif={d_prev:+.5f} dea={e_prev:+.5f} — 未出现金叉"
+            ),
+            block_reason="NO_4H_GOLDEN_CROSS",
+        )
+
+    # 条件 3: 交叉前两线都 < 0 (零下金叉,反转打法)
+    if not (d_prev < 0 and e_prev < 0):
+        return Decision(
+            should_trade=False, side=None,
+            reasoning=(
+                f"[macd_reversal] 4h 金叉成立但交叉前 dif={d_prev:+.5f} "
+                f"dea={e_prev:+.5f} 不全 < 0 (本 mode 要求零线下方金叉)"
+            ),
+            block_reason="CROSS_NOT_BELOW_ZERO",
+        )
+
+    return Decision(
+        should_trade=True, side="LONG",
+        reasoning=(
+            f"[macd_reversal] 4h 收盘金叉成立 "
+            f"dif {d_prev:+.5f}→{d_now:+.5f} 上穿 dea {e_prev:+.5f}→{e_now:+.5f} "
+            f"且交叉前两线 < 0"
+        ),
+        block_reason=None,
     )

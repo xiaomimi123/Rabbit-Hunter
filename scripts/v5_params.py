@@ -110,7 +110,7 @@ DEFAULTS = {
     "v5_risk_per_trade":          0.01,
     "v5_leverage":                5,
     "v5_soft_target_minutes":     15,
-    "v5_strategy_mode":             "trend_aligned",   # "trend_aligned" | "and_strict"
+    "v5_strategy_mode":             "trend_aligned",   # "trend_aligned" | "and_strict" | "macd_reversal_long"
     "v5_trend_rsi_short_threshold": 60.0,
     "v5_trend_rsi_long_threshold":  40.0,
     "v5_anti_chase_pct":            0.005,
@@ -133,7 +133,7 @@ PARAM_META = {
     "v5_risk_per_trade":          (0.001, 0.05, "", "单笔风险预算"),
     "v5_leverage":                (1, 100, "x", "杠杆"),
     "v5_soft_target_minutes":     (5, 60, "分钟", "持仓软目标"),
-    "v5_strategy_mode":             (None, None, "", "策略模式 trend_aligned 或 and_strict"),
+    "v5_strategy_mode":             (None, None, "", "策略模式 trend_aligned / and_strict / macd_reversal_long"),
     "v5_trend_rsi_short_threshold": (50.0, 75.0, "", "trend_aligned SHORT RSI 触发阈值"),
     "v5_trend_rsi_long_threshold":  (25.0, 50.0, "", "trend_aligned LONG RSI 触发阈值"),
     "v5_anti_chase_pct":            (0.0, 0.02, "", "anti-chase 缓冲 % (0 = 关闭)"),
