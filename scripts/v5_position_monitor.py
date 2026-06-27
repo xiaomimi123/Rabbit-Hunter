@@ -30,9 +30,20 @@ def _enqueue_ws(db_path: str, payload: dict) -> None:
 
 
 def _max_extensions() -> int:
-    # 2026-06-27: 默认从 3 提到 30 (= 最长持仓 15min × (1+30) = 465min ≈ 8h),
-    # 对齐 backtest MAX_HOLD_MINUTES=480 假设,见 docs/exit-time-experiment.md
-    return int(get_param("v5_max_extensions", 30, int))
+    # 2026-06-27 应用 max-hold-scan 实验最优档:
+    #   v5_max_extensions=15 → soft_target(15min) × (1+15) = 240min 窗口 (4h)
+    #   PF=1.51 + R/小时峰值 + maxDD 比 480 还小,见 docs/max-hold-scan-experiment.md
+    return int(get_param("v5_max_extensions", 15, int))
+
+
+def _signal_reverse_min_minutes() -> int:
+    """SIGNAL_REVERSE 最短持仓门槛 (分钟)。
+    历史 28 笔 SR 全部在 30min 内触发 (max 11.5min),平均 2.4min。
+    设 30 → 在 240min 窗口的前 30min 屏蔽 SR 抢跑,30min 后仍允许真趋势反转兜底。
+    设 0 → 旧行为 (SR 立即生效)。
+    见 docs/applied-optimal-exit-config.md
+    """
+    return int(get_param("v5_signal_reverse_min_minutes", 30, int))
 
 
 def _rsi_reverse_short() -> float:
@@ -121,11 +132,24 @@ def check_exit_triggers(position: dict, market: dict) -> Optional[dict]:
 
     # SIGNAL_REVERSE 只对 auto 策略生效:手动单是用户主观决定,
     # 不应该被规则引擎"反悔"。SL/TP/SOFT_TARGET 仍然适用。
+    # 加最短持仓门槛 (_signal_reverse_min_minutes,默认 30):防止 SR 在 240min 窗口
+    # 前 30min 抢跑赢单。30min 后仍允许真趋势反转 SR 兜底。
     if position.get("strategy_id") != "v5_manual":
-        if _signal_reversed(side, market["rsi_15m"],
-                            market["macd_hist_15m"], market["macd_hist_prev_15m"]):
-            return {"position_id": position["id"], "exit_price": current_price,
-                    "exit_reason": "SIGNAL_REVERSE"}
+        entry_time_str = position.get("entry_time")
+        elapsed_min = 9999.0   # 默认通过 (兼容无 entry_time 的旧数据)
+        if entry_time_str:
+            try:
+                et = datetime.fromisoformat(entry_time_str)
+                if et.tzinfo is None:
+                    et = et.replace(tzinfo=timezone.utc)
+                elapsed_min = (_utcnow() - et).total_seconds() / 60
+            except (ValueError, TypeError):
+                pass
+        if elapsed_min >= _signal_reverse_min_minutes():
+            if _signal_reversed(side, market["rsi_15m"],
+                                market["macd_hist_15m"], market["macd_hist_prev_15m"]):
+                return {"position_id": position["id"], "exit_price": current_price,
+                        "exit_reason": "SIGNAL_REVERSE"}
 
     return None
 
