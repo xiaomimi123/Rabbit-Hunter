@@ -6,21 +6,25 @@ V5 默认开启。可通过 v5_use_symbol_whitelist=false 关闭(SHADOW 实验�
 from typing import Set
 
 
-# 25 个高流动性 USDT 永续(主流加密币)
+# 22 个高流动性 USDT 永续(主流加密币)
+# 规矩(立于 2026-06-26):
+#   任何新加 symbol / setup 必须先过 30d backtest + 6m walk-forward(扣成本),
+#   net PF >= 1 且 KPI doc §15.2 PASS 才能进白名单。
+#
 # 历史:
 #   2026-06    : MATICUSDT 移除 — Polygon 已改名 POL,OKX 上 MATIC-USDT-SWAP 不存在
-#   2026-06-26 : +6 加密主流(WLD/PEPE/AAVE/HYPE/ZEC/IP),OKX SWAP 当前 24h 成交额 >= 1 亿
-#                原 19 个里 14 个(BNB/ADA/AVAX/DOT/LINK/UNI/LTC/TRX/BCH/NEAR/ATOM/APT/FIL/ARB)
-#                当前已跌破 1 亿,保留以待回暖;MarketScanner 的 MIN_VOLUME_24H_USDT 会自动按需过滤
+#   2026-06-26 : +6 加密主流(WLD/PEPE/AAVE/HYPE/ZEC/IP),OKX SWAP 当时 24h 成交额 >= 1 亿
+#   2026-06-26 : 移除 AAVE / ADA / IP — 30d backtest 都是负 net R(AAVE -2.17R 17 笔,
+#                ADA -2.33R 13 笔,IP -0.76R 29 笔 win 34%),无 edge,违反立规矩
 # 不收:RWA / 美股代币化(SOXL/SKHYNIX/SNDK/SPCX/MU/XAU/XAG)、meme/pump(BEAT/HUSDT/SLX/LAB 等)
 V5_TOP20_WHITELIST: Set[str] = {
-    # 原 19(V4 时代基线,保留作为未来回暖候选)
+    # 原 19 - 移除 ADA(亏 R,2026-06-26) = 18
     "BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT",
-    "DOGEUSDT", "ADAUSDT", "AVAXUSDT", "DOTUSDT", "LINKUSDT",
+    "DOGEUSDT",            "AVAXUSDT", "DOTUSDT", "LINKUSDT",
     "UNIUSDT", "LTCUSDT", "TRXUSDT", "BCHUSDT",
     "NEARUSDT", "ATOMUSDT", "APTUSDT", "FILUSDT", "ARBUSDT",
-    # 2026-06-26 加 6 个当前 OKX SWAP 100M+ 主流加密币
-    "WLDUSDT", "PEPEUSDT", "AAVEUSDT", "HYPEUSDT", "ZECUSDT", "IPUSDT",
+    # 2026-06-26 加 6 个 - 移除 AAVE / IP(亏 R) = 4
+    "WLDUSDT", "PEPEUSDT",             "HYPEUSDT", "ZECUSDT",
 }
 
 

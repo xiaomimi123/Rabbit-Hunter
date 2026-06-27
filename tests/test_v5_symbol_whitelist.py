@@ -18,10 +18,11 @@ from scripts.v5_symbol_whitelist import (
 # Unit tests — whitelist module
 # ---------------------------------------------------------------------------
 
-def test_whitelist_size_is_25():
-    # 2026-06: MATIC removed (delisted from OKX as Polygon rebranded to POL)
-    # 2026-06-26: +6 加密主流(WLD/PEPE/AAVE/HYPE/ZEC/IP),OKX SWAP 当前 100M+
-    assert len(V5_TOP20_WHITELIST) == 25
+def test_whitelist_size_is_22():
+    # 2026-06    : MATIC removed (delisted from OKX as Polygon rebranded to POL)
+    # 2026-06-26 : +6 加密主流(WLD/PEPE/AAVE/HYPE/ZEC/IP),OKX SWAP 当时 100M+
+    # 2026-06-26 : 立规矩后清理 — 移除 AAVE/ADA/IP(30d backtest 均负 net R,无 edge)
+    assert len(V5_TOP20_WHITELIST) == 22
 
 
 def test_matic_no_longer_in_whitelist():
@@ -33,10 +34,16 @@ def test_whitelist_includes_majors():
         assert s in V5_TOP20_WHITELIST
 
 
-def test_whitelist_includes_new_2026_06_26_additions():
-    """2026-06-26 加入的 6 个 OKX SWAP 100M+ 主流加密币。"""
-    for s in ("WLDUSDT", "PEPEUSDT", "AAVEUSDT", "HYPEUSDT", "ZECUSDT", "IPUSDT"):
+def test_whitelist_includes_validated_2026_06_26_additions():
+    """2026-06-26 加入并通过 30d backtest 净 R 验证的 4 个。"""
+    for s in ("WLDUSDT", "PEPEUSDT", "HYPEUSDT", "ZECUSDT"):
         assert s in V5_TOP20_WHITELIST
+
+
+def test_whitelist_excludes_pruned_negative_r_symbols():
+    """2026-06-26 移除 — 30d backtest 净 R 均 < 0,违反立规矩。"""
+    for s in ("AAVEUSDT", "ADAUSDT", "IPUSDT"):
+        assert s not in V5_TOP20_WHITELIST
 
 
 def test_whitelist_excludes_known_meme_and_rwa():
