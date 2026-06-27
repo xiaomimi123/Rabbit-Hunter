@@ -1,5 +1,5 @@
-import { useQuery } from '@tanstack/react-query';
-import { apiGet } from '../../services/api';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { apiGet, apiPost } from '../../services/api';
 
 export interface WFReportListItem {
   name: string;
@@ -79,5 +79,68 @@ export function useWalkforwardReport(name: string | null) {
     queryFn: () => apiGet<WFReport>(`/api/v5/walkforward/reports/${name}`),
     enabled: !!name,
     staleTime: 5 * 60_000,
+  });
+}
+
+
+// ─── 实验台: 触发 + 跟踪任务 ────────────────────────────────
+
+export interface WFRunRequest {
+  variant: 'A' | 'B' | 'C';
+  start: string;            // ISO
+  end: string;
+  symbols: string[];
+  train_days: number;
+  oos_days: number;
+  step_days: number;
+  exit_strategy: 'baseline' | 'vegas_full' | 'vegas_sl_only';
+  max_hold_minutes: number;
+  cost_preset: 'realistic' | 'optimistic' | 'pessimistic';
+  cross_threshold_pct?: number;
+  a_proximity_pct?: number;
+}
+
+export interface WFJob {
+  job_id: string;
+  status: 'queued' | 'running' | 'done' | 'failed';
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+  params: WFRunRequest;
+  report_name: string | null;
+  error: string | null;
+  stdout_tail: string | null;
+}
+
+export function useRunWalkforward() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: WFRunRequest) =>
+      apiPost<{ job_id: string; status: string }>('/api/v5/walkforward/run', body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['v5', 'wf', 'jobs'] });
+    },
+  });
+}
+
+export function useWalkforwardJob(jobId: string | null, opts?: { pollInterval?: number }) {
+  return useQuery<WFJob>({
+    queryKey: ['v5', 'wf', 'job', jobId],
+    queryFn: () => apiGet<WFJob>(`/api/v5/walkforward/jobs/${jobId}`),
+    enabled: !!jobId,
+    refetchInterval: (q) => {
+      const d = q.state.data;
+      if (!d) return 2000;
+      if (d.status === 'queued' || d.status === 'running') return opts?.pollInterval ?? 2000;
+      return false; // done / failed → stop polling
+    },
+  });
+}
+
+export function useWalkforwardJobs(limit = 20) {
+  return useQuery<{ jobs: WFJob[] }>({
+    queryKey: ['v5', 'wf', 'jobs', limit],
+    queryFn: () => apiGet<{ jobs: WFJob[] }>(`/api/v5/walkforward/jobs?limit=${limit}`),
+    refetchInterval: 5000,
   });
 }

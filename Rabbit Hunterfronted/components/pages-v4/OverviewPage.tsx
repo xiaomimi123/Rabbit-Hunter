@@ -110,12 +110,17 @@ export function OverviewPage() {
     [orderHistory.data],
   );
 
-  // 权益曲线 — 用最近 50 笔 closed 的累计 PnL
+  const initial = b?.paper_initial_balance_usdt ?? 10000;
+
+  // 已平仓按时间正序 (供权益曲线 + 回撤监控)
+  const closed = useMemo(
+    () => (orderHistory.data ?? []).filter((o: any) => o.exit_time).slice().reverse(),
+    [orderHistory.data],
+  );
+
+  // 权益曲线 — 用 closed 累计 PnL
   const equityPoints = useMemo(() => {
-    const all = orderHistory.data ?? [];
-    const closed = all.filter((o: any) => o.exit_time).slice().reverse(); // 按时间正序
-    if (closed.length === 0) return [];
-    const initial = b?.paper_initial_balance_usdt ?? 10000;
+    if (closed.length === 0) return [initial];
     let cum = initial;
     const pts: number[] = [initial];
     for (const o of closed) {
@@ -123,13 +128,12 @@ export function OverviewPage() {
       pts.push(cum);
     }
     return pts;
-  }, [orderHistory.data, b]);
+  }, [closed, initial]);
 
   const isLive = (b?.status === 'ok') && !!b?.exchange;
   const equity = isLive
     ? (b?.total_usdt ?? 0)
-    : (b?.paper_initial_balance_usdt ?? 10000) + (b?.paper_realized_pnl_usdt ?? 0);
-  const initial = b?.paper_initial_balance_usdt ?? 10000;
+    : initial + (b?.paper_realized_pnl_usdt ?? 0);
   const pnlAbs = equity - initial;
   const pnlPct = initial > 0 ? (pnlAbs / initial) * 100 : 0;
 
@@ -194,6 +198,15 @@ export function OverviewPage() {
           sub="≈ 账户 - 4.8% · 远低于熔断线"
         />
       </div>
+
+      {/* ── 2b. 回撤监控区 (v2 新加) ───────────────────────── */}
+      <DrawdownPanel
+        equityPoints={equityPoints}
+        initial={initial}
+        maxDDRolling={k?.max_dd_r ?? null}
+        dailyDD={kpi.data?.constitution?.rule_3_daily_dd ?? null}
+        closed={closed}
+      />
 
       {/* ── 3. 当前持仓表 ───────────────────────────────────── */}
       <SectionTitle>
@@ -317,6 +330,167 @@ export function OverviewPage() {
           </div>
         </Card>
       </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// 回撤监控区 (v2 新加 2026-06-27)
+// ─────────────────────────────────────────────────────────────
+
+interface DailyDD {
+  today_pnl_usdt: number;
+  today_pnl_pct: number;
+  limit_pct: number;        // 负数,e.g. -0.03
+  lockdown_triggered: boolean;
+  distance_pct: number;     // 距熔断线还有多少,正数
+}
+
+function DrawdownPanel({ equityPoints, initial, maxDDRolling, dailyDD, closed }: {
+  equityPoints: number[];
+  initial: number;
+  maxDDRolling: number | null;
+  dailyDD: DailyDD | null;
+  closed: any[];
+}) {
+  // 水下曲线 + 最大历史回撤 + 恢复时长
+  const { underwater, maxDDPct, recoveryDays, currentDDPct } = useMemo(() => {
+    if (equityPoints.length === 0 || initial <= 0) {
+      return { underwater: [], maxDDPct: 0, recoveryDays: 0, currentDDPct: 0 };
+    }
+    let peak = equityPoints[0];
+    let maxDD = 0;
+    let maxDDIdx = 0;
+    let lastPeakIdx = 0;
+    let recoveryFromIdx = -1;
+    const uw: number[] = [];
+    for (let i = 0; i < equityPoints.length; i++) {
+      const eq = equityPoints[i];
+      if (eq > peak) {
+        peak = eq;
+        lastPeakIdx = i;
+        if (recoveryFromIdx >= 0) {
+          // recovered
+          recoveryFromIdx = -1;
+        }
+      }
+      const dd = (eq - peak) / peak;
+      uw.push(dd * 100);
+      if (dd < maxDD) {
+        maxDD = dd;
+        maxDDIdx = i;
+        if (recoveryFromIdx < 0) recoveryFromIdx = i;
+      }
+    }
+    // 当前回撤
+    const currentDD = uw[uw.length - 1] ?? 0;
+
+    // 恢复时长:从 maxDD 时刻到现在(若已恢复则为 0)经过多少笔
+    let recDays = 0;
+    if (currentDD < 0 && closed.length > 0) {
+      const maxDDIdxClamped = Math.max(0, maxDDIdx - 1);
+      if (maxDDIdxClamped < closed.length) {
+        const tradeAtMaxDD: any = closed[maxDDIdxClamped];
+        if (tradeAtMaxDD?.exit_time) {
+          const ts = new Date(tradeAtMaxDD.exit_time).getTime();
+          recDays = (Date.now() - ts) / 86400000;
+        }
+      }
+    }
+
+    return {
+      underwater: uw,
+      maxDDPct: maxDD * 100,
+      recoveryDays: recDays,
+      currentDDPct: currentDD,
+    };
+  }, [equityPoints, initial, closed]);
+
+  // 距熔断线进度条
+  const distPct = dailyDD?.distance_pct ?? 0.03;       // 默认距 3%
+  const limitPct = Math.abs(dailyDD?.limit_pct ?? -0.03); // 3%
+  const usedPct = ((limitPct - distPct) / limitPct) * 100; // 0-100,越大越接近熔断
+  const dailyDDPct = (dailyDD?.today_pnl_pct ?? 0) * 100;
+
+  return (
+    <div className="mt-4 mb-4">
+      <div className="mb-2 text-[11px] uppercase tracking-[0.08em] text-v3muted">
+        风险监控 · <span className="font-mono text-v3faint">回撤 + 宪法 §3 熔断</span>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 mb-3">
+        {/* 当前回撤 */}
+        <Card>
+          <div className="text-[11px] uppercase tracking-[0.07em] text-v3faint">当前回撤</div>
+          <div className={`mt-2 text-[24px] font-semibold leading-none font-mono ${
+            currentDDPct < -5 ? 'text-loss' : currentDDPct < 0 ? 'text-amber' : 'text-gain'
+          }`}>
+            {currentDDPct.toFixed(2)}%
+          </div>
+          <div className="mt-1.5 text-[11px] text-v3muted">距峰值距离</div>
+        </Card>
+
+        {/* 最大历史回撤 */}
+        <Card>
+          <div className="text-[11px] uppercase tracking-[0.07em] text-v3faint">最大历史回撤</div>
+          <div className="mt-2 text-[24px] font-semibold leading-none font-mono text-loss">
+            {maxDDPct.toFixed(2)}%
+          </div>
+          <div className="mt-1.5 text-[11px] text-v3muted font-mono">
+            {maxDDRolling != null ? `30d 滚动 ${maxDDRolling.toFixed(1)}R` : '—'}
+          </div>
+        </Card>
+
+        {/* 恢复时长 */}
+        <Card>
+          <div className="text-[11px] uppercase tracking-[0.07em] text-v3faint">距 peak 时长</div>
+          <div className="mt-2 text-[24px] font-semibold leading-none font-mono text-v3text">
+            {recoveryDays > 0 ? `${recoveryDays.toFixed(1)}d` : '0d'}
+          </div>
+          <div className="mt-1.5 text-[11px] text-v3muted">
+            {currentDDPct < 0 ? '尚未回到峰值' : '已在峰值'}
+          </div>
+        </Card>
+
+        {/* 距日内熔断线 */}
+        <Card>
+          <div className="text-[11px] uppercase tracking-[0.07em] text-v3faint flex items-center justify-between">
+            <span>距日内熔断线 §3</span>
+            {dailyDD?.lockdown_triggered && <span className="text-loss text-[10px] font-bold animate-pulse">⚠ 锁仓</span>}
+          </div>
+          <div className={`mt-2 text-[24px] font-semibold leading-none font-mono ${
+            distPct < 0.005 ? 'text-loss' : distPct < 0.015 ? 'text-amber' : 'text-gain'
+          }`}>
+            {(distPct * 100).toFixed(2)}%
+          </div>
+          <div className="mt-2">
+            <div className="h-1.5 w-full bg-[#0E141A] rounded overflow-hidden">
+              <div
+                className={`h-full transition-all ${
+                  usedPct > 80 ? 'bg-loss' : usedPct > 50 ? 'bg-amber' : 'bg-gain'
+                }`}
+                style={{ width: `${Math.max(0, Math.min(100, usedPct))}%` }}
+              />
+            </div>
+          </div>
+          <div className="mt-1 text-[11px] text-v3muted font-mono">
+            今日 {dailyDDPct >= 0 ? '+' : ''}{dailyDDPct.toFixed(2)}% / 限 -{(limitPct * 100).toFixed(0)}%
+          </div>
+        </Card>
+      </div>
+
+      {/* 水下曲线 */}
+      <Card>
+        <div className="flex items-center justify-between mb-2">
+          <h4 className="text-xs font-medium text-v3muted">水下曲线 · 距 peak %</h4>
+          <span className="text-[10px] text-v3faint font-mono">{underwater.length} 数据点</span>
+        </div>
+        {underwater.length > 1 ? (
+          <Sparkline values={underwater} width={900} height={90} />
+        ) : (
+          <div className="py-6 text-center text-sm text-v3faint">无足够数据</div>
+        )}
+      </Card>
     </div>
   );
 }
