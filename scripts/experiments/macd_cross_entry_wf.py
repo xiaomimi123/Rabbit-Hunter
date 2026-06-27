@@ -520,6 +520,9 @@ def main():
                    help="变量二: B/C variant 交叉强度阈值 (dif-dea)/|dea| ≥ 此值")
     p.add_argument("--a-proximity-pct", type=float, default=0.20,
                    help="A variant: gap < 此 × 近 20 根 abs(dif) 均值")
+    p.add_argument("--max-hold-minutes", type=int, default=8 * 60,
+                   help="持仓 max-hold 上限(分钟)。default 480 (8h)。"
+                        "短窗口测试用 60 (paper 真实窗口) 或 240 (4h 折中)。")
     p.add_argument("--out", required=True)
     p.add_argument("--cache-root", default="data/backtest_cache")
     args = p.parse_args()
@@ -543,6 +546,7 @@ def main():
         cross_threshold_pct=args.cross_threshold_pct,
         a_proximity_pct=args.a_proximity_pct,
         exit_strategy=args.exit_strategy,
+        max_hold_minutes=args.max_hold_minutes,
     )
 
     result = run_walkforward(cfg)
