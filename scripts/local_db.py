@@ -81,11 +81,14 @@ CREATE TABLE IF NOT EXISTS positions_v5 (
     id                  INTEGER PRIMARY KEY AUTOINCREMENT,
     symbol              TEXT NOT NULL,
     side                TEXT NOT NULL,
-    status              TEXT NOT NULL,
+    status              TEXT NOT NULL,        -- OPEN / CLOSED / ERROR_RECONCILE_NEEDED
     entry_price         REAL,
     entry_time          TEXT,
     sl_price            REAL,
     tp_price            REAL,
+    sl_attached         INTEGER DEFAULT 1,    -- 1 = SL 已成功挂到交易所;0 = 失败但 SL_TP_FAIL_OPEN 保留主仓
+    tp_attached         INTEGER DEFAULT 1,    -- 同上,TP
+    error_context       TEXT,                 -- JSON: {sl_error, tp_error, rollback_error} 用于 reconcile
     size_usdt           REAL,
     leverage            INTEGER,
     position_size_coins REAL,
@@ -469,6 +472,11 @@ def _apply_migrations(conn: sqlite3.Connection) -> None:
         # ai_training_data 也缺 scorer 写的两列
         ("ai_training_data", "p3a_match_score",        "REAL"),
         ("ai_training_data", "ai_effective_threshold", "REAL"),
+        # v0.5.5 (audit HIGH-1+2): positions_v5 加 SL/TP 挂单状态 + 错误上下文。
+        # 用于 LIVE 模式回滚失败时仍写库,标 ERROR_RECONCILE_NEEDED 供人工平账。
+        ("positions_v5", "sl_attached",   "INTEGER DEFAULT 1"),
+        ("positions_v5", "tp_attached",   "INTEGER DEFAULT 1"),
+        ("positions_v5", "error_context", "TEXT"),
     ]
     for table, column, col_type in add_column_migrations:
         try:

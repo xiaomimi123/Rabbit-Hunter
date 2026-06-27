@@ -162,9 +162,21 @@ export function PortfolioPage() {
                 const lev = p.leverage ?? 5;
                 const unrealR = ent && sl ? ((now - ent) / Math.abs(ent - sl)) * (p.side === 'LONG' ? 1 : -1) : 0;
                 const holdMin = p.entry_time ? Math.round((Date.now() - new Date(p.entry_time).getTime()) / 60000) : 0;
+                // HIGH-1+2: sl/tp_attached=0 表示挂单失败但保留主仓 — 高风险
+                const slMissing = p.sl_attached === 0;
+                const tpMissing = p.tp_attached === 0;
+                const isDegraded = slMissing || tpMissing;
                 return (
-                  <tr key={p.id ?? p.position_id} className="text-v3text">
-                    <td className="px-4 py-3"><SymbolCell symbol={p.symbol} /></td>
+                  <tr key={p.id ?? p.position_id} className={isDegraded ? 'text-v3text bg-loss/5' : 'text-v3text'}>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <SymbolCell symbol={p.symbol} />
+                        {isDegraded && (
+                          <span title={`保护单缺: ${slMissing ? 'SL' : ''}${slMissing && tpMissing ? '+' : ''}${tpMissing ? 'TP' : ''}`}
+                                className="text-[11px] text-loss font-bold animate-pulse">⚠</span>
+                        )}
+                      </div>
+                    </td>
                     <td className="px-4 py-3">
                       <Badge tone={p.side === 'LONG' ? 'long' : 'short'}>
                         {p.side === 'LONG' ? '做多' : '做空'}
