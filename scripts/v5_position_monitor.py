@@ -30,7 +30,9 @@ def _enqueue_ws(db_path: str, payload: dict) -> None:
 
 
 def _max_extensions() -> int:
-    return int(get_param("v5_max_extensions", 3, int))
+    # 2026-06-27: 默认从 3 提到 30 (= 最长持仓 15min × (1+30) = 465min ≈ 8h),
+    # 对齐 backtest MAX_HOLD_MINUTES=480 假设,见 docs/exit-time-experiment.md
+    return int(get_param("v5_max_extensions", 30, int))
 
 
 def _rsi_reverse_short() -> float:

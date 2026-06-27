@@ -86,3 +86,65 @@ Backtest 的 PF 2.08 是基于"每笔仓位最长可持有 8 小时"算的——
 ## 不动主线代码
 
 按约定本次只跑实验出报告,**不改 `v5_params.py` 任何默认值**。下次再讨论是否切 paper 配置。
+
+---
+
+# Paper 实测 Phase 1 — α 方向落地观察
+
+> 2026-06-27 启动 · 计划运行 7 天 (到 2026-07-04 复盘)
+
+## 配置变更 (已部署)
+
+| 文件 | 改 | 旧 | 新 |
+|---|---|---|---|
+| `scripts/v5_params.py` | `DEFAULTS["v5_max_extensions"]` | 3 | **30** |
+| `scripts/v5_params.py` | `PARAM_META["v5_max_extensions"]` range | (0, 10) | (0, 50) |
+| `scripts/v5_position_monitor.py` | `_max_extensions()` fallback | 3 | **30** |
+
+→ paper 最长持仓窗口: `soft_target (15min) × (1 + 30 ext) = 465 min ≈ 7.8 h`
+   几乎对齐 backtest 假设的 480 min。
+
+## 起点基线 (历史 52 笔已平仓)
+
+| 指标 | 值 |
+|---|---|
+| Net PF | **0.97** (注:之前审计报告里的 0.77 是 30d 滚动 KPI 算法) |
+| 胜率 | 44.2% |
+| avg PnL % | -0.21% |
+| avg 持仓 | 0.09 h ≈ 5.4 min |
+
+### 起点 exit_reason 分布
+
+| exit_reason | n | avg PnL % | avg 持仓 (min) |
+|---|---|---|---|
+| SIGNAL_REVERSE | 28 (54%) | +0.41 | **2.4** |
+| AI_TIMEBOX | 13 (25%) | -1.17 | 15.3 |
+| MANUAL_USER | 8 (15%) | +0.21 | 0.3 |
+| SL_HIT | 2 (4%) | -3.56 | 4.1 |
+| TRAILING_SL_HIT | 1 (2%) | -2.03 | 2.1 |
+| **TP_HIT** | **0** | — | — |
+
+## 验收标准 (2026-07-04 复盘时看)
+
+| 指标 | 起点 | 期望落点 | 含义 |
+|---|---|---|---|
+| **TP_HIT 出现** | 0 | ≥ 1 | 验证扩窗口确实让赢单走到 TP |
+| **TP_HIT 占比** | 0% | ≥ 10% | 接近 backtest 9% (60min) ↗ 53% (480min) 区间 |
+| Net PF (新增样本) | 0.97 | ≥ 1.0 | 不再恶化即成功;升到 1.5 就完美 |
+| 胜率 (新增样本) | 44% | ≥ 50% | 给赢单更多时间应该自然升 |
+| AI_TIMEBOX 占比 | 25% | ≤ 10% | 30 次续仓上限让 AI 更倾向 EXTEND |
+| HORIZON_TIMEOUT 出现 | 0 | 可能出现 | 长持仓后等不到 SL/TP 才轮到这个 |
+
+## 中期检查点 (2026-06-30, 3 天)
+
+- 至少应该看到 ≥ 1 笔 `extension_count > 3`(老上限),证明配置生效
+- 如果连一笔都没扩超 3 → 说明 AI 仍在 `quick_yes_no` 里返回 CLOSE,要回头看 AI prompt
+
+## 一周后(2026-07-04)做的事
+
+- SQL 拉新增的 closed trades,按 exit_reason 分布
+- 算新增样本的 Net PF / 胜率 / avg R
+- 跟起点 52 笔对比 — 是否符合"扩窗口 → PF↑"假设
+- 出 `docs/exit-time-experiment-week1.md` 复盘报告
+- 若达验收 → 确认 α 是主因,讨论是否再做 β (TP 倍数微调)
+- 若不达 → 排查 AI EXTEND 决策质量、考虑直接砍 SIGNAL_REVERSE
