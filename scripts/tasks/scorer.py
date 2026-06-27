@@ -301,7 +301,8 @@ async def process_enriched_v5(*, enriched: EnrichedItem, ai, paper_pm, live_pm,
         if mode == "SHADOW":
             ai_result = AIResult(execute=True, sl_multiplier=1.0, tp_multiplier=1.0,
                                   size_multiplier=1.0, confidence=0.5,
-                                  reasoning="AI disabled — SHADOW pass-through")
+                                  reasoning="AI disabled — SHADOW pass-through",
+                                  error_kind="ok")
         else:
             _write_trade_score(db_path, enriched, indicators, decision,
                               block_reason="AI_UNAVAILABLE_LIVE_FAIL_CLOSED",
@@ -311,15 +312,11 @@ async def process_enriched_v5(*, enriched: EnrichedItem, ai, paper_pm, live_pm,
     else:
         ai_result = await ai.decide(enriched, indicators, decision, risk)
         if not ai_result.execute:
-            # 区分:AI 真说"不",vs AI 本身报错/超时(infra failure)。
-            # trading_assistant 把后者包成 execute=False + reasoning 前缀
-            # "AI 调用异常" / "AI 调用超时"。SHADOW + ai_fail_open=true 下
-            # infra failure 不应阻塞数据采集,自动 pass-through。
+            # 区分:AI 真说"不"(error_kind="rule") vs AI 本身报错/超时(error_kind="infra")。
+            # SHADOW + ai_fail_open=true 下 infra failure 不应阻塞数据采集,自动 pass-through。
+            # 用 error_kind 字段判,不再依赖 reasoning 字符串前缀匹配(HIGH-4 修复)。
             reasoning = ai_result.reasoning or ""
-            is_infra_error = (
-                reasoning.startswith("AI 调用异常")
-                or reasoning.startswith("AI 调用超时")
-            )
+            is_infra_error = (ai_result.error_kind == "infra")
             ai_fail_open = _ai_fail_open(db_path)
             if is_infra_error and (mode == "SHADOW" or ai_fail_open):
                 print(f"[V5Scorer] {enriched.symbol} AI infra error, "
@@ -328,6 +325,7 @@ async def process_enriched_v5(*, enriched: EnrichedItem, ai, paper_pm, live_pm,
                     execute=True, sl_multiplier=1.0, tp_multiplier=1.0,
                     size_multiplier=1.0, confidence=0.5,
                     reasoning=f"AI unavailable, pass-through: {reasoning[:120]}",
+                    error_kind="ok",
                 )
             else:
                 _write_trade_score(db_path, enriched, indicators, decision,
@@ -344,6 +342,7 @@ async def process_enriched_v5(*, enriched: EnrichedItem, ai, paper_pm, live_pm,
         size_multiplier=clamp_evolution_size_mult(ai_result.size_multiplier),
         confidence=ai_result.confidence,
         reasoning=ai_result.reasoning,
+        error_kind=ai_result.error_kind,
     )
 
     # M3 铁律层(开仓前最后一道):SL ratio / RR / SL 必挂 / 强平距 / 单笔风险。
@@ -377,6 +376,7 @@ async def process_enriched_v5(*, enriched: EnrichedItem, ai, paper_pm, live_pm,
             size_multiplier=actual_size_mult,
             confidence=ai_result.confidence,
             reasoning=ai_result.reasoning,
+            error_kind=ai_result.error_kind,
         )
         planned_loss = final_size * risk.leverage * final_sl_dist_pct
         gate_per_trade_risk(

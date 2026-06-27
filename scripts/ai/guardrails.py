@@ -24,6 +24,7 @@ def clamp_ai_result(raw: AIResult) -> AIResult:
         size_multiplier=_clamp(raw.size_multiplier, SIZE_MULT_MIN, SIZE_MULT_MAX),
         confidence=_clamp(raw.confidence, CONFIDENCE_MIN, CONFIDENCE_MAX),
         reasoning=raw.reasoning,
+        error_kind=raw.error_kind,
     )
 
 

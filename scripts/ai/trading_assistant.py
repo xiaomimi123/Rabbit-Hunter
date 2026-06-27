@@ -367,6 +367,7 @@ class TradingAssistant:
                     sl_multiplier=1.0, tp_multiplier=1.0,
                     size_multiplier=0.0, confidence=0.0,
                     reasoning=f"FAILURE_MODE_MATCH: {','.join(hits)}",
+                    error_kind="rule",
                 )
 
         # ── 原 RAG + AI call 路径继续 (existing code) ──
@@ -376,7 +377,8 @@ class TradingAssistant:
         if not self.client:
             return AIResult(execute=False, sl_multiplier=1.0, tp_multiplier=1.0,
                             size_multiplier=0.0, confidence=0.0,
-                            reasoning="AI 未初始化")
+                            reasoning="AI 未初始化",
+                            error_kind="infra")
 
         user_msg = build_v5_user_message(enriched, indicators, decision, risk)
 
@@ -436,6 +438,7 @@ class TradingAssistant:
                         size_multiplier=ai_result.size_multiplier,
                         confidence=ai_result.confidence * mult,
                         reasoning=ai_result.reasoning + f" [calibrated x{mult:.2f}]",
+                        error_kind=ai_result.error_kind,
                     )
             except Exception as e:
                 print(f"[trading_assistant] calibration apply failed: {e}")
@@ -443,11 +446,13 @@ class TradingAssistant:
         except asyncio.TimeoutError:
             return AIResult(execute=False, sl_multiplier=1.0, tp_multiplier=1.0,
                             size_multiplier=0.0, confidence=0.0,
-                            reasoning=f"AI 调用超时(>{timeout_s:.0f}s),fail-closed")
+                            reasoning=f"AI 调用超时(>{timeout_s:.0f}s),fail-closed",
+                            error_kind="infra")
         except Exception as e:
             return AIResult(execute=False, sl_multiplier=1.0, tp_multiplier=1.0,
                             size_multiplier=0.0, confidence=0.0,
-                            reasoning=f"AI 调用异常 {type(e).__name__}: {e}")
+                            reasoning=f"AI 调用异常 {type(e).__name__}: {e}",
+                            error_kind="infra")
 
     # ------------------------------------------------------------------
     # Provider-specific decision paths

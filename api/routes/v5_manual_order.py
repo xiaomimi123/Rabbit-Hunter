@@ -154,6 +154,7 @@ async def execute(req: ManualOrderExecuteRequest) -> ManualOrderExecuteResponse:
         size_multiplier=req.size_multiplier,
         confidence=float(ai_dict.get("confidence") or 0.0),
         reasoning=f"[v5_manual] " + (ai_dict.get("reasoning") or ""),
+        error_kind="ok",
     )
     forced_decision = Decision(
         should_trade=True, side=req.side,

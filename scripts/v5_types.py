@@ -62,3 +62,9 @@ class AIResult:
     size_multiplier: float                 # 0~1.2 范围
     confidence: float                      # 0~1
     reasoning: str
+    # error_kind: 让 scorer 显式区分 AI 失败类型,不靠 reasoning 字符串前缀匹配。
+    #   "ok"          — execute 决策正常 (无论 True/False)
+    #   "infra"       — AI 调用超时/异常/未初始化等基建错误 (SHADOW 可 pass-through)
+    #   "rule"        — failure_taxonomy 命中等规则拒 (任何模式都拒)
+    #   "fail_closed" — LIVE + ai_fail_open=false 的安全兜底
+    error_kind: str = "ok"

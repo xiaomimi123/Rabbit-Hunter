@@ -31,6 +31,11 @@ import ccxt
 from dotenv import load_dotenv
 
 
+# fail-closed 默认: SL/TP 挂失败时抛异常,让 v5_position_manager 的回滚逻辑生效。
+# fail-open (true) 仅应在已知 OKX 接口不稳定的应急时段开启;那时主仓会成功但保护单可能缺失。
+_SL_TP_FAIL_OPEN = os.environ.get("SL_TP_FAIL_OPEN", "false").lower() in ("1", "true", "yes")
+
+
 # ── 凭据 ─────────────────────────────────────────────────────────────
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 load_dotenv(dotenv_path=os.path.join(BASE_DIR, ".env"))
@@ -524,6 +529,11 @@ class OkxTrader:
 
         filled_qty = order_result.get("filled") or quantity
 
+        # SL/TP 失败 fail-closed: 默认抛异常,让 v5_position_manager 的 try/except 回滚主仓。
+        # fail-open 仅在 SL_TP_FAIL_OPEN=true 时保留主仓 + 在 result 里塞 error 字段。
+        result["sl_attached"] = True
+        result["tp_attached"] = True
+
         if stop_loss:
             sl_result = self._place_protective_stop(
                 symbol=symbol, stop_price=stop_loss, side=side,
@@ -536,6 +546,9 @@ class OkxTrader:
                 err = sl_result.get("error", "未知错误")
                 print(f"[OKX WARNING] 设置止损失败: {symbol} - {err}")
                 result["stop_loss_error"] = err
+                result["sl_attached"] = False
+                if not _SL_TP_FAIL_OPEN:
+                    raise Exception(f"OKX SL 挂单失败: {err}")
 
         if take_profit:
             tp_result = self._place_protective_stop(
@@ -549,6 +562,9 @@ class OkxTrader:
                 err = tp_result.get("error", "未知错误")
                 print(f"[OKX WARNING] 设置止盈失败: {symbol} - {err}")
                 result["take_profit_error"] = err
+                result["tp_attached"] = False
+                if not _SL_TP_FAIL_OPEN:
+                    raise Exception(f"OKX TP 挂单失败: {err}")
 
         print(f"[OKX TRADE] ✅ 开仓成功: {symbol} {side} {float(filled_qty):.4f} @ {result['price']}")
         return result
