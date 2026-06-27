@@ -232,10 +232,6 @@ from api.routes import v5_account
 from api.routes import v5_trader_kpi
 from api.websocket_v5 import router as ws_v5_router
 
-# TODO(v5): weights/system/market routers still use V4.3 DB schema (Supabase).
-# They are stubbed out here to keep the API importable while V5 migration proceeds.
-# Re-enable each once rewired to SQLite/V5.
-
 _global_auth = [Depends(require_auth)]
 
 # V5 routes
@@ -255,11 +251,6 @@ app.include_router(v5_m9.router,              dependencies=_global_auth)
 app.include_router(v5_account.router,         dependencies=_global_auth)
 app.include_router(v5_trader_kpi.router,      dependencies=_global_auth)
 app.include_router(ws_v5_router)  # WebSocket — no HTTP auth middleware
-
-# V4.3 routes — disabled pending V5 rewire
-# app.include_router(weights_router,   dependencies=_global_auth)  # TODO(v5): rewire weights
-# app.include_router(market_router,    dependencies=_global_auth)  # TODO(v5): rewire market
-# app.include_router(system_router,    dependencies=_global_auth)  # TODO(v5): rewire system
 
 
 # ============================================
