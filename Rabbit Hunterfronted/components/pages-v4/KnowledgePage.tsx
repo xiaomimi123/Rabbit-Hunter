@@ -1,11 +1,12 @@
 /**
- * KnowledgePage — V3 重写 (2026-06-27)。
+ * KnowledgePage — V3 (2026-06-27)。
  *
- * M9 知识层: 4 KPI + 书籍列表 + 候选规则列表 (状态过滤)。
- * 高级操作 (验证/添加) 后续单独迁移。
+ * M9 知识层: 4 KPI + 书籍列表 (导入入口) + 候选规则列表 (状态过滤)。
+ * 2026-06-28: 加"导入书籍" Modal — POST /api/v5/m9/books 后端早就有,UI 缺。
  */
 import { useState, useMemo } from 'react';
-import { useM9Books, useM9Candidates } from '../../hooks/api/useV5M9';
+import { Plus, X, BookOpen, Loader2 } from 'lucide-react';
+import { useM9Books, useM9Candidates, useM9AddBook } from '../../hooks/api/useV5M9';
 import type { CandidateOut } from '../../hooks/api/useV5M9';
 
 function Card({ children, className = '', pad0 = false }: { children: React.ReactNode; className?: string; pad0?: boolean }) {
@@ -56,6 +57,7 @@ const STATUS_TABS = [
 export function KnowledgePage() {
   const books = useM9Books();
   const [statusFilter, setStatusFilter] = useState<string>('');
+  const [showImport, setShowImport] = useState(false);
   const candidates = useM9Candidates(statusFilter || undefined);
 
   const bookList = books.data?.books ?? [];
@@ -84,11 +86,24 @@ export function KnowledgePage() {
         <Card pad0>
           <div className="flex items-center justify-between px-4 pt-4 pb-2">
             <h3 className="text-xs font-medium text-v3muted uppercase tracking-[0.06em]">书籍 / 笔记</h3>
-            <span className="text-[10px] text-v3faint font-mono">{bookList.length}</span>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-v3faint font-mono">{bookList.length}</span>
+              <button
+                type="button"
+                onClick={() => setShowImport(true)}
+                title="导入新书籍/笔记"
+                className="inline-flex items-center gap-1 rounded-md border border-amber/40 bg-amber-soft px-2 py-1 text-[11px] font-semibold text-amber hover:bg-amber/20 transition"
+              >
+                <Plus className="h-3 w-3" />
+                导入
+              </button>
+            </div>
           </div>
           {bookList.length === 0 ? (
-            <div className="py-10 text-center text-sm text-v3faint">
-              无书籍 (用 <span className="font-mono text-amber">m9_knowledge.py</span> 导入)
+            <div className="py-10 px-4 text-center">
+              <BookOpen className="h-7 w-7 text-v3faint mx-auto mb-3" />
+              <div className="text-sm text-v3muted mb-1">尚无书籍</div>
+              <div className="text-[11px] text-v3faint">点击右上 <span className="text-amber font-semibold">导入</span> 按钮添加交易书籍/笔记</div>
             </div>
           ) : (
             <div className="max-h-[640px] overflow-y-auto">
@@ -101,6 +116,9 @@ export function KnowledgePage() {
                   {b.author && <div className="text-[11px] text-v3muted">{b.author}</div>}
                   <div className="text-[10px] text-v3faint mt-0.5 font-mono">
                     {b.source_type} · {new Date(b.uploaded_at).toLocaleDateString('zh-CN')}
+                    {b.content_length != null && b.content_length > 0 && (
+                      <> · {b.content_length.toLocaleString()} 字</>
+                    )}
                   </div>
                 </div>
               ))}
@@ -161,6 +179,184 @@ export function KnowledgePage() {
             </div>
           )}
         </Card>
+      </div>
+
+      {showImport && (
+        <ImportBookModal onClose={() => setShowImport(false)} />
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// ImportBookModal — 导入书籍/笔记 (POST /api/v5/m9/books)
+// ─────────────────────────────────────────────────────────────
+
+function ImportBookModal({ onClose }: { onClose: () => void }) {
+  const addBook = useM9AddBook();
+  const [title, setTitle] = useState('');
+  const [author, setAuthor] = useState('');
+  const [sourceType, setSourceType] = useState<'book' | 'note' | 'paper' | 'article'>('book');
+  const [contentText, setContentText] = useState('');
+  const [notes, setNotes] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  const canSubmit = title.trim().length > 0 && !addBook.isPending;
+
+  const handleSubmit = async () => {
+    if (!canSubmit) return;
+    setError(null);
+    try {
+      await addBook.mutateAsync({
+        title: title.trim(),
+        author: author.trim() || undefined,
+        source_type: sourceType,
+        content_text: contentText.trim() || undefined,
+        notes: notes.trim() || undefined,
+      });
+      onClose();
+    } catch (e: any) {
+      setError(e?.message || String(e));
+    }
+  };
+
+  // 估算预计切分的 chunk 数 (M9 默认 ~1500 字/chunk)
+  const chunkEstimate = Math.max(1, Math.ceil(contentText.length / 1500));
+
+  return (
+    <div
+      className="fixed inset-0 z-50 grid place-items-center bg-black/60 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-2xl mx-6 rounded-lg border border-line bg-panel2 shadow-2xl overflow-hidden max-h-[90vh] flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* 头部 */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-line-soft">
+          <div className="flex items-center gap-2">
+            <BookOpen className="h-4 w-4 text-amber" />
+            <h3 className="text-sm font-semibold text-v3text">导入书籍 / 笔记</h3>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-v3muted hover:text-v3text transition"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* 表单 */}
+        <div className="px-5 py-4 overflow-y-auto flex-1">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+            <div>
+              <label className="text-[11px] uppercase tracking-[0.07em] text-v3faint">
+                标题 <span className="text-loss">*</span>
+              </label>
+              <input
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="e.g. 短线交易大师"
+                autoFocus
+                className="mt-1 w-full rounded-md border border-line bg-ink px-3 py-2 text-[13px] text-v3text outline-none focus:border-amber transition"
+              />
+            </div>
+            <div>
+              <label className="text-[11px] uppercase tracking-[0.07em] text-v3faint">作者</label>
+              <input
+                type="text"
+                value={author}
+                onChange={(e) => setAuthor(e.target.value)}
+                placeholder="e.g. Linda Raschke"
+                className="mt-1 w-full rounded-md border border-line bg-ink px-3 py-2 text-[13px] text-v3text outline-none focus:border-amber transition"
+              />
+            </div>
+          </div>
+
+          <div className="mb-3">
+            <label className="text-[11px] uppercase tracking-[0.07em] text-v3faint">类型</label>
+            <select
+              value={sourceType}
+              onChange={(e) => setSourceType(e.target.value as any)}
+              className="mt-1 w-full rounded-md border border-line bg-ink px-3 py-2 text-[13px] text-v3text outline-none focus:border-amber transition"
+            >
+              <option value="book">书籍 (book)</option>
+              <option value="note">笔记 (note)</option>
+              <option value="paper">论文 (paper)</option>
+              <option value="article">文章 (article)</option>
+            </select>
+          </div>
+
+          <div className="mb-3">
+            <label className="text-[11px] uppercase tracking-[0.07em] text-v3faint flex items-center justify-between">
+              <span>正文内容 (可选)</span>
+              {contentText.length > 0 && (
+                <span className="font-mono text-amber">
+                  {contentText.length.toLocaleString()} 字 → ~{chunkEstimate} chunk
+                </span>
+              )}
+            </label>
+            <textarea
+              value={contentText}
+              onChange={(e) => setContentText(e.target.value)}
+              placeholder="粘贴书籍正文,会自动切块进 M9 知识库供 AI 提取候选规则。&#10;留空只创建条目(后续可手动添加候选规则)。"
+              rows={8}
+              className="mt-1 w-full rounded-md border border-line bg-ink px-3 py-2 text-[12px] font-mono text-v3text outline-none focus:border-amber transition resize-none"
+            />
+          </div>
+
+          <div className="mb-3">
+            <label className="text-[11px] uppercase tracking-[0.07em] text-v3faint">备注 (可选)</label>
+            <input
+              type="text"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="e.g. 来源, 读后感, ISBN"
+              className="mt-1 w-full rounded-md border border-line bg-ink px-3 py-2 text-[13px] text-v3text outline-none focus:border-amber transition"
+            />
+          </div>
+
+          {error && (
+            <div className="mb-3 rounded-md border border-loss/40 bg-loss/10 px-3 py-2 text-[12px] text-loss">
+              导入失败: {error}
+            </div>
+          )}
+
+          <div className="text-[11px] text-v3faint border-t border-line-soft pt-3">
+            导入后会自动切块入 M9 知识库 (scripts/m9_knowledge.py)。
+            候选规则可在右侧"候选规则"列表里追加或由 M9 自动抽取。
+          </div>
+        </div>
+
+        {/* 底部按钮 */}
+        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-line-soft bg-[#10161D]">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={addBook.isPending}
+            className="px-4 py-2 rounded-md border border-line text-[13px] text-v3muted hover:border-v3text hover:text-v3text transition disabled:opacity-50"
+          >
+            取消
+          </button>
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={!canSubmit}
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-md text-[13px] font-semibold transition ${
+              canSubmit
+                ? 'bg-amber text-ink hover:bg-amber-dim'
+                : 'bg-amber/30 text-v3faint cursor-not-allowed'
+            }`}
+          >
+            {addBook.isPending ? (
+              <><Loader2 className="h-3.5 w-3.5 animate-spin" /> 导入中...</>
+            ) : (
+              <><Plus className="h-3.5 w-3.5" /> 导入</>
+            )}
+          </button>
+        </div>
       </div>
     </div>
   );
