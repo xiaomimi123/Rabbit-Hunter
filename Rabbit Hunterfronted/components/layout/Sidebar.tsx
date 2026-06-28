@@ -20,14 +20,12 @@ const NAV: NavItem[] = [
   { to: '/settings',  label: '设置',     Icon: Settings },
 ];
 
-// 深链 — 低频辅助页面
+// 深链 — 低频辅助页面 (中控仪表/手动开单 2026-06-28 用户要求移除入口,route 仍保留)
 const DEEP_LINKS = [
-  { to: '/dashboard',   label: '中控仪表 (V2)' },
   { to: '/audit',       label: '反思审计' },
   { to: '/diagnostics', label: 'AI 诊断' },
   { to: '/reliability', label: '执行可靠性' },
   { to: '/collect',     label: '数据采集' },
-  { to: '/manual',      label: '手动开单' },
   { to: '/glossary',    label: '术语词典' },
 ];
 
