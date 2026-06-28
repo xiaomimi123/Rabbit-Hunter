@@ -47,7 +47,7 @@ from scripts.backtest.position_sim import simulate_exit
 from scripts.v5_indicator_engine import _ema, calculate_atr
 
 
-Variant = Literal["A", "B", "C"]
+Variant = Literal["A", "B", "C", "trend_follow_long"]
 ExitStrategy = Literal["baseline", "vegas_full", "vegas_sl_only"]
 
 
@@ -207,10 +207,73 @@ def detect_entries_variant_C(
     return signals
 
 
+def _rsi_series(closes: List[float], period: int = 14) -> List[float]:
+    """逐根 RSI(14),长度同 closes,前 period 根用 50 填充。"""
+    if len(closes) <= period:
+        return [50.0] * len(closes)
+    rsi = [50.0] * period
+    gains = []
+    losses = []
+    for i in range(1, period + 1):
+        diff = closes[i] - closes[i - 1]
+        gains.append(max(0.0, diff))
+        losses.append(max(0.0, -diff))
+    avg_g = sum(gains) / period
+    avg_l = sum(losses) / period
+    if avg_l == 0:
+        rsi.append(100.0)
+    else:
+        rs = avg_g / avg_l
+        rsi.append(100 - 100 / (1 + rs))
+    for i in range(period + 1, len(closes)):
+        diff = closes[i] - closes[i - 1]
+        g = max(0.0, diff)
+        l = max(0.0, -diff)
+        avg_g = (avg_g * (period - 1) + g) / period
+        avg_l = (avg_l * (period - 1) + l) / period
+        if avg_l == 0:
+            rsi.append(100.0)
+        else:
+            rs = avg_g / avg_l
+            rsi.append(100 - 100 / (1 + rs))
+    return rsi
+
+
+def detect_entries_trend_follow_long(
+    klines_15m: List[List[float]], cfg: ExperimentConfig,
+) -> List[Tuple[int, float, float]]:
+    """顺势做多 (BTC 短线 Pine V4.6 翻译):
+       - 15m MACD 金叉 (DIF 上穿 DEA)
+       - 15m RSI(14) ∈ (40, 70)
+       - 15m close > EMA(50) (牛市过滤,核心)
+    """
+    closes = [float(k[4]) for k in klines_15m]
+    dif, dea, _ = _macd_series(closes, cfg.macd_fast, cfg.macd_slow, cfg.macd_signal)
+    rsi = _rsi_series(closes, 14)
+    ema50 = _ema(closes, 50)
+
+    signals: List[Tuple[int, float, float]] = []
+    for i in range(50, len(klines_15m)):
+        # 金叉
+        if not (dif[i] > dea[i] and dif[i - 1] <= dea[i - 1]):
+            continue
+        # RSI 区间
+        if not (40 < rsi[i] < 70):
+            continue
+        # 牛市过滤 (顺势)
+        if not (closes[i] > ema50[i]):
+            continue
+        signals.append((int(klines_15m[i][0]), dif[i], dea[i]))
+    return signals
+
+
 DETECTORS = {
-    "A": detect_entries_variant_A,
-    "B": detect_entries_variant_B,
-    "C": detect_entries_variant_C,
+    # 现有 4h-based detector 不变 — wrapper 吃掉 klines_15m 参数
+    "A": lambda c4, c15, cfg: detect_entries_variant_A(c4, cfg),
+    "B": lambda c4, c15, cfg: detect_entries_variant_B(c4, cfg),
+    "C": lambda c4, c15, cfg: detect_entries_variant_C(c4, cfg),
+    # 新加: 15m-based trend-follow,只接 15m 数据
+    "trend_follow_long": lambda c4, c15, cfg: detect_entries_trend_follow_long(c15, cfg),
 }
 
 
@@ -440,7 +503,7 @@ def run_walkforward(cfg: ExperimentConfig) -> dict:
             print(f"[EXP] skip {symbol}: {type(e).__name__}: {e}", file=sys.stderr)
             skipped.append(symbol)
             continue
-        signals = detector(klines_4h, cfg)
+        signals = detector(klines_4h, klines_15m, cfg)
         sym_trades = execute_trades(symbol, klines_4h, klines_15m, signals, cfg)
         all_trades.extend(sym_trades)
         print(
@@ -501,7 +564,7 @@ def run_walkforward(cfg: ExperimentConfig) -> dict:
 
 def main():
     p = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    p.add_argument("--variant", required=True, choices=["A", "B", "C"])
+    p.add_argument("--variant", required=True, choices=["A", "B", "C", "trend_follow_long"])
     p.add_argument("--start", required=True, help="ISO start (UTC)")
     p.add_argument("--end", required=True, help="ISO end (UTC)")
     p.add_argument("--symbols", required=True, help="CSV: APTUSDT,NEARUSDT,...")
@@ -523,6 +586,8 @@ def main():
     p.add_argument("--max-hold-minutes", type=int, default=8 * 60,
                    help="持仓 max-hold 上限(分钟)。default 480 (8h)。"
                         "短窗口测试用 60 (paper 真实窗口) 或 240 (4h 折中)。")
+    p.add_argument("--sl-atr-mult", type=float, default=1.5, help="SL = N × ATR (default 1.5)")
+    p.add_argument("--tp-atr-mult", type=float, default=2.5, help="TP = N × ATR (default 2.5)")
     p.add_argument("--out", required=True)
     p.add_argument("--cache-root", default="data/backtest_cache")
     args = p.parse_args()
@@ -547,6 +612,8 @@ def main():
         a_proximity_pct=args.a_proximity_pct,
         exit_strategy=args.exit_strategy,
         max_hold_minutes=args.max_hold_minutes,
+        sl_atr_mult=args.sl_atr_mult,
+        tp_atr_mult=args.tp_atr_mult,
     )
 
     result = run_walkforward(cfg)
