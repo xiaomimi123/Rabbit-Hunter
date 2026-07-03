@@ -1,18 +1,28 @@
 """V5PositionManager 测试 — broker 用 mock,只测 fail-closed 逻辑。"""
+import sys
 import pytest
 from unittest.mock import MagicMock
+
+# ccxt 在 CI / 本地可能未安装；用 MagicMock stub 让 OkxTrader 可导入（只用它的类 spec）
+if "ccxt" not in sys.modules:
+    sys.modules["ccxt"] = MagicMock()
+from scripts.okx_trader import OkxTrader
 
 
 def test_sl_tp_failure_rollbacks_main():
     """主仓开成功,SL 单失败 → 立刻市价平回滚。"""
     from scripts.v5_position_manager import V5PositionManager
 
-    mock_broker = MagicMock()
-    mock_broker.create_order.side_effect = [
-        {"orderId": "main", "status": "filled"},
-        Exception("SL order failed: insufficient margin"),
-    ]
-    mock_broker.close_position = MagicMock()
+    mock_broker = MagicMock(spec=OkxTrader)
+    mock_broker.open_position.return_value = {
+        "success": True, "order_id": "main", "symbol": "H/USDT", "side": "SHORT",
+    }
+    mock_broker.set_stop_loss.return_value = {
+        "success": False, "error": "insufficient margin", "error_kind": "PERMANENT",
+    }
+    mock_broker.close_position.return_value = {
+        "success": True, "order_id": "rb", "symbol": "H/USDT",
+    }
 
     pm = V5PositionManager(broker=mock_broker, db_path=":memory:")
 
@@ -34,8 +44,16 @@ def test_successful_open_writes_positions_v5():
     tmp.close()
     init_local_db(tmp.name)
 
-    mock_broker = MagicMock()
-    mock_broker.create_order.return_value = {"orderId": "x", "status": "filled"}
+    mock_broker = MagicMock(spec=OkxTrader)
+    mock_broker.open_position.return_value = {
+        "success": True, "order_id": "main", "symbol": "H/USDT", "side": "SHORT",
+    }
+    mock_broker.set_stop_loss.return_value = {
+        "success": True, "order_id": "sl", "symbol": "H/USDT",
+    }
+    mock_broker.set_take_profit.return_value = {
+        "success": True, "order_id": "tp", "symbol": "H/USDT",
+    }
 
     pm = V5PositionManager(broker=mock_broker, db_path=tmp.name)
     pid = pm.open_position(
@@ -48,3 +66,11 @@ def test_successful_open_writes_positions_v5():
                        (pid,)).fetchone()
     conn.close()
     assert row == ("H/USDT", "SHORT", "OPEN")
+
+
+def test_broker_missing_method_fails_fast():
+    """spec=OkxTrader 拦住任何 attribute 打错的 bug（F4 类回归防护）."""
+    mock_broker = MagicMock(spec=OkxTrader)
+    # OkxTrader 上没有 create_order 方法。spec mock 应拒绝这个访问。
+    with pytest.raises(AttributeError):
+        mock_broker.create_order(symbol="H/USDT", side="sell")

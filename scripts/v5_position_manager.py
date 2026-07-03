@@ -77,12 +77,16 @@ class V5PositionManager:
 
         # ── 阶段 1: 主仓 ─────────────────────────────────────────────
         try:
-            self.broker.create_order(
-                symbol=symbol, side="sell" if side == "SHORT" else "buy",
-                type="market", amount=position_size_coins,
+            result = self.broker.open_position(
+                symbol=symbol, side=side, quantity=position_size_coins,
             )
+            if not result.get("success"):
+                raise Exception(
+                    f"主仓下单失败: {result.get('error_kind', 'PERMANENT')}: {result.get('error', 'unknown')}"
+                )
         except Exception as e:
-            # 主仓失败 = 交易所无真持仓,直接抛上去,scorer 写 OPEN_FAILED 即可
+            if str(e).startswith("主仓下单失败:"):
+                raise
             raise Exception(f"主仓下单失败: {type(e).__name__}: {e}")
 
         sl_attached = True
@@ -91,18 +95,24 @@ class V5PositionManager:
 
         # ── 阶段 2: SL 挂单 ──────────────────────────────────────────
         try:
-            self.broker.create_order(
-                symbol=symbol, side="buy" if side == "SHORT" else "sell",
-                type="stop_market", amount=position_size_coins,
-                params={"stopPrice": sl_price, "reduceOnly": True},
+            result = self.broker.set_stop_loss(
+                symbol=symbol, stop_price=sl_price, side=side,
             )
+            if not result.get("success"):
+                raise Exception(
+                    f"{result.get('error_kind', 'PERMANENT')}: {result.get('error', 'unknown')}"
+                )
         except Exception as e_sl:
             sl_attached = False
             error_context["sl_error"] = f"{type(e_sl).__name__}: {e_sl}"
             if not SL_TP_FAIL_OPEN:
                 # fail-closed: 回滚主仓
                 try:
-                    self.broker.close_position(symbol)
+                    rb_result = self.broker.close_position(symbol)
+                    if isinstance(rb_result, dict) and not rb_result.get("success"):
+                        raise Exception(
+                            f"{rb_result.get('error_kind', 'PERMANENT')}: {rb_result.get('error', 'unknown')}"
+                        )
                     raise Exception(f"SL 下单失败,主仓已回滚: {e_sl}")
                 except Exception as e_rb:
                     if "已回滚" in str(e_rb):
@@ -132,17 +142,23 @@ class V5PositionManager:
 
         # ── 阶段 3: TP 挂单 ──────────────────────────────────────────
         try:
-            self.broker.create_order(
-                symbol=symbol, side="buy" if side == "SHORT" else "sell",
-                type="take_profit_market", amount=position_size_coins,
-                params={"stopPrice": tp_price, "reduceOnly": True},
+            result = self.broker.set_take_profit(
+                symbol=symbol, take_profit_price=tp_price, side=side,
             )
+            if not result.get("success"):
+                raise Exception(
+                    f"{result.get('error_kind', 'PERMANENT')}: {result.get('error', 'unknown')}"
+                )
         except Exception as e_tp:
             tp_attached = False
             error_context["tp_error"] = f"{type(e_tp).__name__}: {e_tp}"
             if not SL_TP_FAIL_OPEN:
                 try:
-                    self.broker.close_position(symbol)
+                    rb_result = self.broker.close_position(symbol)
+                    if isinstance(rb_result, dict) and not rb_result.get("success"):
+                        raise Exception(
+                            f"{rb_result.get('error_kind', 'PERMANENT')}: {rb_result.get('error', 'unknown')}"
+                        )
                     raise Exception(f"TP 下单失败,主仓已回滚: {e_tp}")
                 except Exception as e_rb:
                     if "已回滚" in str(e_rb):
