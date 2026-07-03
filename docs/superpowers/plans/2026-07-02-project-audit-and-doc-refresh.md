@@ -256,7 +256,7 @@ market scanner → deep collector → v5 scorer → paper_pm / live_pm
 
 ```bash
 # 从写好的 md 里抽出所有 <file>:<line> 引用做批量验证
-grep -oE '`?[a-zA-Z_./ -]+\.(py|tsx|ts):[0-9]+' docs/audit-2026-07/architecture-map.md \
+grep -oE '`?[a-zA-Z0-9_./ -]+\.(py|tsx|ts):[0-9]+' docs/audit-2026-07/architecture-map.md \
   | sort -u \
   | while read ref; do
       file="${ref%:*}"
