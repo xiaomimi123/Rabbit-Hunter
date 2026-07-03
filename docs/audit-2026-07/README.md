@@ -16,7 +16,7 @@
 
 | 文件 | 状态 |
 |---|---|
-| [architecture-map.md](./architecture-map.md) | 待生成 |
+| [architecture-map.md](./architecture-map.md) | ✅ 已生成 |
 | [dead-code-and-tables.md](./dead-code-and-tables.md) | 待生成 |
 | [tech-debt.md](./tech-debt.md) | 待生成 |
 | [doc-vs-code-diff.md](./doc-vs-code-diff.md) | 待生成 |
