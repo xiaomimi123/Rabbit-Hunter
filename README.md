@@ -7,7 +7,7 @@
 > 要切真实下单，明确把 `.env` 里 `ENABLE_AUTO_TRADING=true`，并通过 `/system/mode` 接口或前端 Settings 页切到 LIVE。
 
 > **v45 入口约定**：唯一受支持的采集器入口是 `python -m scripts.tasks.collector_main`。
-> 旧的 `scripts/collector.py` 已归档，直接运行会打印 deprecation 信息并退出。
+> 旧的 `scripts/collector.py` 已彻底删除。
 
 ---
 
@@ -58,7 +58,7 @@ M6 回测      scripts/walkforward.py + cost_model + reporter
 | **SHADOW**（默认） | `ENABLE_AUTO_TRADING=false` 或显式切换 | 信号完整通过、虚拟下单 | `paper_trades` |
 | **LIVE** | `ENABLE_AUTO_TRADING=true` + 模式切到 LIVE | 真实下单到 OKX / Binance | `positions_v5` + 远端账户 |
 
-模式状态持久化在 `system_settings` 表，可通过 `api/routes/system.py` 暴露的接口在线切换。
+模式状态持久化在 `system_settings` 表，可通过 `api/routes/v5_settings.py` 的 PATCH `/api/v5/settings` 接口在线切换（key: `enable_auto_trading` / `system_mode`）。
 
 行为旋钮（`.env`，默认全部 fail-closed）：
 
@@ -78,7 +78,7 @@ M6 回测      scripts/walkforward.py + cost_model + reporter
 
 | 模块 | 说明 |
 |------|------|
-| `tasks/collector_main.py` | v45 唯一入口，启动四个异步任务 |
+| `tasks/collector_main.py` | v45 唯一入口，启动 7+ 个异步协程（scanner / scorer / monitor / reflection_worker / funding_collector 等）|
 | `tasks/scanner.py` | 市场异动扫描 |
 | `tasks/deep_collector.py` | 深度采集（OI / funding / CVD / K线） |
 | `tasks/scorer.py` | 评分 + 策略路由 + AI 接入点 + 风控闸门 |
@@ -86,9 +86,9 @@ M6 回测      scripts/walkforward.py + cost_model + reporter
 | `tasks/v5_funding_collector.py` | 资金费率独立采集器 |
 | `tasks/v5_reflection_worker.py` | 平仓后异步反思 |
 | `tasks/paper_monitor.py` | SHADOW 仓位监控 |
-| `v44_strategy_router.py` | SNIPER / VULTURE 路由 |
-| `v43_position_manager.py` | 持仓管理 |
-| `paper_position_manager.py` | SHADOW 纸面仓位 |
+| `v5_strategy.py` | 三 mode 策略规则引擎（and_strict / trend_aligned / macd_reversal_long）|
+| `v5_position_manager.py` | LIVE 持仓管理（开仓 / 止损 / 回滚）|
+| `paper_position_manager.py` | SHADOW 虚拟持仓管理 |
 | `risk_constitution.py` | 风控宪法（铁律） |
 | `exchange_factory.py` | 按 `EXCHANGE` 选 OkxTrader / BinanceTrader |
 | `okx_trader.py` / `binance_trader.py` | 两套同接口的下单实现 |
@@ -118,11 +118,8 @@ FastAPI，容器内绑 `0.0.0.0:8000`，host 默认 `127.0.0.1:8000`。
 
 | 路由 | 说明 |
 |------|------|
-| `system.py` | SHADOW↔LIVE 切换、交易所状态、healthz |
 | `positions.py` | 持仓查询 |
 | `scores.py` | 信号评分 |
-| `weights.py` | 权重管理 |
-| `market.py` | 市场数据 |
 | `v5_account.py` | OKX 账户资产同步 |
 | `v5_ai.py` | AI 决策日志 |
 | `v5_charts.py` | K 线数据 |
@@ -135,6 +132,7 @@ FastAPI，容器内绑 `0.0.0.0:8000`，host 默认 `127.0.0.1:8000`。
 | `v5_settings.py` | 用户设置持久化 |
 | `v5_strategy_config.py` | 策略参数 |
 | `v5_walkforward.py` | Walk-forward 报告 |
+| `v5_trader_kpi.py` | KPI 中控（PF / Sharpe / MaxDD / 宪法违规 / AI 健康度）|
 
 ### 前端（`Rabbit Hunterfronted/`）
 
@@ -144,6 +142,7 @@ React 19 + Vite 6 + TypeScript + TailwindCSS + Zustand + React Query。
 
 | 路径 | 页面 |
 |---|---|
+| `/overview` | 账户概览（资产 / 活仓汇总 / KPI，为根路径 `/` 的重定向目标）|
 | `/dashboard` | 仪表盘（OKX 资产 / 实时持仓 / AI 决策） |
 | `/portfolio` | 活跃持仓 |
 | `/history` | 交易历史 |
@@ -160,7 +159,7 @@ React 19 + Vite 6 + TypeScript + TailwindCSS + Zustand + React Query。
 | `/manual` | 手动下单 |
 | `/glossary` | 术语表 |
 
-旧路径 `/v5/*` 全部重定向到新路径（`App.tsx:42-53`）。
+旧路径 `/v5/*` 全部重定向到新路径（`App.tsx:46-57`）。
 
 ---
 
