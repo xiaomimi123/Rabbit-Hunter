@@ -417,3 +417,156 @@ v0.5.0 的核心定位 —— **不确定 = 拒绝交易**:
 ---
 
 **文档定位:** 这份文档是项目的"逻辑地图"。要看实现细节请直接读源码;要看版本演进请读 `CHANGELOG.md`;要看快速上手请读 `README.md`。
+
+---
+
+## [待整合 · Task 7 会重写] 从 docs/project-structure.md 合并的段落
+
+> 以下段落来自已删除的 `docs/project-structure.md`，由 Task 6 原样搬入。Task 7 会统一重写并合并进正文。
+> 来源行范围: §5.1 (254-273), §7 (319-332), §8.3 (366-382), §9 (386-414), §10 (419-432), §11 (438-450), §12 (454-467)
+
+### 5.1 视觉系统 — "Field Instrument" tokens
+
+定义在 `tailwind.config.js`,镜像在 `services/tokens.ts`。
+
+| 用途 | Token class | Hex | 语义 |
+|---|---|---|---|
+| 背景主 | `bg-bg-base` | #0F1115 | 暖深黑 |
+| 卡片 | `bg-bg-surface` | #171A20 | 上浮一档 |
+| 深底 | `bg-bg-deep` | #0A0C0F | 输入框 |
+| 文本 | `text-ivory` / `-70` / `-40` / `-25` | #F1ECDD | 象牙白 + 4 档透明度 |
+| 强调 | `text-brass` / `bg-brass-soft` | #C9A14B | 黄铜金 — primary / active |
+| LONG / 正盈 | `text-sage` / `bg-sage-soft` | #6B8568 | 鼠灰绿 |
+| SHORT / 负盈 | `text-oxblood` / `bg-oxblood-soft` | #A53E32 | 暗红 |
+| Info | `text-ink` / `bg-ink-soft` | #5A7691 | 灰蓝 |
+| 描边 | `border-hairline` / `-strong` | rgba(241,236,221,.10/.18) | 发丝细线 |
+| 字间 | `tracking-wider2/3/4` | .18/.22/.26em | eyebrow letter-spacing |
+| 字体 | `font-mono` | Fira Code | tabular-nums |
+
+🎯 **优化此处不要碰 token 名 — 它们已扩散到 50+ 文件**。改 token 值(hex)反而 OK,全局生效。
+
+---
+
+## 7. 风控宪法 7 条 — 改这里影响动钱代码
+
+定义在 `scripts/risk_constitution.py`,在 `scripts/risk_gates.py` 实现 gate,在 `scripts/tasks/scorer.py` 串接执行。
+
+| 规则 | 常量 / 函数 | 执行点 | API 暴露 |
+|---|---|---|---|
+| 1 单笔风险 ≤ 1% | `MAX_PER_TRADE_RISK_PCT` + `resolve_risk_pct_for_equity()` | `scorer._risk_per_trade()` + `gate_per_trade_risk()` | `trader-kpi.constitution.rule_1_*` |
+| 2 进场必挂 SL + 失败回滚 | `SL_MANDATORY_AT_ENTRY` + `gate_sl_attached()` | `v5_position_manager.open_position` | `rule_2_*` |
+| 3 日内 -3% 锁仓 | `DAILY_DRAWDOWN_LIMIT_PCT = 0.03` + `gate_daily_drawdown()` | `scorer:252` | `rule_3_*` |
+| 4 杠杆 3-5x + 反推 | `MIN_LIQ_TO_SL_DISTANCE_RATIO = 2.0` + `derive_safe_leverage()` + `gate_liquidation_distance()` | `v5_risk_calculator` + `scorer:333` | `rule_4_*` |
+| 5 SL ratio ∈ [1.5, 2.2] + 仓位 [0.6, 1.1] | `FINAL_SL_ATR_RATIO_MIN/MAX` + `EVOLUTION_SIZE_MULT_MIN/MAX` + `gate_final_sl_ratio()` + `clamp_evolution_*()` | `scorer:317,326` | `rule_5_*` |
+| 6 SHORT 默认关 | `config.enable_short_trading = False` + scorer 内联 gate | `scorer:235` (我加的) | `rule_6_*` |
+| 7 杀手 setup 禁用 | `DEFAULT_DISABLED_SETUPS` frozenset + `gate_setup_enabled()` | `scorer:244` | `rule_7_*` |
+
+🎯 **关键文件**: `docs/risk-constitution-audit.md` 有完整的"宪法 vs 代码"核对清单 + 修复历史。
+
+---
+
+### 8.3 热配置 (system_settings, 前端可改)
+
+```
+v5_strategy_mode                  trend_aligned / and_strict / macd_reversal_long
+v5_use_symbol_whitelist           true / false
+v5_sl_atr_mult / v5_tp_atr_mult   SL/TP ATR 倍数
+v5_rsi_overbought / v5_rsi_oversold
+v5_trend_rsi_long/short_threshold
+v5_funding_anti_pile_threshold
+v5_max_concurrent                 同时活仓数上限 (默认 3)
+v5_leverage                       杠杆 cap (默认 5, derive_safe_leverage 会再压)
+v5_risk_per_trade                 单笔风险 (默认 0.01)
+v5_anti_chase_pct / window_bars
+v5_symbol_whitelist               逗号分隔字符串覆盖默认 22
+deepseek_api_key                  AI key (前端 Settings 填)
+okx_api_key / secret / passphrase OKX 凭证 (前端 Settings 填)
+```
+
+---
+
+## 9. 测试 (`tests/`, 53 个文件)
+
+```
+test_v5_strategy*.py          ★ 决策器 3 mode 边界
+test_safety_defaults.py       ★ 风控默认值 + leverage 反推
+test_risk_gates.py            ★ 7 个 gate_* 函数
+test_v5_scoring_pipeline.py   ★ scorer 端到端
+test_v5_risk_calculator.py    plan() 公式
+test_walkforward.py           M6 引擎
+test_m9_*.py                  M9 知识层
+test_paper_position_manager_v5.py
+test_v5_position_*.py
+test_v5_funding_*.py
+test_v5_indicator_engine.py
+test_v5_symbol_whitelist.py
+test_trading_assistant_*.py
+test_deepseek_adapter.py      ⚠️ 3 失败 (158c90f 引入,本会话未触)
+test_failure_taxonomy_*.py
+test_reflection_*.py
+test_ai_v5_adapter.py / test_kelly_sizing.py / test_confidence_calibration.py
+test_setup_*.py
+test_local_db_v5.py / test_funding_db.py
+test_v5_*_api.py              FastAPI 路由 (10+ 文件)
+test_websocket_v5.py
+test_collector_preflight.py
+test_chandelier.py / test_local_rag.py
+```
+
+跑全套: `python3 -m pytest tests/ -q`
+现状: **425 passed / 3 known-broken (test_deepseek_adapter)**.
+
+---
+
+## 10. 关键扩展点速查表 (✨ "我想做 X — 改哪")
+
+| 想做的事 | 改哪个文件 | 新加文件 |
+|---|---|---|
+| 加一个新页面 (前端) | `App.tsx` 加 Route | `components/pages-v4/XxxPage.tsx` |
+| 加一个新 API endpoint | `api/main.py` import + include | `api/routes/v5_xxx.py` |
+| 加一个新前端 hook | — | `Rabbit Hunterfronted/hooks/api/useV5Xxx.ts` |
+| 加一个新风控闸门 | `scorer.py` 串接 + 测试 | `risk_gates.py` 加 `gate_xxx()` |
+| 加新策略 mode | `v5_strategy.py:decide()` 加分支 + 测试 | 新 `_decide_xxx()` |
+| 加新 setup_type | `scripts/ai/setup_type.py:derive_setup_type()` | — |
+| 加新指标 (TA) | `v5_indicator_engine.py` 加纯函数 | — |
+| 加新 backtest 实验 | — | `scripts/experiments/xxx.py` (复用 cost_model + position_sim) |
+| 加新 setting 项 | `v5_params.py:_ENV_MAP/DEFAULTS/PARAM_META` + 前端 SettingsPage | — |
+| 改宪法常量 | `scripts/risk_constitution.py` + 跑全测试 | — |
+| 加新视觉 token | `tailwind.config.js:colors` + `services/tokens.ts` (mirror) | — |
+| 加新 db 表 | `scripts/local_db.py` 加 CREATE + migration | — |
+
+---
+
+## 11. Legacy / 半死 / 跳过区 (改的时候避开)
+
+| 路径 | 状态 | 说明 |
+|---|---|---|
+| `scripts/collector.py` | 归档 | 旧入口,直接运行打 deprecation 退出。用 `scripts/tasks/collector_main` |
+| `scripts/core/risk_calculator.py` | V4 老版 | V5 用 `scripts/v5_risk_calculator.py`,核心计算在那 |
+| `scripts/diagnose_*.py / check_*.py` | 一次性诊断 | 不在运行时,不要跑 |
+| `Rabbit Hunterfronted/components/pages/V5*` 里 8 个 | legacy | App.tsx 未引用,`/v5/*` 已 redirect 到 pages-v4。改了不生效 |
+| `Rabbit Hunterfronted/components/primitives/` | legacy V2 | 当前用 primitives-v3 |
+| `api/websocket_server.py` | V4 ws | 不主推,主用 websocket_v5 |
+| `scripts/binance_*.py` (除 trader) | 备用 | 主用 OKX。binance 路径需 `EXCHANGE=binance` 才激活 |
+| `Rabbit Hunterfronted/ui/` | 空 | 历史目录 |
+| `data/rabbit_hunter.db.backup-pre-v5.*` / `*.malformed-*` | 备份 | 不要动 |
+| 8 个 `weights_router / system_router / market_router` 注册被 `# TODO(v5)` 注释 | V4.3 残留 | 注释里写 "rewire to SQLite/V5" |
+
+---
+
+## 12. Docker compose 拓扑
+
+```yaml
+services:
+  api:        FastAPI on 127.0.0.1:8000
+  collector:  python -m scripts.tasks.collector_main (no HTTP port)
+  frontend:   nginx 静态前端 on 127.0.0.1:5173 (反代 /api → api:8000)
+
+挂卷:
+  ./data    → /app/data     (SQLite + JSONL + backtest cache)
+  ./reports → /app/reports  (walk-forward 输出)
+```
+
+启动: `docker compose up -d`
+
+---
