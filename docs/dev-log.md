@@ -5,6 +5,10 @@
 
 ## 2026-07
 
+- 2026-07-03 · `f651d16` · +61/-0 · docs(devlog): .githooks/README.md + CLAUDE.md 激活说明
+- 2026-07-03 · `1693dd1` · +1/-7 · chore(devlog): 清 test_seed_devlog.py 未用 imports + 简化误导性注释
+- 2026-07-03 · `1059ecd` · +358/-0 · feat(devlog): seed script + seed v0.5.0 之后全部 commits
+- 2026-07-03 · `777c439` · +9/-0 · docs(readme): 指向 CLAUDE.md 的 dev-log 激活说明 + 验收 commit
 - 2026-07-03 · `5753dd1` · +0/-0 · chore: activate devlog hook (acceptance test)
 - 2026-07-03 · `726e81a` · +1/-2 · chore(devlog): unblock .githooks/lib/ in .gitignore + drop unused pytest import
 - 2026-07-03 · `2ff437d` · +306/-0 · feat(devlog): post-commit hook + update_devlog.py + tests

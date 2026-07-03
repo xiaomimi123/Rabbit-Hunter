@@ -29,6 +29,10 @@ git config --get core.hooksPath
 
 `git commit --amend` 会生成新 SHA。post-commit hook 会为 amend 后的新 commit 再 append 一行，**老 SHA 的孤儿 entry 仍在 dev-log**。amend 后请手工去掉孤儿行（搜索老 SHA7 删除对应行）。
 
+## Working tree drift（正常，不要 checkout 掉）
+
+post-commit hook 追加行到 `docs/dev-log.md` 是**未 staged 状态** —— 下一次 `git commit` 会把这行自动带上。若做 `git checkout -- docs/dev-log.md` 会**丢失刚刚 append 的那行**。看到 `git status` 显示 dev-log.md 有 1 行改动是**正常的**，不用清理。
+
 ## `--no-verify`
 
 `git commit --no-verify` 会跳过 post-commit hook，该 commit 不进 dev-log。当且仅当你 (Claude) 或用户明确要求 opt-out 时使用。
