@@ -33,7 +33,6 @@ from dotenv import load_dotenv
 
 # fail-closed 默认: SL/TP 挂失败时抛异常,让 v5_position_manager 的回滚逻辑生效。
 # fail-open (true) 仅应在已知 OKX 接口不稳定的应急时段开启;那时主仓会成功但保护单可能缺失。
-_SL_TP_FAIL_OPEN = os.environ.get("SL_TP_FAIL_OPEN", "false").lower() in ("1", "true", "yes")
 
 
 # ── 凭据 ─────────────────────────────────────────────────────────────
@@ -473,6 +472,10 @@ class OkxTrader:
         take_profit: Optional[float] = None,
     ) -> Dict[str, Any]:
         """OKX 开仓 — 与 BinanceTrader.open_position 同 surface 同语义。"""
+        from scripts.settings_db import read_sl_tp_fail_open
+        fail_open = read_sl_tp_fail_open(
+            os.environ.get("DB_PATH", "data/rabbit_hunter.db")
+        )
         if side.upper() == "LONG":
             side_ccxt = "buy"
         elif side.upper() == "SHORT":
@@ -530,7 +533,7 @@ class OkxTrader:
         filled_qty = order_result.get("filled") or quantity
 
         # SL/TP 失败 fail-closed: 默认抛异常,让 v5_position_manager 的 try/except 回滚主仓。
-        # fail-open 仅在 SL_TP_FAIL_OPEN=true 时保留主仓 + 在 result 里塞 error 字段。
+        # fail-open 仅在 sl_tp_fail_open=true 时保留主仓 + 在 result 里塞 error 字段。
         result["sl_attached"] = True
         result["tp_attached"] = True
 
@@ -547,7 +550,7 @@ class OkxTrader:
                 print(f"[OKX WARNING] 设置止损失败: {symbol} - {err}")
                 result["stop_loss_error"] = err
                 result["sl_attached"] = False
-                if not _SL_TP_FAIL_OPEN:
+                if not fail_open:
                     raise Exception(f"OKX SL 挂单失败: {err}")
 
         if take_profit:
@@ -563,7 +566,7 @@ class OkxTrader:
                 print(f"[OKX WARNING] 设置止盈失败: {symbol} - {err}")
                 result["take_profit_error"] = err
                 result["tp_attached"] = False
-                if not _SL_TP_FAIL_OPEN:
+                if not fail_open:
                     raise Exception(f"OKX TP 挂单失败: {err}")
 
         print(f"[OKX TRADE] ✅ 开仓成功: {symbol} {side} {float(filled_qty):.4f} @ {result['price']}")

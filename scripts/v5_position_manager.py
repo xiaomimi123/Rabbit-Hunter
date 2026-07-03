@@ -1,7 +1,7 @@
 """V5 LIVE 持仓管理 — 走 Broker(Binance/OKX)真实下单。
 
 fail-closed: 主仓成功 + SL/TP 失败 → 立即市价平回滚。
-fail-open  : SL_TP_FAIL_OPEN=true 时保留主仓,但带 sl_attached=False 标记。
+fail-open  : 运行时 sl_tp_fail_open=true 时保留主仓,但带 sl_attached=False 标记。
 
 HIGH-1+2 修复 (docs/code-audit-report.md):
   - 回滚 broker.close_position() 失败时仍 INSERT positions_v5,
@@ -17,7 +17,6 @@ from datetime import datetime, timezone, timedelta
 
 
 SOFT_TARGET_MINUTES = 15
-SL_TP_FAIL_OPEN = os.environ.get("SL_TP_FAIL_OPEN", "false").lower() in ("1", "true")
 
 
 def _utcnow():
@@ -67,10 +66,13 @@ class V5PositionManager:
                       leverage: int) -> int:
         """LIVE 开仓三阶段状态机:
           阶段 1 主仓 → 失败直接抛(无需写库,无真持仓)
-          阶段 2 SL   → 失败按 SL_TP_FAIL_OPEN 选 fail-closed/fail-open
+          阶段 2 SL   → 失败按 sl_tp_fail_open 选 fail-closed/fail-open
                         fail-closed 时再次失败 → 写库 ERROR_RECONCILE_NEEDED
           阶段 3 TP   → 同上
         """
+        from scripts.settings_db import read_sl_tp_fail_open
+        sl_tp_fail_open = read_sl_tp_fail_open(self.db_path)
+
         position_size_coins = size_usdt / entry_price
         entry_time = _utcnow()
         target_close_at = entry_time + timedelta(minutes=SOFT_TARGET_MINUTES)
@@ -105,7 +107,7 @@ class V5PositionManager:
         except Exception as e_sl:
             sl_attached = False
             error_context["sl_error"] = f"{type(e_sl).__name__}: {e_sl}"
-            if not SL_TP_FAIL_OPEN:
+            if not sl_tp_fail_open:
                 # fail-closed: 回滚主仓
                 try:
                     rb_result = self.broker.close_position(symbol)
@@ -137,8 +139,8 @@ class V5PositionManager:
                         f"SL 失败且回滚失败 (position {pid} 待 reconcile): "
                         f"sl={e_sl}; rollback={e_rb}"
                     )
-            # SL_TP_FAIL_OPEN=true: 保留主仓继续,sl_attached=False
-            print(f"[V5PositionManager] ⚠️  SL 失败但 SL_TP_FAIL_OPEN=true 保留主仓: {e_sl}")
+            # sl_tp_fail_open=true: 保留主仓继续,sl_attached=False
+            print(f"[V5PositionManager] ⚠️  SL 失败但 sl_tp_fail_open=true 保留主仓: {e_sl}")
 
         # ── 阶段 3: TP 挂单 ──────────────────────────────────────────
         try:
@@ -152,7 +154,7 @@ class V5PositionManager:
         except Exception as e_tp:
             tp_attached = False
             error_context["tp_error"] = f"{type(e_tp).__name__}: {e_tp}"
-            if not SL_TP_FAIL_OPEN:
+            if not sl_tp_fail_open:
                 try:
                     rb_result = self.broker.close_position(symbol)
                     if isinstance(rb_result, dict) and not rb_result.get("success"):
@@ -181,7 +183,7 @@ class V5PositionManager:
                         f"TP 失败且回滚失败 (position {pid} 待 reconcile): "
                         f"tp={e_tp}; rollback={e_rb}"
                     )
-            print(f"[V5PositionManager] ⚠️  TP 失败但 SL_TP_FAIL_OPEN=true 保留主仓: {e_tp}")
+            print(f"[V5PositionManager] ⚠️  TP 失败但 sl_tp_fail_open=true 保留主仓: {e_tp}")
 
         # ── 全部 OK (或 fail-open 状态) — 写库 ──────────────────────
         # status: 全 attached → OPEN; 任一缺 (fail-open) → OPEN_DEGRADED

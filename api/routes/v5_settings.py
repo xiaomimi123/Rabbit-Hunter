@@ -9,6 +9,7 @@ from typing import Optional
 
 from fastapi import APIRouter
 
+from scripts.settings_db import read_sl_tp_fail_open
 from api.schemas.v5_settings import (
     SettingsResponse, SettingsPatchRequest,
     TestAIRequest, TestAIResponse,
@@ -76,8 +77,7 @@ async def get_settings() -> SettingsResponse:
                                os.environ.get("ENABLE_AUTO_TRADING", "false")).lower() in ("1", "true")
         ai_fail_open = (_read_setting(conn, "ai_fail_open") or
                         os.environ.get("AI_FAIL_OPEN", "false")).lower() in ("1", "true")
-        sl_tp_fail_open = (_read_setting(conn, "sl_tp_fail_open") or
-                           os.environ.get("SL_TP_FAIL_OPEN", "false")).lower() in ("1", "true")
+        sl_tp_fail_open = read_sl_tp_fail_open(_db())
 
         if deepseek_enabled and deepseek_key_eff:
             active_provider, active_model = "deepseek", os.environ.get("DEEPSEEK_MODEL", "deepseek-chat")
