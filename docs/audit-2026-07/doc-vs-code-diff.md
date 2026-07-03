@@ -47,8 +47,8 @@
 - **建议**: 删除这三行。healthz 现在 `api/main.py` 中直接注册；模式切换改由 `v5_settings.py`；权重/市场相关功能已合并到 `v5_strategy_config.py` 或无专用端点。
 
 ### D-R7. API 路由表缺 v5_trader_kpi.py
-- **位置**: `README.md:119-136`
-- **doc 说**: 列出 14 个路由文件，无 `v5_trader_kpi.py`
+- **位置**: `README.md:119-137`
+- **doc 说**: 列出 17 个路由文件（含 3 个已删除的 v4.3 文件），无 `v5_trader_kpi.py`
 - **实际**: `api/routes/v5_trader_kpi.py` 存在，提供 GET `/api/v5/dashboard/trader-kpi`，是 DashboardPage 和 OverviewPage 的 KPI 数据主源（`architecture-map.md` §一、§六）。
 - **建议**: 在路由表补充一行"| `v5_trader_kpi.py` | KPI 中控（PF / Sharpe / MaxDD / 宪法违规 / AI 健康度）|"
 
@@ -61,7 +61,7 @@
 ### D-R9. /v5/* 重定向行号引用错误
 - **位置**: `README.md:163`
 - **doc 说**: "旧路径 `/v5/*` 全部重定向到新路径（`App.tsx:42-53`）"
-- **实际**: `Rabbit Hunterfronted/App.tsx:42-43` 是 `/manual` 和 `/glossary` 的活跃路由，不是重定向。`/v5/*` 重定向段实为 `App.tsx:46-57`（共 12 条 Navigate 规则，另有 App.tsx:58 的通配符重定向至 /dashboard）。
+- **实际**: `Rabbit Hunterfronted/App.tsx:42-43` 是 `/manual` 和 `/glossary` 的活跃路由，不是重定向。`/v5/*` 重定向段实为 `App.tsx:46-57`（含 11 条 Navigate 重定向 + 1 条活跃 v5/chart route），另有 App.tsx:58 的通配符重定向至 /dashboard）。
 - **建议**: 改为"（`App.tsx:46-57`）"
 
 ---
@@ -96,7 +96,7 @@
 - **位置**: `PROJECT_STRUCTURE.md:152-154`
 - **doc 说**: 数据流图标注 DB 表名 `trade_scores_v43`、`positions_v43`、`orders_history`
 - **实际**: 实际表名为 `trade_scores_v5`（19,636 行）、`paper_trades`（55 行）/ `positions_v5`（0 行 LIVE 路径）；`orders_history` 不在 architecture-map.md 的 19 张关键表中。
-- **建议**: 将数据流图中三处表名改为 `trade_scores_v5`、`paper_trades` / `positions_v5`。
+- **建议**: 将数据流图中三处表名改为 `trade_scores_v5`、`paper_trades` / `positions_v5`；orders_history 无对应替代表 —— 删除该节点标注（或替换为 ws_event_queue：架构图的消息队列节点）。
 
 ### D-P6. §5.2 + §5.3 引用已删除模块 + SNIFFER 不复存在
 - **位置**: `PROJECT_STRUCTURE.md:191`
