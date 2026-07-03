@@ -180,7 +180,7 @@
 #### scripts/deepseek_ai_learner.py
 
 - **版本标记**: V4.2 AI 学习器
-- **外部依赖**: Supabase（`ai_training_data` 的唯一写入者，但写入 Supabase 而非本地 SQLite）
+- **外部依赖**: Supabase 客户端；对 `ai_training_data` 只是 `.select(...)` 读取（详见 § 一，实际 Supabase upsert 位于 `scripts/backfill_p3a_match_and_thr.py:146`，一次性回填已完结）
 - **现状**: `scripts/local_db.py:119` 的 `ai_training_data` 本地 SQLite 表因此永远为 0 行；无 V5 代码 import 此文件
 - **判断**: **建议删除** — V4.2 Supabase AI 学习器，是 `ai_training_data`（本地 SQLite 0 行）问题的根源；V5 学习路径已由 `reflection_runner.py` + `local_rag.py` 负责
 
