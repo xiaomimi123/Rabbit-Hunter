@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# post-commit: append this commit to docs/dev-log.md via update_devlog.py.
+#
+# Spec: docs/superpowers/specs/2026-07-03-phase2-devlog-mechanism-design.md
+# Activate with: git config core.hooksPath .githooks
+set -e
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+LOG_FILE="$REPO_ROOT/docs/dev-log.md"
+UPDATE="$REPO_ROOT/.githooks/lib/update_devlog.py"
+
+SHA7=$(git rev-parse --short HEAD)
+SUBJECT=$(git log -1 --pretty=%s)
+DATE=$(git log -1 --pretty=%as)   # ISO short date (YYYY-MM-DD, author-date)
+
+# Compute +N/-M from --numstat (tab-separated: adds	dels	path). Handles binary (-).
+STATS=$(
+  git show --numstat --format= HEAD \
+    | awk 'BEGIN{a=0;d=0} $1!="-" && $2!="-" {a+=$1; d+=$2} END {printf "+%d/-%d", a, d}'
+)
+
+python3 "$UPDATE" \
+  --log-file "$LOG_FILE" \
+  --sha "$SHA7" \
+  --subject "$SUBJECT" \
+  --date "$DATE" \
+  --stats "$STATS"
