@@ -123,6 +123,7 @@
 - **优先级**: P0
 - **描述**: `V5PositionMonitor._tick()` 第 185-187 行：当 `mode == "LIVE"` 时 `pm = self.live_pm`，若 `live_pm` 为 None（trader 初始化失败时 `collector_main.py` 置 None），则 `if not pm: return` 立即退出，不做任何监控。每 30s 的 tick 均无操作，所有 LIVE 仓位的 SL/TP 触发检查、软时限平仓、信号反转平仓均不执行。
 - **Failure scenario**: OKX API 密钥在 collector 启动时因网络超时初始化失败，`live_pm = None`。系统模式切换至 LIVE 并开仓（若使用另一路径）。Monitor 每 30s 进 _tick 后立即返回，不检查任何仓位。仓位到达软时限后不平仓；行情反转后 RSI/MACD 触发 SIGNAL_REVERSE 不执行；SL 被触发但已 DB 无 paper_pm 路径，LIVE 仓位在交易所自动成交 SL 但 DB 仍为 OPEN，持仓状态永久不一致。
+- **依赖关系**: 此 finding 的 P0 严重性目前是**潜伏**状态 —— 只有在 Finding 4 (`create_order` 缺失) 修复后，LIVE 开仓才能真正落地进 `positions_v5`，本 finding 才成为真实触发路径。修复时应与 Finding 4 同批处理。
 - **Fix 建议**: 不应静默 return，而应：
   1. 日志 WARN 输出当前 LIVE 模式但 `live_pm` 为 None 的异常状态
   2. 尝试重新初始化 trader（`_get_live_trader()`），成功则更新 `self.live_pm`
@@ -291,6 +292,9 @@
       from scripts.exchange_factory import get_trader
       from scripts.v5_position_manager import V5PositionManager
       broker = get_trader()
+      if broker is None:
+          # get_trader() 可能因交易所不可达返回 None（见 collector_main.py:57-61）
+          raise HTTPException(503, "Exchange unavailable — LIVE close unavailable now")
       live_pm = V5PositionManager(broker=broker, db_path=db)
       live_pm.close_position(position_id, exit_price=body.exit_price, exit_reason=body.exit_reason)
       ...
@@ -336,7 +340,7 @@
 
 ## Finding 15: useV5ActivePositions 用 Promise.all 并行拉取，任一失败则两类持仓均不可见
 
-- **位置**: `Rabbit Hunterfronted/hooks/api/useV5ActivePositions.ts:15`
+- **位置**: `Rabbit Hunterfronted/hooks/api/useV5ActivePositions.ts:15-16`
 - **置信度**: CONFIRMED
 - **优先级**: P1
 - **描述**: `useV5ActivePositions` 的 `queryFn` 使用 `Promise.all([live, paper])` 同时请求 `/api/v5/positions?status=OPEN` 和 `/api/v5/paper-positions?status=OPEN`。若任一请求失败（如 LIVE 端点 503 或 paper 端点超时），整个 `Promise.all` rejected，React Query 将整个查询标记为错误，`data` 变为 `undefined`，Dashboard 的活仓表格渲染空白或错误状态，而另一类仓位实际是可用的。
