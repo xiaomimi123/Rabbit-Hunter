@@ -4,6 +4,26 @@
 """
 from datetime import datetime, timezone, timedelta
 import pytest
+from unittest.mock import MagicMock
+
+
+def _make_monitor(paper_pm=None, live_pm=None, db_path=":memory:"):
+    """构造最小 V5PositionMonitor,测 _resolve_pm 时不需要真实依赖。
+
+    db_path=:memory: 用于不涉及 ws_event_queue 的路径；否则传 tmp_path 建的真库。
+    """
+    from scripts.v5_position_monitor import V5PositionMonitor
+    from scripts.local_db import init_local_db
+    if db_path != ":memory:":
+        init_local_db(db_path)
+    return V5PositionMonitor(
+        paper_pm=paper_pm or MagicMock(),
+        live_pm=live_pm,
+        ai_assistant=MagicMock(),
+        indicator_fetcher=MagicMock(),
+        mode_resolver=lambda: "LIVE",
+        db_path=db_path,
+    )
 
 
 def _open_position(side="SHORT", entry=0.166, sl=0.169, tp=0.162,
@@ -147,3 +167,84 @@ def test_check_exit_triggers_still_hits_sl_for_manual():
               "macd_hist_15m": -0.001, "macd_hist_prev_15m": -0.002}
     intent = check_exit_triggers(position, market)
     assert intent is not None and intent["exit_reason"] == "SL_HIT"
+
+
+def test_resolve_pm_shadow_returns_paper():
+    paper = MagicMock(name="paper")
+    monitor = _make_monitor(paper_pm=paper, live_pm=None)
+    assert monitor._resolve_pm("SHADOW") is paper
+
+
+def test_resolve_pm_live_returns_live_when_set():
+    live = MagicMock(name="live")
+    monitor = _make_monitor(paper_pm=MagicMock(), live_pm=live)
+    assert monitor._resolve_pm("LIVE") is live
+
+
+def test_resolve_pm_live_recovers_via_get_trader(tmp_path, monkeypatch):
+    """live_pm=None + get_trader mock 返 fake trader → self.live_pm 被替换。"""
+    from scripts.local_db import init_local_db
+    db = str(tmp_path / "test.db")
+    init_local_db(db)
+
+    monitor = _make_monitor(live_pm=None, db_path=db)
+
+    fake_trader = MagicMock(name="trader")
+    monkeypatch.setattr(
+        "scripts.exchange_factory.get_trader", lambda: fake_trader
+    )
+    result = monitor._resolve_pm("LIVE")
+
+    assert result is monitor.live_pm     # 已被替换
+    assert monitor.live_pm is not None   # 显式再断一次
+
+
+def test_resolve_pm_live_fails_emits_ws_event(tmp_path, monkeypatch):
+    """get_trader 返 None → 返 None + ws_event_queue 一行 monitor_degraded。"""
+    import sqlite3
+    from scripts.local_db import init_local_db
+    db = str(tmp_path / "test.db")
+    init_local_db(db)
+
+    monitor = _make_monitor(live_pm=None, db_path=db)
+    monkeypatch.setattr(
+        "scripts.exchange_factory.get_trader", lambda: None
+    )
+
+    result = monitor._resolve_pm("LIVE")
+    assert result is None
+
+    conn = sqlite3.connect(db)
+    row = conn.execute(
+        "SELECT payload_json FROM ws_event_queue"
+    ).fetchone()
+    conn.close()
+    assert row is not None
+    assert "monitor_degraded" in row[0]
+    assert "live_pm_unavailable" in row[0]
+
+
+def test_resolve_pm_live_recovery_exception_still_returns_none(tmp_path, monkeypatch):
+    """get_trader 抛异常 → helper 不抛,返 None + ws 事件里 error 字段非空。"""
+    import sqlite3
+    from scripts.local_db import init_local_db
+    db = str(tmp_path / "test.db")
+    init_local_db(db)
+
+    monitor = _make_monitor(live_pm=None, db_path=db)
+
+    def raiser():
+        raise RuntimeError("network timeout")
+    monkeypatch.setattr("scripts.exchange_factory.get_trader", raiser)
+
+    result = monitor._resolve_pm("LIVE")
+    assert result is None
+
+    conn = sqlite3.connect(db)
+    row = conn.execute(
+        "SELECT payload_json FROM ws_event_queue"
+    ).fetchone()
+    conn.close()
+    assert row is not None
+    assert "RuntimeError" in row[0]
+    assert "network timeout" in row[0]

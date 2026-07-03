@@ -180,10 +180,52 @@ class V5PositionMonitor:
                 print(f"[V5PositionMonitor] tick 异常: {type(e).__name__}: {e}")
             await asyncio.sleep(self.poll_interval_s)
 
+    def _resolve_pm(self, mode: str):
+        """解析本 tick 用哪个 pm。LIVE 且 live_pm=None 时尝试恢复。
+
+        Returns pm or None (caller should skip this tick if None).
+        恢复失败会写 ws_event_queue monitor_degraded 事件。
+        """
+        if mode == "SHADOW":
+            return self.paper_pm
+
+        # LIVE 分支
+        if self.live_pm is not None:
+            return self.live_pm
+
+        # live_pm=None → 尝试重建
+        print("[V5PositionMonitor] WARN: LIVE mode but live_pm is None; "
+              "attempting trader re-init")
+        try:
+            from scripts.exchange_factory import get_trader
+            from scripts.v5_position_manager import V5PositionManager
+            trader = get_trader()
+        except Exception as e:
+            print(f"[V5PositionMonitor] trader re-init failed: "
+                  f"{type(e).__name__}: {e}")
+            _enqueue_ws(self.db_path, {
+                "type": "monitor_degraded",
+                "reason": "live_pm_unavailable",
+                "error": f"{type(e).__name__}: {e}",
+            })
+            return None
+
+        if trader is None:
+            _enqueue_ws(self.db_path, {
+                "type": "monitor_degraded",
+                "reason": "live_pm_unavailable",
+                "error": "get_trader() returned None",
+            })
+            return None
+
+        self.live_pm = V5PositionManager(broker=trader, db_path=self.db_path)
+        print("[V5PositionMonitor] LIVE trader re-init OK; resuming monitoring")
+        return self.live_pm
+
     async def _tick(self):
         mode = self.resolve_mode()
-        pm = self.paper_pm if mode == "SHADOW" else self.live_pm
-        if not pm:
+        pm = self._resolve_pm(mode)
+        if pm is None:
             return
         for position in pm.get_open_positions():
             try:
