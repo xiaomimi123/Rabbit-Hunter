@@ -162,10 +162,13 @@
 - **Failure scenario**: SQLite 在高写入负载下返回 `database is locked`，导致 `_write_trade_score`（`scripts/tasks/scorer.py:141`）内 `conn.execute(...)` 抛出 `OperationalError`。该异常未在 `process_enriched_v5` 内被捕获，冒泡到第 464 行，打印 `[V5Scorer] XYZUSDT 处理异常`。该 enriched item 的全部中间状态（已通过规则层、已请求 AI）丢失，无记录。`_healthcheck_loop` 的"5 分钟无写入"告警在高频场景下可能延迟触发。
 - **相关代码**:
   ```python
-  # scripts/tasks/scorer.py:460-465
-  await process_enriched_v5(
-      enriched=enriched, ai=self.ai, ...
-  )
+  # scripts/tasks/scorer.py:456-465
+  try:
+      mode = self.resolve_mode()
+      balance = self.fetch_balance()
+      await process_enriched_v5(
+          enriched=enriched, ai=self.ai, ...
+      )
   except Exception as e:
       print(f"[V5Scorer] {enriched.symbol} 处理异常: {type(e).__name__}: {e}")
   ```
