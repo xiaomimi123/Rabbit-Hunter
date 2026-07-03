@@ -71,7 +71,7 @@
 - `096505f` feat(exchange): pluggable market-data source — Binance/OKX backends via EXCHANGE env
 - `8b90c75` feat(exchange): OkxTrader + exchange_factory + frontend active-exchange badge
 - `4c02019` feat(config): unified Exchange + AI configuration with DB-backed persistence
-- `4414d10` feat(shadow): make SHADOW mode a real paper-trading loop, end-to-end
+- `d414d10` feat(shadow): make SHADOW mode a real paper-trading loop, end-to-end
 - `5802c57` feat(settings): AI connection test endpoint + button
 - `31a70e4` feat(ai): make SettingsPage AI config actually wire up + auto-upload memory
 
@@ -139,9 +139,9 @@
 - `fc40ca8` fix(audit HIGH-1+2): v5_position_manager 三阶段状态机 + ERROR_RECONCILE_NEEDED
 - `7187aeb` fix(audit HIGH-3,4): OkxTrader fail-closed + AIResult.error_kind 枚举
 - `e5b6de2` fix(collector): _system_mode 是 ghost call，改为 _resolve_mode_db
-- `f396ccc` fix(constitution): SHORT/risk/leverage 默认值对齐宪法 + 杠杆反推
-- `de6101d` fix(KnowledgePage): ValidateModal still read sync ValidationResult fields after async refactor
-- `4f1e80d` fix(scorer): SHADOW mode pass-through on AI infra errors (DeepSeek 余额不足)
+- `4f1e80d` fix(constitution): SHORT/risk/leverage 默认值对齐宪法 + 杠杆反推
+- `f396ccc` fix(KnowledgePage): ValidateModal still read sync ValidationResult fields after async refactor
+- `de6101d` fix(scorer): SHADOW mode pass-through on AI infra errors (DeepSeek 余额不足)
 - `f415179` fix(M9 + scorer): WF 验证异步化 + 扫描开关实时生效
 - `20bcc00` fix(HeaderBar): scope symbol selector + price block to symbol-aware routes only
 - `5e250f8` fix(MarketPage): normalize symbol for funding/signal lookup
