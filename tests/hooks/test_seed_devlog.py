@@ -3,10 +3,7 @@
 Run: pytest tests/hooks/test_seed_devlog.py -v
 """
 import subprocess
-import sys
 from pathlib import Path
-
-import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SEED_SCRIPT = REPO_ROOT / ".githooks" / "seed-devlog.sh"
@@ -60,10 +57,7 @@ def test_seed_5_commits(tmp_path):
     # 5 commits should produce 5 entry lines (the first-sha itself is excluded
     # by the range convention `first..HEAD`; we include the range endpoint).
     entry_lines = [l for l in log.split("\n") if l.startswith("- 2026-")]
-    # first..HEAD excludes first, includes commits 2..5 → 4 lines.
-    # If the seed script uses `first_sha..HEAD` semantics, expect 4.
-    # If it inclusively seeds from first_sha, expect 5.
-    # Test expects the git-range convention: exclusive of first_sha, i.e. 4 entries.
+    # With 5 commits, `first_sha..HEAD` excludes commit 0, seeding commits 1–4 → 4 entries.
     assert len(entry_lines) == 4
 
 
