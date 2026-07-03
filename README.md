@@ -4,7 +4,7 @@
 
 > **默认安全态：SHADOW（影子）模式**。
 > 全新克隆后开箱即用，所有信号写入 `paper_trades`，**不触及真实账户**。
-> 要切真实下单，明确把 `.env` 里 `ENABLE_AUTO_TRADING=true`，并通过 `/system/mode` 接口或前端 Settings 页切到 LIVE。
+> 要切真实下单，明确把 `.env` 里 `ENABLE_AUTO_TRADING=true`，并通过前端 Settings 页或 `PATCH /api/v5/settings` 接口（key: `system_mode`）切到 LIVE。
 
 > **v45 入口约定**：唯一受支持的采集器入口是 `python -m scripts.tasks.collector_main`。
 > 旧的 `scripts/collector.py` 已彻底删除。
@@ -149,6 +149,7 @@ React 19 + Vite 6 + TypeScript + TailwindCSS + Zustand + React Query。
 | `/market` | 市场扫描 |
 | `/collect` | 数据采集监控 |
 | `/learning` | 学习层 |
+| `/learning-v2` | 早期学习/反思页面（历史遗留）|
 | `/backtest` | Walk-forward 报告（M6） |
 | `/knowledge` | 候选规则 + 书籍管理（M9） |
 | `/audit` | 反思 / 审计 |
@@ -159,23 +160,21 @@ React 19 + Vite 6 + TypeScript + TailwindCSS + Zustand + React Query。
 | `/manual` | 手动下单 |
 | `/glossary` | 术语表 |
 
-旧路径 `/v5/*` 全部重定向到新路径（`App.tsx:46-57`）。
+旧路径 `/v5/*` 重定向到新路径（`App.tsx:46-56`），`/v5/chart/:symbol` 保留 (`App.tsx:57`)。
 
 ---
 
 ## 交易策略
 
-> 以下默认数值取自 v4.3/v4.4 时代。`v5_risk_calculator` 与 `v5_strategy_config` 路由可能暴露更动态的阈值，精确数值以代码为准。
+### v5 交易策略（三 mode）
 
-### SNIPER（狙击手）
-- 目标：P3A 早期拉升
-- 方向：做多
-- 默认 SL：2.0x ATR；TP：3.0x ATR
+`scripts/v5_strategy.py` 定义三种入场判定模式（详见 `PROJECT_STRUCTURE.md § 五` 与 `scripts/v5_strategy.py`）：
 
-### VULTURE（秃鹫）
-- 目标：P3B / P4 出货
-- 方向：做空（**默认禁用**，需 `ENABLE_SHORT_TRADING=true`）
-- 默认 SL：1.5x ATR；TP：2.5x ATR
+- **`and_strict`**: 全指标同向一致才入场（保守；RSI + MACD + 结构 + 趋势齐验）
+- **`trend_aligned`**: 长期趋势方向一致 + 短期节奏配合（顺势）
+- **`macd_reversal_long`**: MACD 反转判定（拐点狙击）
+
+三 mode 通过 `strategy_config.json` 里 `enabled_modes` 白名单开关。历史遗留的 SNIPER / VULTURE 命名已在 v0.5.x-dev 期间退役（见 `docs/audit-2026-07/dead-code-and-tables.md`）。
 
 ### 风控宪法（`risk_constitution.py` + `guardrails.py`，AI 无法突破）
 - SL 倍数：1.2x – 3.0x ATR

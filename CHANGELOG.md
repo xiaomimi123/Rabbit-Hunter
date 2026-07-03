@@ -8,6 +8,7 @@
 > 这一段没有正式 release tag，是 v0.5.0 之后累积的所有变更。
 > 按 conventional commit type 分组，同类里按主题聚簇。
 > 完整 git log: `git log ad19ca1..HEAD`
+> 窗口截点: 生成于 2026-07-03 Phase 1 结束时 (HEAD=9101699)。同期 doc-vs-code-diff.md 记录的 "190 commits" 是 Phase 0 生成时的快照，两者相差 15 条自身生成的 docs commits，不矛盾。
 
 ### feat（103 条）
 
