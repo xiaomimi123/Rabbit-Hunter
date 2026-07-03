@@ -1,0 +1,224 @@
+# Rabbit-Hunter Dev Log
+
+> 每个 git commit 自动 append。post-commit hook 生成，无人工整理。
+> 与 CHANGELOG.md 的区别：CHANGELOG 是筛选后的人可读版本；dev-log 是全部 commit 的机器可读时间线。
+
+## 2026-07
+
+- 2026-07-03 · `726e81a` · +1/-2 · chore(devlog): unblock .githooks/lib/ in .gitignore + drop unused pytest import
+- 2026-07-03 · `2ff437d` · +306/-0 · feat(devlog): post-commit hook + update_devlog.py + tests
+- 2026-07-03 · `9c88d25` · +915/-0 · docs(plan): Phase 2 dev-log mechanism implementation plan
+- 2026-07-03 · `ed48c44` · +163/-0 · docs(spec): Phase 2 dev-log 自动记录机制 design
+- 2026-07-03 · `0b42f09` · +2/-2 · docs(readme): ASCII 图 V4.3/V4.4 SNIPER/VULTURE → V5Scorer 三 mode
+- 2026-07-03 · `1eb344d` · +11/-13 · docs: final review fixes — README /system/mode + SNIPER→v5 modes + 4 minors
+- 2026-07-03 · `9101699` · +9/-10 · docs(readme): 定点刷新过时段落（doc-vs-code-diff shopping list）
+- 2026-07-03 · `fd2ba6b` · +4/-4 · docs(changelog): fix 3-way SHA rotation in fix section + typo 4414d10→d414d10
+- 2026-07-03 · `e567171` · +249/-0 · docs(changelog): 补 v0.5.1 → HEAD 205 commits，按 type + 主题分组
+- 2026-07-03 · `2d092ac` · +4/-0 · docs(structure): §七 §九 加回 architecture-map 反向引用
+- 2026-07-03 · `2ccfaef` · +327/-417 · docs(structure): 刷新 PROJECT_STRUCTURE.md 对齐 v0.5.x → HEAD
+- 2026-07-03 · `98d0516` · +153/-513 · docs: 合并 docs/project-structure.md 独有段落到 PROJECT_STRUCTURE.md 并删除重复
+- 2026-07-03 · `68242ac` · +4/-4 · docs(audit): fix D-R7 range + D-R9 count + D-P5 orders_history clarity
+- 2026-07-03 · `8d6a2dc` · +200/-1 · docs(audit): doc-vs-code-diff — Phase 1 的 shopping list
+- 2026-07-03 · `8b13b24` · +7/-4 · docs(audit): tech-debt Finding 8 snippet 加回 try: 行避免误读为语法错
+- 2026-07-03 · `8cbb9db` · +213/-1 · docs(audit): tech-debt — findings + CONFIRMED/PLAUSIBLE + failure scenarios
+- 2026-07-03 · `9f68064` · +1/-1 · docs(audit): dead-code § 二 deepseek_ai_learner 与 § 一 保持一致
+- 2026-07-03 · `6df98cd` · +5/-3 · docs(audit): fix ai_training_data write-path citation across Task 2+3 + note strategy_config dup
+- 2026-07-03 · `a4f6403` · +300/-1 · docs(audit): dead-code-and-tables — 0 行表 + 无调用者模块 + 未读 config 字段
+- 2026-07-03 · `c8578e6` · +2/-3 · docs(audit): fix KnowledgePage hooks + refresh funding_rates count
+- 2026-07-03 · `42dc896` · +1/-1 · docs(plan): fix existence-check regex to include digits
+- 2026-07-03 · `ff32991` · +317/-1 · docs(audit): architecture-map — 后端/前端目录 + 数据流 + DB 读写路径
+- 2026-07-02 · `e247ef1` · +36/-0 · docs(audit): 体检目录 + index 骨架
+- 2026-07-02 · `d894917` · +928/-0 · docs(plan): 项目全面体检 + 开发文档刷新 implementation plan
+- 2026-07-02 · `9385ee1` · +109/-0 · docs(spec): 项目全面体检 + 开发文档刷新 design (Phase 0/1/2)
+
+## 2026-06
+
+- 2026-06-28 · `1c3304a` · +1/-3 · chore(sidebar): 移除深链区"中控仪表 V2"和"手动开单"入口
+- 2026-06-28 · `20e5bca` · +86/-0 · experiment(BTC trend-follow): 用户复审 — max_hold/SL/TP grid + 独立期验证 → 证伪加固
+- 2026-06-28 · `98c4fa1` · +213/-6 · experiment(M9 候选): BTC 顺势 Pine 翻译 + 4 组 wf 对照 → 证伪
+- 2026-06-28 · `a1cbb72` · +203/-7 · fix(KnowledgePage): 加"导入书籍" UI Modal — 后端早就有但前端没暴露
+- 2026-06-27 · `0df24d3` · +975/-189 · feat(ui v2): BacktestPage 实验台 + Overview 回撤监控区 + walkforward POST API
+- 2026-06-27 · `b3e4c3f` · +118/-9 · feat(paper config): 应用最优出场 — max_hold=240min + SIGNAL_REVERSE 30min 最短门槛
+- 2026-06-27 · `3531a42` · +154/-0 · experiment: max-hold 6 档扫描 — 找到甜蜜点 = 240 min (PF 顶 + 周转最快)
+- 2026-06-27 · `ff9d454` · +67/-3 · feat(params): v5_max_extensions default 3 → 30 (paper 一周观察验证 α 方向)
+- 2026-06-27 · `0780a69` · +92/-0 · experiment: max-hold 时间窗对照 — 找到 paper PF 0.77 vs backtest 2.08 主因
+- 2026-06-27 · `fc40ca8` · +178/-42 · fix(audit HIGH-1+2): v5_position_manager 三阶段状态机 + ERROR_RECONCILE_NEEDED
+- 2026-06-27 · `7187aeb` · +41/-12 · fix(audit HIGH-3,4): OkxTrader fail-closed + AIResult.error_kind 枚举
+- 2026-06-27 · `261ca60` · +375/-9 · chore: 死代码 Phase 1 清理 (-26 文件) + 审计报告
+- 2026-06-27 · `ba605de` · +714/-943 · feat(ui): 把 4 个 V2 有用页面接入 V3,Sidebar 主导航扩到 8 项
+- 2026-06-27 · `a1b9f27` · +1406/-421 · feat(ui): V3 UI 原型落地 — 4 页面重写 + 宪法签名条 + 模式指示器
+- 2026-06-27 · `c0f3721` · +513/-0 · docs: 加项目结构 + 设计优化接缝指南
+- 2026-06-27 · `dac27ff` · +4842/-7 · feat(experiment): 出场对照实验 (维加斯通道 vs 固定 ATR 倍数)
+- 2026-06-27 · `3ccc848` · +56/-56 · style(ui): sweep 剩 3 个 live 页面到 Field Instrument tokens
+- 2026-06-27 · `ac3f852` · +270/-270 · style(ui): pages-v4 11 个页面 sweep 到 Field Instrument tokens
+- 2026-06-27 · `7c1c51d` · +866/-243 · feat(ui): 交易员中控 Dashboard + Field Instrument tokens 全面落地
+- 2026-06-27 · `a1eb7bd` · +182/-8 · feat(strategy): 加 macd_reversal_long mode (Variant B 实验落地)
+- 2026-06-27 · `49f450c` · +34469/-15 · feat(experiment): MACD 进场时机对照实验 + 22→17 symbol 双 OOS 验证
+- 2026-06-26 · `7cf55b2` · +24/-8 · feat(whitelist): 扩展高流动性白名单到 25 个 (+6 加密主流)
+- 2026-06-25 · `e5b6de2` · +1/-1 · fix(collector): _system_mode 是 ghost call,改为 _resolve_mode_db
+- 2026-06-23 · `4f1e80d` · +895/-153 · fix(constitution): SHORT/risk/leverage 默认值对齐宪法 + 杠杆反推
+- 2026-06-22 · `f396ccc` · +10/-14 · fix(KnowledgePage): ValidateModal still read sync ValidationResult fields after async refactor
+- 2026-06-22 · `0aa5c83` · +424/-26 · feat(UI): 侧栏精简 6 项 + 仪表盘 OKX 资产 + 修复 BacktestPage TypeError
+- 2026-06-22 · `de6101d` · +163/-5 · fix(scorer): SHADOW mode pass-through on AI infra errors (DeepSeek 余额不足)
+- 2026-06-22 · `f415179` · +283/-13 · fix(M9 + scorer): WF 验证异步化 + 扫描开关实时生效
+- 2026-06-22 · `20bcc00` · +11/-2 · fix(HeaderBar): scope symbol selector + price block to symbol-aware routes only
+- 2026-06-22 · `5e250f8` · +8/-2 · fix(MarketPage): normalize symbol for funding/signal lookup
+- 2026-06-22 · `44330fc` · +10/-5 · fix(okx encoder): tolerate slash format for binance_symbol_to_okx_inst
+- 2026-06-22 · `ffce6f1` · +2/-1 · fix(HeaderBar): bump kline limit 2 → 10 to satisfy backend ge=10 validator
+- 2026-06-21 · `3121a46` · +1564/-1 · feat(M9): 策略书籍知识层 + 候选规则审核闸门
+- 2026-06-21 · `45eea56` · +82/-2 · fix(M6 CLI): handle None profit_factor in print format
+- 2026-06-21 · `69382b3` · +1265/-42 · feat(M6): 写实成本模型 + walk-forward + 前端报告查看
+- 2026-06-21 · `b533d8a` · +380/-1 · feat(M3/M8 frontend): 宪法 + setup_performance 透明化
+- 2026-06-21 · `2297b93` · +336/-6 · feat(M8): setup_performance 自动剪枝 + 运行时禁用清单
+- 2026-06-21 · `da4d291` · +253/-4 · feat(M5): RR 硬锁 + Chandelier 移动止损
+- 2026-06-21 · `7413601` · +730/-5 · feat(M3): 阶段0立宪 + 铁律层硬断言
+- 2026-06-21 · `a664418` · +2/-2 · fix(klines/events): URL-encode slash → underscore to match backend route
+- 2026-06-21 · `20735df` · +1722/-164 · ui(v4): 1:1 architectural port from cryptoquant-ai reference
+- 2026-06-21 · `07e40c4` · +1258/-1333 · ui(v3): convert all remaining 10 pages to cryptoquant-ai style
+- 2026-06-21 · `e734081` · +371/-204 · ui(v3-sample): redesign V5SignalsPage as dense data table
+- 2026-06-21 · `8964a25` · +470/-341 · ui(v3-sample): Dashboard sample in cryptoquant-ai style (zinc + indigo)
+- 2026-06-21 · `90e2d64` · +140/-38 · fix(network): retry wrapper around all OKX HTTP calls in live pipeline
+- 2026-06-19 · `9adeb8f` · +33/-14 · feat(check): --start-date flag for trial cutoff date
+- 2026-06-19 · `1adb63c` · +455/-0 · feat(safety): SHADOW → LIVE promotion hard gates + auto-check script
+- 2026-06-19 · `67549f2` · +54/-3 · fix(ai): TradingAssistant hot-reload key + DB-first DeepSeek (no more stale clients)
+- 2026-06-18 · `5802c57` · +218/-6 · feat(settings): AI connection test endpoint + button
+- 2026-06-18 · `68c2aff` · +2/-2 · fix(manual-order): URL params are 'symbol' and 'side', not Chinese keys
+- 2026-06-18 · `5dd0ac4` · +19/-6 · feat(scanner+whitelist): 100M USDT mover floor + XAU exclude + drop MATIC
+- 2026-06-18 · `e0b9786` · +150/-136 · ui+ai: switch to system fonts; translate English labels; reflection in Chinese
+- 2026-06-18 · `ca39709` · +31/-16 · fix(collector): silence fetch_balance noise in SHADOW + move trial config to env
+- 2026-06-18 · `168e6b3` · +90/-0 · docs: SHADOW trial contract for exp3b 2-week verification
+- 2026-06-18 · `cba2d08` · +1/-1 · feat(strategy): live scorer passes funding_z to decide() for filter activation
+- 2026-06-18 · `cc8f46b` · +283/-42 · feat(strategy): funding anti-pile filter + backtest sim bug fix
+- 2026-06-18 · `035d68a` · +110/-0 · experiment(backtest): funding z-score threshold 2.0 vs 1.5 (revert)
+- 2026-06-18 · `a8113be` · +212/-20 · feat(backtest): requests + larger retry budget, README, 30d baseline
+- 2026-06-18 · `9e4b03f` · +66/-15 · fix(backtest): manual urllib retry + skip missing OKX instruments
+- 2026-06-18 · `2bf0134` · +180/-0 · feat(backtest): CLI entry point
+- 2026-06-18 · `7a0acee` · +224/-0 · feat(backtest): reporter + aggregator
+- 2026-06-18 · `f69b3d6` · +709/-0 · feat(backtest): BacktestRunner orchestration loop
+- 2026-06-18 · `6c51b71` · +342/-0 · feat(backtest): schemas + position_sim
+- 2026-06-18 · `c4edefb` · +219/-0 · feat(backtest): kline_fetcher with OKX history + JSON disk cache
+- 2026-06-18 · `1a9098f` · +135/-0 · feat(funding): compute_zscore_as_of for backtest historical replay
+- 2026-06-18 · `1cf3b26` · +1585/-0 · spec+plan: backtest engine MVP (CLI, 8 tasks)
+- 2026-06-18 · `77362bb` · +26/-6 · fix(api+ui): raise signals limit to 5000; Settings save feedback
+- 2026-06-18 · `d4147ba` · +111/-97 · ui(v2): Phase 7+8 — V5GlossaryPage + final cleanup
+- 2026-06-18 · `8c0b321` · +475/-210 · ui(v2): Phase 7.1 — V5SettingsPage + V5ManualOrderPage
+- 2026-06-18 · `0f5c740` · +110/-67 · ui(v2): Phase 6.4 — V5StrategyConfigPage rewrite
+- 2026-06-18 · `4babe30` · +98/-80 · ui(v2): Phase 6.3 — V5ChartPage + IndicatorOverlayChart re-skin
+- 2026-06-18 · `06b6d56` · +278/-113 · ui(v2): Phase 6.2 — V5OrderHistoryPage + V5SignalHistoryPage
+- 2026-06-18 · `c09f878` · +267/-211 · ui(v2): Phase 6.1 — V5ReflectionPage rewrite (3 tabs)
+- 2026-06-18 · `bed28ff` · +246/-100 · ui(v2): Phase 5.3 — V5SignalsPage rewrite
+- 2026-06-18 · `c2c157c` · +318/-199 · ui(v2): Phase 5.2 — V5AIStatusPage rewrite, kill HoloCard
+- 2026-06-18 · `03ace09` · +225/-83 · ui(v2): Phase 5.1 — V5ActivePositionsPage + ActivePositionCard
+- 2026-06-18 · `1e21b28` · +383/-168 · ui(v2): Phase 4 — V5DashboardPage rewrite (flagship)
+- 2026-06-18 · `1cb5a0a` · +161/-84 · ui(v2): Phase 3 primitives — Card/Badge/KpiCard/ProgressBar/etc
+- 2026-06-18 · `3e738ab` · +90/-69 · ui(v2): Phase 2 shell — Sidebar + TopBar + AppShell
+- 2026-06-18 · `6908a7b` · +235/-78 · ui(v2): Phase 1 foundation — fonts + tokens + Tailwind + CSS + Aperture
+- 2026-06-18 · `9c447e8` · +1141/-0 · plan: V2 Field Instrument UI migration (23 tasks, 8 phases)
+- 2026-06-18 · `22aa696` · +1287/-0 · design(v2): add ActivePositions + AIStatus preview pages
+- 2026-06-18 · `dea9232` · +1356/-0 · design(v2): Field Instrument visual direction + Dashboard preview
+- 2026-06-18 · `843e103` · +750/-0 · docs: UI design brief for AI generation
+- 2026-06-18 · `600fdd9` · +37/-1 · chore(v6): verify_v5_acceptance covers Funding Phases 1-6 schema
+- 2026-06-18 · `967476b` · +99/-0 · feat(v6): reflection card + dashboard setup breakdown 显示 funding
+- 2026-06-18 · `10e9e11` · +105/-0 · feat(v6): AI Status FundingHeatmapCard
+- 2026-06-18 · `2281570` · +186/-0 · feat(v6): GET /api/v5/funding/status + /history/{symbol}
+- 2026-06-18 · `1d7c1ec` · +168/-5 · feat(v6): reflection 集成 funding_z_score_at_entry
+- 2026-06-18 · `92afd73` · +138/-0 · feat(v6): trading_assistant 注入 funding context 到 AI prompt
+- 2026-06-18 · `b183ebf` · +64/-3 · feat(v6): failure_taxonomy 真正用上 funding_z_score
+- 2026-06-17 · `4a2f4e5` · +138/-9 · feat(v6): scorer 注入 funding_z_score → trade_scores_v5
+- 2026-06-17 · `9922a13` · +66/-8 · feat(v6): setup_type 派生 funding_extreme_* 分支
+- 2026-06-17 · `d961472` · +498/-0 · feat(v6): V5FundingCollector worker + z-score calculator
+- 2026-06-17 · `c3c4886` · +204/-0 · feat(v6): OKX public funding API client + symbol mapping
+- 2026-06-17 · `0b7d0d0` · +139/-0 · feat(v6): DB schema for funding_rates + zscore_cache + ALTER
+- 2026-06-17 · `43f54d9` · +2826/-0 · docs(v6): funding rate phases 1-6 implementation plan (12 tasks, ~44 BE tests)
+- 2026-06-17 · `1165342` · +634/-0 · docs(v6): funding rate design spec
+- 2026-06-17 · `4b4cfbc` · +21/-2 · fix(v5.1): deep_collector also enriches top-20 each cycle (not just movers)
+- 2026-06-17 · `a7e0d6f` · +180/-0 · feat(v5.1): top-20 USDT perp whitelist filter (default on)
+- 2026-06-16 · `a4cb4c3` · +301/-27 · feat(v5.1): trend_aligned strategy mode (Plan C) — default
+- 2026-06-16 · `7f1a549` · +7/-0 · fix(reflection): enqueue reflection after manual /positions/:id/close
+- 2026-06-15 · `47c0e37` · +34/-1 · chore(reflection): verify_v5_acceptance covers Phases 1-3 schema
+- 2026-06-15 · `c43bb09` · +451/-6 · feat(reflection): Phase 3 APIs + frontend Tab 3 + AI calibration curve
+- 2026-06-15 · `e69c8f6` · +212/-1 · feat(reflection): fractional Kelly sizing engine + weekly cron
+- 2026-06-15 · `48de020` · +208/-10 · feat(reflection): AI confidence calibration
+- 2026-06-15 · `2aed5b4` · +263/-0 · feat(reflection): daily aggregator by setup_type + worker cron
+- 2026-06-15 · `3d848c2` · +159/-4 · feat(reflection): GET /failure-taxonomy + Tab 2 (失败模式分布)
+- 2026-06-15 · `c5f17ca` · +146/-3 · feat(reflection): trading_assistant veto on failure_taxonomy match
+- 2026-06-15 · `9e8b079` · +253/-0 · feat(reflection): failure_taxonomy matcher with 8 handlers
+- 2026-06-15 · `158c90f` · +171/-0 · feat(reflection): failure_taxonomy 表 + 8 种子模式
+- 2026-06-15 · `26b5a7a` · +375/-1 · feat(reflection): GET /api/v5/reflections + 复盘工作台 Tab 1
+- 2026-06-15 · `7071041` · +275/-0 · feat(reflection): V5ReflectionWorker 进程 + enqueue 集成
+- 2026-06-15 · `94ba7c6` · +360/-0 · feat(reflection): runner — load context → AI → validate → persist
+- 2026-06-15 · `c4eb04d` · +227/-0 · feat(reflection): 5 问 prompt builder + Pydantic schemas
+- 2026-06-15 · `3f32918` · +212/-0 · feat(reflection): DB schema (reflection_queue + reflections) + setup_type 派生
+- 2026-06-15 · `43a9415` · +4465/-0 · docs(reflection): Phases 1-3 implementation plan (14 tasks, ~65 BE tests)
+- 2026-06-15 · `9811a6e` · +824/-0 · docs(reflection): Reflection Worker design spec
+- 2026-06-13 · `fa7a895` · +190/-24 · feat(chart): synchronized crosshair across K/RSI/MACD + hover data row
+- 2026-06-13 · `ec7864c` · +331/-17 · feat(frontend): glossary tooltips on jargon + /v5/glossary page
+- 2026-06-13 · `6ed160a` · +482/-24 · feat(dashboard): 24h 胜率分项 (by side / strategy / exit reason)
+- 2026-06-13 · `b5aaea6` · +51/-5 · fix(v5): manual orders survive SIGNAL_REVERSE in position monitor
+- 2026-06-13 · `8bb81a5` · +96/-102 · fix(frontend): align types/hooks/pages with actual API shape
+- 2026-06-12 · `d1fa459` · +10/-0 · fix(nginx): proxy /ws/v5 to api:8000 for V5 WebSocket upgrade
+- 2026-06-12 · `c3f7b89` · +19/-1 · chore(v5): verify_v5_acceptance covers Plan B-2 frontend dist
+- 2026-06-12 · `daaa2ac` · +287/-3 · feat(frontend): V5ManualOrderPage + V5ChartPage
+- 2026-06-12 · `5d0bb0d` · +245/-4 · feat(frontend): V5StrategyConfigPage + V5SettingsPage
+- 2026-06-12 · `31b91ef` · +158/-2 · feat(frontend): V5DashboardPage + V5AIStatusPage
+- 2026-06-12 · `a2c97ff` · +220/-3 · feat(frontend): V5ActivePositionsPage + V5OrderHistoryPage
+- 2026-06-12 · `6711927` · +288/-4 · feat(frontend): V5SignalsPage + V5SignalHistoryPage
+- 2026-06-12 · `2ae9b3b` · +246/-13 · feat(frontend): AppShell + Sidebar + TopBar + routing + placeholders
+- 2026-06-12 · `3626689` · +260/-0 · feat(frontend): IndicatorOverlayChart (Lightweight Charts main + RSI + MACD)
+- 2026-06-12 · `1d592ff` · +326/-0 · feat(frontend): shared composites (gauges/kpi/funnel/decisions/position)
+- 2026-06-12 · `273891f` · +427/-0 · feat(frontend): primitives (Card/Badge/ProgressBar/GaugeArc/Modal/Slider/NumberInput/LoadingSkeleton/Toast/ErrorBoundary/Select/VirtualList)
+- 2026-06-12 · `d040292` · +363/-0 · feat(frontend): 10 React-Query hooks for V5 endpoints
+- 2026-06-12 · `33f3acd` · +215/-0 · feat(frontend): /ws/v5 client hook + system-mode mirror
+- 2026-06-12 · `7796ae1` · +114/-0 · feat(frontend): Zustand UI store (no server state)
+- 2026-06-12 · `6207b31` · +164/-45 · feat(frontend): typed fetch wrapper + ApiError + interceptor bus
+- 2026-06-12 · `637c862` · +92/-734 · feat(frontend): design tokens + Tailwind + base CSS, drop V4.3 orphans
+- 2026-06-12 · `ac02120` · +264/-0 · feat(frontend): V5 types.ts mirroring backend Pydantic schemas
+- 2026-06-12 · `168b86c` · +684/-8159 · chore(frontend): wipe V4.3, scaffold V5 skeleton, add deps
+- 2026-06-12 · `2fee7b7` · +5024/-0 · docs(v5): Plan B-2 frontend implementation plan (17 tasks)
+- 2026-06-12 · `47e93ed` · +44/-3 · chore(v5): verify_v5_acceptance covers Plan B-1 schema
+- 2026-06-12 · `8ee0f5f` · +307/-2 · feat(ws): /ws/v5 broadcast + cross-process event bus
+- 2026-06-12 · `73cf39b` · +132/-0 · feat(api): POST /api/v5/positions/{id}/close
+- 2026-06-12 · `e085c5a` · +291/-0 · feat(api): /api/v5/manual-order preview + execute
+- 2026-06-12 · `f9ed5df` · +181/-0 · feat(api): /api/v5/klines/{symbol} + /events/{symbol}
+- 2026-06-12 · `6d73cdf` · +209/-0 · feat(api): /api/v5/ai/status + /decisions
+- 2026-06-12 · `bc98376` · +226/-0 · feat(api): /api/v5/settings GET/PATCH
+- 2026-06-12 · `92d026d` · +245/-0 · feat(api): /api/v5/strategy-config GET/PATCH/preview
+- 2026-06-12 · `4a5c32a` · +303/-6 · feat(v5): DeepSeek-friendly local RAG-lite
+- 2026-06-12 · `9fac54c` · +283/-20 · feat(v5): v5_params hot-reload layer + integrate 6 modules
+- 2026-06-12 · `8239f70` · +298/-0 · feat(api): V5 Pydantic schemas for Plan B routes
+- 2026-06-12 · `a6c8d0c` · +3482/-0 · docs(plan): V5 Plan B-1 backend implementation plan
+- 2026-06-12 · `cd34b79` · +782/-0 · docs: V5 frontend rebuild + AI learning loop design (Plan B)
+- 2026-06-12 · `9aa764f` · +360/-3002 · feat(v5): DeepSeek adapter + deep_collector stat fix + dead-script cleanup
+- 2026-06-12 · `46d7ebb` · +34/-29 · fix(v5): hot-fixes from first SHADOW startup
+- 2026-06-12 · `2b9c017` · +93/-0 · chore(v5): SHADOW 24h acceptance script
+- 2026-06-12 · `bdcdb70` · +96/-0 · feat(v5): preflight check + healthcheck loop
+- 2026-06-12 · `e004317` · +329/-963 · feat(v5): API rename to /api/v5/* + V5SignalManager
+- 2026-06-12 · `7b83ff8` · +198/-8376 · refactor(v5): physically delete V4.3/V4.4, rewire collector_main
+- 2026-06-12 · `3a4a48b` · +211/-1278 · feat(v5): scorer rewritten as pure V5 pipeline glue
+- 2026-06-12 · `d906545` · +192/-0 · feat(v5): LIVE V5PositionManager with fail-closed SL/TP rollback
+- 2026-06-12 · `b18e974` · +1/-2 · fix(v5): quick_yes_no should await AsyncOpenAI client directly
+- 2026-06-12 · `fa481ad` · +287/-0 · feat(v5): position monitor — 30s polling with exit triggers
+- 2026-06-12 · `b162384` · +299/-157 · feat(v5): PaperPositionManager with 15min soft target + indicator snapshot
+- 2026-06-12 · `3dd4a71` · +276/-375 · feat(v5): AI layer adapted to V5 types
+- 2026-06-12 · `ac4d0a5` · +213/-21 · feat(v5): DeepCollector pulls 15m+4h klines, filters |ΔP|>3%
+- 2026-06-12 · `a333cec` · +134/-0 · feat(v5): risk calculator (SL/TP/size from ATR + risk budget)
+- 2026-06-12 · `cd65404` · +149/-0 · feat(v5): AND-conjunction strategy decider
+- 2026-06-12 · `a9b9a89` · +240/-0 · feat(v5): pure indicator engine (RSI/MACD/ATR + calculate_indicators)
+- 2026-06-12 · `7639c78` · +304/-140 · feat(db): V5 schema + drop V4.3/V4.4 tables
+- 2026-06-12 · `d98b764` · +131/-0 · test: bootstrap pytest infra + V5 shared types
+- 2026-06-12 · `6479699` · +4021/-0 · docs(plan): V5 backend rebuild implementation plan
+- 2026-06-12 · `290bfa8` · +896/-0 · docs: V5 RSI-MACD 15min rebuild design
+- 2026-06-11 · `6fcbef4` · +48/-7 · feat(gates): SHADOW/LIVE-aware expected-return threshold
+- 2026-06-11 · `08789da` · +9/-14 · fix(features): make range_left ATR fallback unconditional
+- 2026-06-09 · `2c383c5` · +419/-0 · docs: add project structure overview
+- 2026-06-09 · `8d77b9a` · +65/-24 · fix(timezone): make DB timestamps UTC-aware end-to-end
+- 2026-06-09 · `d1be9fd` · +50/-13 · fix(kill-board): expose 4D scores + AI fields, switch UI to Chinese
+- 2026-06-09 · `1e76ff9` · +18/-6 · fix(scanner): rank by USDT quote volume, not token count
+- 2026-06-08 · `31a70e4` · +273/-18 · feat(ai): make SettingsPage AI config actually wire up + auto-upload memory
+- 2026-06-08 · `a256b2c` · +337/-65 · fix(shadow): make paper KPI a credible signal of live performance
+- 2026-06-08 · `d414d10` · +1098/-88 · feat(shadow): make SHADOW mode a real paper-trading loop, end-to-end
+- 2026-06-08 · `84a31b3` · +67/-1 · fix(routing): apiInterceptor double-prefix + add missing /system-state endpoint
+- 2026-06-08 · `4c02019` · +1180/-422 · feat(config): unified Exchange + AI configuration with DB-backed persistence
+- 2026-06-08 · `8b90c75` · +895/-23 · feat(exchange): OkxTrader + exchange_factory + frontend active-exchange badge
+- 2026-06-08 · `096505f` · +555/-139 · feat(exchange): pluggable market-data source — Binance/OKX backends via EXCHANGE env
+- 2026-06-07 · `061a833` · +163/-33 · fix(deadcode): revive 4 API endpoints — kill-queue / anatomy / entry-validator / scores
