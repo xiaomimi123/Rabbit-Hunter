@@ -8,8 +8,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 HOOK_SRC = REPO_ROOT / ".githooks" / "post-commit"
 UPDATE_DEVLOG_SRC = REPO_ROOT / ".githooks" / "lib" / "update_devlog.py"

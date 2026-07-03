@@ -30,6 +30,7 @@ downloads/
 eggs/
 .eggs/
 lib/
+!.githooks/lib/
 lib64/
 parts/
 sdist/
