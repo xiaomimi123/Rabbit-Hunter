@@ -4,6 +4,7 @@
 """
 from datetime import datetime, timezone, timedelta
 import pytest
+import sqlite3
 from unittest.mock import MagicMock
 
 
@@ -183,10 +184,7 @@ def test_resolve_pm_live_returns_live_when_set():
 
 def test_resolve_pm_live_recovers_via_get_trader(tmp_path, monkeypatch):
     """live_pm=None + get_trader mock 返 fake trader → self.live_pm 被替换。"""
-    from scripts.local_db import init_local_db
     db = str(tmp_path / "test.db")
-    init_local_db(db)
-
     monitor = _make_monitor(live_pm=None, db_path=db)
 
     fake_trader = MagicMock(name="trader")
@@ -201,11 +199,7 @@ def test_resolve_pm_live_recovers_via_get_trader(tmp_path, monkeypatch):
 
 def test_resolve_pm_live_fails_emits_ws_event(tmp_path, monkeypatch):
     """get_trader 返 None → 返 None + ws_event_queue 一行 monitor_degraded。"""
-    import sqlite3
-    from scripts.local_db import init_local_db
     db = str(tmp_path / "test.db")
-    init_local_db(db)
-
     monitor = _make_monitor(live_pm=None, db_path=db)
     monkeypatch.setattr(
         "scripts.exchange_factory.get_trader", lambda: None
@@ -226,11 +220,7 @@ def test_resolve_pm_live_fails_emits_ws_event(tmp_path, monkeypatch):
 
 def test_resolve_pm_live_recovery_exception_still_returns_none(tmp_path, monkeypatch):
     """get_trader 抛异常 → helper 不抛,返 None + ws 事件里 error 字段非空。"""
-    import sqlite3
-    from scripts.local_db import init_local_db
     db = str(tmp_path / "test.db")
-    init_local_db(db)
-
     monitor = _make_monitor(live_pm=None, db_path=db)
 
     def raiser():
@@ -248,3 +238,33 @@ def test_resolve_pm_live_recovery_exception_still_returns_none(tmp_path, monkeyp
     assert row is not None
     assert "RuntimeError" in row[0]
     assert "network timeout" in row[0]
+
+
+def test_resolve_pm_live_pm_construct_failure_emits_ws_event(tmp_path, monkeypatch):
+    """V5PositionManager 构造失败 → 返 None + ws 事件里 error 字段非空。"""
+    db = str(tmp_path / "test.db")
+    monitor = _make_monitor(live_pm=None, db_path=db)
+
+    fake_trader = MagicMock(name="trader")
+    monkeypatch.setattr(
+        "scripts.exchange_factory.get_trader", lambda: fake_trader
+    )
+
+    def bad_ctor(broker, db_path):
+        raise RuntimeError("db schema stale")
+    monkeypatch.setattr(
+        "scripts.v5_position_manager.V5PositionManager", bad_ctor
+    )
+
+    result = monitor._resolve_pm("LIVE")
+    assert result is None
+    assert monitor.live_pm is None  # 构造失败,未替换
+
+    conn = sqlite3.connect(db)
+    row = conn.execute(
+        "SELECT payload_json FROM ws_event_queue"
+    ).fetchone()
+    conn.close()
+    assert row is not None
+    assert "RuntimeError" in row[0]
+    assert "db schema stale" in row[0]

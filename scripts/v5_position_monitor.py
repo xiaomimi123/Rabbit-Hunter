@@ -218,7 +218,17 @@ class V5PositionMonitor:
             })
             return None
 
-        self.live_pm = V5PositionManager(broker=trader, db_path=self.db_path)
+        try:
+            self.live_pm = V5PositionManager(broker=trader, db_path=self.db_path)
+        except Exception as e:
+            print(f"[V5PositionMonitor] V5PositionManager 构造失败: "
+                  f"{type(e).__name__}: {e}")
+            _enqueue_ws(self.db_path, {
+                "type": "monitor_degraded",
+                "reason": "live_pm_unavailable",
+                "error": f"{type(e).__name__}: {e}",
+            })
+            return None
         print("[V5PositionMonitor] LIVE trader re-init OK; resuming monitoring")
         return self.live_pm
 
