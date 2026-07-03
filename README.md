@@ -23,8 +23,8 @@
   DeepCollector          OI / funding / CVD / K线
         │
         ▼
-  StrategyScorer         V4.3 特征 + V4.4 策略路由 + 风控闸门
-  (SNIPER / VULTURE)
+  V5Scorer               四维评分 + v5_strategy 三 mode + 风控闸门
+  (and_strict / trend_aligned / macd_reversal_long)
         │
         │  高分信号
         ▼
