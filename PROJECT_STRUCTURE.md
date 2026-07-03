@@ -327,6 +327,8 @@ SQLite 主库 `data/rabbit_hunter.db`，19 张关键表（行数截至 2026-07-0
 | `AI_FAIL_OPEN=false` | AI 不可用 = 拒绝交易 |
 | API 绑定非本机且无 Token | **拒绝启动** |
 
+> 完整触发条件与代码位置详见 `docs/audit-2026-07/architecture-map.md § 四` 和 `docs/audit-2026-07/tech-debt.md`（Finding 3 描述了 fail-closed 的一处漏洞）。
+
 ---
 
 ## 八、前端结构
@@ -393,6 +395,8 @@ SQLite 主库 `data/rabbit_hunter.db`，19 张关键表（行数截至 2026-07-0
 | 描边 | `border-hairline` / `-strong` | rgba(241,236,221,.10/.18) | 发丝细线 |
 | 字间 | `tracking-wider2/3/4` | .18/.22/.26em | eyebrow letter-spacing |
 | 字体 | `font-mono` | Fira Code | tabular-nums |
+
+> Token 来源：`Rabbit Hunterfronted/tailwind.config.js` + `styles/tokens.css`；页面级用法详见 `docs/audit-2026-07/architecture-map.md § 六`。
 
 ---
 
