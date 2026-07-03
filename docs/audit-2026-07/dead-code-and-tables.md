@@ -36,9 +36,9 @@
 ### ai_training_data
 
 - **行数**: 0
-- **INSERT 路径**: 本地 SQLite 无 INSERT 语句；schema 在 `scripts/local_db.py:119` 定义；历史写入路径为 `scripts/deepseek_ai_learner.py:80`，该文件写入的是 **Supabase**（外部云服务），并非本地 SQLite
+- **INSERT 路径**: 本地 SQLite 无 INSERT 语句（`grep -rnE 'INSERT.+INTO.+ai_training_data' scripts/ api/` 0 命中）；schema 在 `scripts/local_db.py:119` 定义；Supabase 端历史写入者为 `scripts/backfill_p3a_match_and_thr.py:146`（`.upsert(...)`，一次性历史回填，已完结）；`scripts/deepseek_ai_learner.py:80` 是 Supabase 端的 `.select(...)`（读取），并非写入
 - **消费方**: `scripts/ai/local_rag.py:55` SELECT COUNT（RAG 检索）；`api/routes/v5_ai.py:61` SELECT COUNT（状态页展示）；两处均永远返回 0
-- **Supabase 写入现状**: `scripts/deepseek_ai_learner.py` 属于 V4.2 遗留，依赖 Supabase 客户端，当前 Supabase 断连，且无 V5 代码对其 import
+- **Supabase 写入现状**: `scripts/deepseek_ai_learner.py` 属于 V4.2 遗留，依赖 Supabase 客户端，当前 Supabase 断连，且无 V5 代码对其 import；`backfill_p3a_match_and_thr.py` 为一次性回填脚本，已执行完毕
 - **判断**: **建议删除** — 本地 SQLite 的 `ai_training_data` 表是空壳；原始数据在 Supabase（断连），RAG 消费方永远命中 0 行，继续保留会在 AI status 页面给出误导性"训练样本 = 0"指标
 - **建议**: 删除本地 SQLite 表定义（`scripts/local_db.py:119` 起），同时在 `scripts/ai/local_rag.py` 和 `api/routes/v5_ai.py` 中清除对应 SELECT；如未来重启 RAG，改用 `reflections` 表（已有 41 行）作为来源
 
@@ -248,6 +248,8 @@
 > （经 `load_strategy_config()`）读取，后者属于 Supabase 时代遗留（无 V5 调用方）。
 > V5 活跃流水线的参数全部存储于 `system_settings` 表，通过 `scripts/v5_params.py` 热读；
 > `strategy_config.json` 与 V5 active pipeline 无任何交集。
+> 
+> 注：项目根目录和 `scripts/` 下各有一份 `strategy_config.json`，两份内容相同；`ai_auto_tuner.py` 通过默认 `config_path="strategy_config.json"` 读根目录版本。以下判断针对合并后的字段集。
 
 ---
 

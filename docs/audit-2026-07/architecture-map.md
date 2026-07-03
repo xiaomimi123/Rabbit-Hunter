@@ -274,7 +274,7 @@ V5ReflectionWorker  → SELECT reflection_queue (scripts/tasks/v5_reflection_wor
 | `m9_books` | `scripts/m9_knowledge.py` (line 152) INSERT | `scripts/m9_knowledge.py` (line 170) SELECT | 0 |
 | `m9_knowledge_chunks` | `scripts/m9_knowledge.py` (line 220) INSERT | `scripts/m9_knowledge.py` (line 210) SELECT content | 1 |
 | `m9_candidate_rules` | `scripts/m9_knowledge.py` (line 249) INSERT；`scripts/m9_validate.py` (line 104) UPDATE status | `scripts/m9_knowledge.py` (line 270) SELECT | 0 |
-| `ai_training_data` | 无本地 SQLite INSERT 路径；schema 定义 `scripts/local_db.py:119`；历史写入经 Supabase（`scripts/deepseek_ai_learner.py:80`，外部服务，当前未激活）| `api/routes/v5_ai.py` (line 61) SELECT COUNT | 0 |
+| `ai_training_data` | 无本地 SQLite INSERT；schema 定义 `scripts/local_db.py:119`；Supabase 写入 `scripts/backfill_p3a_match_and_thr.py:146`（一次性回填，已完结）；`scripts/deepseek_ai_learner.py:80` 是 `.select()` 读取而非写入 | `api/routes/v5_ai.py` (line 61) SELECT COUNT | 0 |
 | `sqlite_sequence` | SQLite 内部自动维护（AUTOINCREMENT 序列）| — | — |
 
 **说明**：`positions_v5` 为 LIVE 持仓表。INSERT 路径（`scripts/v5_position_manager.py` line 44）存在，但因 `system_settings` 表中无 `system_state` 行，`_resolve_mode_db()`（`scripts/tasks/collector_main.py:32`）永远返回 `"SHADOW"`，故该 INSERT 从未被触发。这是当前 0 行的直接原因。
