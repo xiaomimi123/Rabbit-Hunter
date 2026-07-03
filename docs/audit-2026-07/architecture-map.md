@@ -259,7 +259,7 @@ V5ReflectionWorker  → SELECT reflection_queue (scripts/tasks/v5_reflection_wor
 | `trade_scores_v5` | `scripts/tasks/scorer.py:151` (INSERT) | `scripts/v5_signal_manager.py` (line 27) SELECT | 19,636 |
 | `positions_v5` | `scripts/v5_position_manager.py` (line 44) INSERT LIVE 路径未激活；(line 209) UPDATE extend；(line 242) UPDATE close | `api/services/position_service.py:22` SELECT | 0 |
 | `paper_trades` | `scripts/paper_position_manager.py:130` INSERT；`:171` UPDATE extend；`:225` UPDATE close | `api/services/position_service.py:48` SELECT | 55 |
-| `funding_rates` | `scripts/tasks/v5_funding_collector.py` (line 40) INSERT OR IGNORE | `api/routes/v5_funding.py` (line 59) SELECT | 3,395 |
+| `funding_rates` | `scripts/tasks/v5_funding_collector.py` (line 40) INSERT OR IGNORE | `api/routes/v5_funding.py` (line 59) SELECT | 3,439 |
 | `funding_zscore_cache` | `scripts/ai/funding_rate_calculator.py:141` INSERT OR REPLACE | `api/routes/v5_funding.py` (line 26) SELECT | 25 |
 | `reflections` | `scripts/ai/reflection_runner.py:140` INSERT | `api/routes/v5_reflection.py` (line 31) SELECT | 41 |
 | `setup_performance` | `scripts/setup_performance.py:97` INSERT | `api/routes/v5_constitution.py` (line 136) SELECT | 8 |
@@ -306,8 +306,7 @@ V5ReflectionWorker  → SELECT reflection_queue (scripts/tasks/v5_reflection_wor
 | `AuditPage.tsx`（/audit）| useV5AIDecisions, useSetupPerformance | GET /api/v5/ai/decisions, GET /api/v5/setup-performance |
 | `DiagnosticsPage.tsx`（/diagnostics）| useV5AIStatus, useV5AIDecisions | GET /api/v5/ai/status, GET /api/v5/ai/decisions |
 | `DiagnosticsPage.tsx`（/diagnostics）| useV5Signals, useV5ActivePositions, useV5OrderHistory | GET /api/v5/signals, GET /api/v5/positions, GET /api/v5/paper-positions |
-| `KnowledgePage.tsx`（/knowledge）| useM9Books, useM9AddBook | GET /api/v5/m9/books, POST /api/v5/m9/books |
-| `KnowledgePage.tsx`（/knowledge）| useM9Candidates, useM9AddCandidate | GET /api/v5/m9/candidates, POST /api/v5/m9/candidates |
+| `KnowledgePage.tsx`（/knowledge）| useM9Books, useM9Candidates, useM9AddBook | GET /api/v5/m9/books, GET /api/v5/m9/candidates, POST /api/v5/m9/books |
 | `MarketPage.tsx`（/market）| useV5Klines, useV5SymbolEvents, useV5FundingHistory | GET /api/v5/klines/{symbol}, GET /api/v5/events/{symbol}, GET /api/v5/funding/history/{symbol} |
 | `ReliabilityPage.tsx`（/reliability）| useConstitution, useIronlawState | GET /api/v5/constitution, GET /api/v5/ironlaw-state |
 | `ReliabilityPage.tsx`（/reliability）| useV5FundingStatus, useSystemMode | GET /api/v5/funding/status, GET /api/v5/settings |
