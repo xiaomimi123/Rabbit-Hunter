@@ -5,6 +5,7 @@
 
 ## 2026-07
 
+- 2026-07-03 · `5753dd1` · +0/-0 · chore: activate devlog hook (acceptance test)
 - 2026-07-03 · `726e81a` · +1/-2 · chore(devlog): unblock .githooks/lib/ in .gitignore + drop unused pytest import
 - 2026-07-03 · `2ff437d` · +306/-0 · feat(devlog): post-commit hook + update_devlog.py + tests
 - 2026-07-03 · `9c88d25` · +915/-0 · docs(plan): Phase 2 dev-log mechanism implementation plan

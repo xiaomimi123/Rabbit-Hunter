@@ -256,6 +256,14 @@ python -m scripts.ai.memory_uploader --upload
 # Vector Store 更新后，下次 AI 决策会自动检索相似案例
 ```
 
+### E. dev-log 激活（首次 clone 后跑一次）
+
+```bash
+git config core.hooksPath .githooks
+```
+
+每个 commit 会自动 append 到 `docs/dev-log.md`。详见 `CLAUDE.md § dev-log 机制`。
+
 ---
 
 ## 配置（.env）
