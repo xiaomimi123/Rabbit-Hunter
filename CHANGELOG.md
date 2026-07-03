@@ -2,6 +2,255 @@
 
 ---
 
+## v0.5.x-dev — v0.5.0 之后的持续迭代（205 commits）
+**日期区间**: 2026-06-08 → 2026-07-03
+
+> 这一段没有正式 release tag，是 v0.5.0 之后累积的所有变更。
+> 按 conventional commit type 分组，同类里按主题聚簇。
+> 完整 git log: `git log ad19ca1..HEAD`
+
+### feat（103 条）
+
+#### 前端基础架构（设计系统 + 骨架 + hooks）
+- `ac02120` feat(frontend): V5 types.ts mirroring backend Pydantic schemas
+- `637c862` feat(frontend): design tokens + Tailwind + base CSS, drop V4.3 orphans
+- `7796ae1` feat(frontend): Zustand UI store (no server state)
+- `6207b31` feat(frontend): typed fetch wrapper + ApiError + interceptor bus
+- `33f3acd` feat(frontend): /ws/v5 client hook + system-mode mirror
+- `d040292` feat(frontend): 10 React-Query hooks for V5 endpoints
+- `273891f` feat(frontend): primitives (Card/Badge/ProgressBar/GaugeArc/Modal/Slider/NumberInput/LoadingSkeleton/Toast/ErrorBoundary/Select/VirtualList)
+- `1d592ff` feat(frontend): shared composites (gauges/kpi/funnel/decisions/position)
+- `3626689` feat(frontend): IndicatorOverlayChart (Lightweight Charts main + RSI + MACD)
+
+#### 前端页面（V5 初版）
+- `2ae9b3b` feat(frontend): AppShell + Sidebar + TopBar + routing + placeholders
+- `6711927` feat(frontend): V5SignalsPage + V5SignalHistoryPage
+- `a2c97ff` feat(frontend): V5ActivePositionsPage + V5OrderHistoryPage
+- `31b91ef` feat(frontend): V5DashboardPage + V5AIStatusPage
+- `5d0bb0d` feat(frontend): V5StrategyConfigPage + V5SettingsPage
+- `daaa2ac` feat(frontend): V5ManualOrderPage + V5ChartPage
+- `6ed160a` feat(dashboard): 24h 胜率分项 (by side / strategy / exit reason)
+- `ec7864c` feat(frontend): glossary tooltips on jargon + /v5/glossary page
+- `fa7a895` feat(chart): synchronized crosshair across K/RSI/MACD + hover data row
+
+#### UI 视觉重设计（V2 → V3 → Field Instrument）
+- `0df24d3` feat(ui v2): BacktestPage 实验台 + Overview 回撤监控区 + walkforward POST API
+- `ba605de` feat(ui): 把 4 个 V2 有用页面接入 V3，Sidebar 主导航扩到 8 项
+- `a1b9f27` feat(ui): V3 UI 原型落地 — 4 页面重写 + 宪法签名条 + 模式指示器
+- `7c1c51d` feat(ui): 交易员中控 Dashboard + Field Instrument tokens 全面落地
+- `0aa5c83` feat(UI): 侧栏精简 6 项 + 仪表盘 OKX 资产 + 修复 BacktestPage TypeError
+
+#### V5 核心引擎（指标 / 评分 / 仓位 / 数据采集）
+- `7639c78` feat(db): V5 schema + drop V4.3/V4.4 tables
+- `a9b9a89` feat(v5): pure indicator engine (RSI/MACD/ATR + calculate_indicators)
+- `cd65404` feat(v5): AND-conjunction strategy decider
+- `a333cec` feat(v5): risk calculator (SL/TP/size from ATR + risk budget)
+- `ac4d0a5` feat(v5): DeepCollector pulls 15m+4h klines, filters |ΔP|>3%
+- `3dd4a71` feat(v5): AI layer adapted to V5 types
+- `b162384` feat(v5): PaperPositionManager with 15min soft target + indicator snapshot
+- `fa481ad` feat(v5): position monitor — 30s polling with exit triggers
+- `d906545` feat(v5): LIVE V5PositionManager with fail-closed SL/TP rollback
+- `3a4a48b` feat(v5): scorer rewritten as pure V5 pipeline glue
+- `e004317` feat(v5): API rename to /api/v5/* + V5SignalManager
+- `bdcdb70` feat(v5): preflight check + healthcheck loop
+- `9aa764f` feat(v5): DeepSeek adapter + deep_collector stat fix + dead-script cleanup
+- `9fac54c` feat(v5): v5_params hot-reload layer + integrate 6 modules
+- `4a5c32a` feat(v5): DeepSeek-friendly local RAG-lite
+
+#### API 服务层（REST + WebSocket）
+- `8239f70` feat(api): V5 Pydantic schemas for Plan B routes
+- `92d026d` feat(api): /api/v5/strategy-config GET/PATCH/preview
+- `bc98376` feat(api): /api/v5/settings GET/PATCH
+- `6d73cdf` feat(api): /api/v5/ai/status + /decisions
+- `f9ed5df` feat(api): /api/v5/klines/{symbol} + /events/{symbol}
+- `e085c5a` feat(api): /api/v5/manual-order preview + execute
+- `73cf39b` feat(api): POST /api/v5/positions/{id}/close
+- `8ee0f5f` feat(ws): /ws/v5 broadcast + cross-process event bus
+
+#### 交易所接入 + 配置管理
+- `096505f` feat(exchange): pluggable market-data source — Binance/OKX backends via EXCHANGE env
+- `8b90c75` feat(exchange): OkxTrader + exchange_factory + frontend active-exchange badge
+- `4c02019` feat(config): unified Exchange + AI configuration with DB-backed persistence
+- `4414d10` feat(shadow): make SHADOW mode a real paper-trading loop, end-to-end
+- `5802c57` feat(settings): AI connection test endpoint + button
+- `31a70e4` feat(ai): make SettingsPage AI config actually wire up + auto-upload memory
+
+#### 策略规则 + 门控 + 参数调优
+- `b3e4c3f` feat(paper config): 应用最优出场 — max_hold=240min + SIGNAL_REVERSE 30min 最短门槛
+- `ff9d454` feat(params): v5_max_extensions default 3 → 30 (paper 一周观察验证 α 方向)
+- `9adeb8f` feat(check): --start-date flag for trial cutoff date
+- `5dd0ac4` feat(scanner+whitelist): 100M USDT mover floor + XAU exclude + drop MATIC
+- `7cf55b2` feat(whitelist): 扩展高流动性白名单到 25 个 (+6 加密主流)
+- `a1eb7bd` feat(strategy): 加 macd_reversal_long mode (Variant B 实验落地)
+- `cc8f46b` feat(strategy): funding anti-pile filter + backtest sim bug fix
+- `cba2d08` feat(strategy): live scorer passes funding_z to decide() for filter activation
+- `a7e0d6f` feat(v5.1): top-20 USDT perp whitelist filter (default on)
+- `a4cb4c3` feat(v5.1): trend_aligned strategy mode (Plan C) — default
+- `1adb63c` feat(safety): SHADOW → LIVE promotion hard gates + auto-check script
+- `6fcbef4` feat(gates): SHADOW/LIVE-aware expected-return threshold
+- `3121a46` feat(M9): 策略书籍知识层 + 候选规则审核闸门
+- `b533d8a` feat(M3/M8 frontend): 宪法 + setup_performance 透明化
+- `2297b93` feat(M8): setup_performance 自动剪枝 + 运行时禁用清单
+- `da4d291` feat(M5): RR 硬锁 + Chandelier 移动止损
+- `7413601` feat(M3): 阶段0立宪 + 铁律层硬断言
+
+#### Funding Rate（v6 资金费率体系）
+- `967476b` feat(v6): reflection card + dashboard setup breakdown 显示 funding
+- `10e9e11` feat(v6): AI Status FundingHeatmapCard
+- `2281570` feat(v6): GET /api/v5/funding/status + /history/{symbol}
+- `1d7c1ec` feat(v6): reflection 集成 funding_z_score_at_entry
+- `92afd73` feat(v6): trading_assistant 注入 funding context 到 AI prompt
+- `b183ebf` feat(v6): failure_taxonomy 真正用上 funding_z_score
+- `4a2f4e5` feat(v6): scorer 注入 funding_z_score → trade_scores_v5
+- `9922a13` feat(v6): setup_type 派生 funding_extreme_* 分支
+- `d961472` feat(v6): V5FundingCollector worker + z-score calculator
+- `c3c4886` feat(v6): OKX public funding API client + symbol mapping
+- `0b7d0d0` feat(v6): DB schema for funding_rates + zscore_cache + ALTER
+- `1a9098f` feat(funding): compute_zscore_as_of for backtest historical replay
+
+#### AI 复盘 / 学习闭环（Reflection Worker）
+- `c43bb09` feat(reflection): Phase 3 APIs + frontend Tab 3 + AI calibration curve
+- `e69c8f6` feat(reflection): fractional Kelly sizing engine + weekly cron
+- `48de020` feat(reflection): AI confidence calibration
+- `2aed5b4` feat(reflection): daily aggregator by setup_type + worker cron
+- `3d848c2` feat(reflection): GET /failure-taxonomy + Tab 2 (失败模式分布)
+- `c5f17ca` feat(reflection): trading_assistant veto on failure_taxonomy match
+- `9e8b079` feat(reflection): failure_taxonomy matcher with 8 handlers
+- `158c90f` feat(reflection): failure_taxonomy 表 + 8 种子模式
+- `26b5a7a` feat(reflection): GET /api/v5/reflections + 复盘工作台 Tab 1
+- `7071041` feat(reflection): V5ReflectionWorker 进程 + enqueue 集成
+- `94ba7c6` feat(reflection): runner — load context → AI → validate → persist
+- `c4eb04d` feat(reflection): 5 问 prompt builder + Pydantic schemas
+- `3f32918` feat(reflection): DB schema (reflection_queue + reflections) + setup_type 派生
+
+#### 数据 / 回测 / 实验台
+- `a8113be` feat(backtest): requests + larger retry budget, README, 30d baseline
+- `2bf0134` feat(backtest): CLI entry point
+- `7a0acee` feat(backtest): reporter + aggregator
+- `f69b3d6` feat(backtest): BacktestRunner orchestration loop
+- `6c51b71` feat(backtest): schemas + position_sim
+- `c4edefb` feat(backtest): kline_fetcher with OKX history + JSON disk cache
+- `69382b3` feat(M6): 写实成本模型 + walk-forward + 前端报告查看
+- `dac27ff` feat(experiment): 出场对照实验 (维加斯通道 vs 固定 ATR 倍数)
+- `49f450c` feat(experiment): MACD 进场时机对照实验 + 22→17 symbol 双 OOS 验证
+
+### fix（34 条）
+- `a1cbb72` fix(KnowledgePage): 加"导入书籍" UI Modal — 后端早就有但前端没暴露
+- `fc40ca8` fix(audit HIGH-1+2): v5_position_manager 三阶段状态机 + ERROR_RECONCILE_NEEDED
+- `7187aeb` fix(audit HIGH-3,4): OkxTrader fail-closed + AIResult.error_kind 枚举
+- `e5b6de2` fix(collector): _system_mode 是 ghost call，改为 _resolve_mode_db
+- `f396ccc` fix(constitution): SHORT/risk/leverage 默认值对齐宪法 + 杠杆反推
+- `de6101d` fix(KnowledgePage): ValidateModal still read sync ValidationResult fields after async refactor
+- `4f1e80d` fix(scorer): SHADOW mode pass-through on AI infra errors (DeepSeek 余额不足)
+- `f415179` fix(M9 + scorer): WF 验证异步化 + 扫描开关实时生效
+- `20bcc00` fix(HeaderBar): scope symbol selector + price block to symbol-aware routes only
+- `5e250f8` fix(MarketPage): normalize symbol for funding/signal lookup
+- `44330fc` fix(okx encoder): tolerate slash format for binance_symbol_to_okx_inst
+- `ffce6f1` fix(HeaderBar): bump kline limit 2 → 10 to satisfy backend ge=10 validator
+- `45eea56` fix(M6 CLI): handle None profit_factor in print format
+- `a664418` fix(klines/events): URL-encode slash → underscore to match backend route
+- `90e2d64` fix(network): retry wrapper around all OKX HTTP calls in live pipeline
+- `67549f2` fix(ai): TradingAssistant hot-reload key + DB-first DeepSeek (no more stale clients)
+- `68c2aff` fix(manual-order): URL params are 'symbol' and 'side', not Chinese keys
+- `ca39709` fix(collector): silence fetch_balance noise in SHADOW + move trial config to env
+- `9e4b03f` fix(backtest): manual urllib retry + skip missing OKX instruments
+- `77362bb` fix(api+ui): raise signals limit to 5000; Settings save feedback
+- `4b4cfbc` fix(v5.1): deep_collector also enriches top-20 each cycle (not just movers)
+- `7f1a549` fix(reflection): enqueue reflection after manual /positions/:id/close
+- `b5aaea6` fix(v5): manual orders survive SIGNAL_REVERSE in position monitor
+- `8bb81a5` fix(frontend): align types/hooks/pages with actual API shape
+- `d1fa459` fix(nginx): proxy /ws/v5 to api:8000 for V5 WebSocket upgrade
+- `46d7ebb` fix(v5): hot-fixes from first SHADOW startup
+- `b18e974` fix(v5): quick_yes_no should await AsyncOpenAI client directly
+- `08789da` fix(features): make range_left ATR fallback unconditional
+- `8d77b9a` fix(timezone): make DB timestamps UTC-aware end-to-end
+- `d1be9fd` fix(kill-board): expose 4D scores + AI fields, switch UI to Chinese
+- `1e76ff9` fix(scanner): rank by USDT quote volume, not token count
+- `a256b2c` fix(shadow): make paper KPI a credible signal of live performance
+- `84a31b3` fix(routing): apiInterceptor double-prefix + add missing /system-state endpoint
+- `061a833` fix(deadcode): revive 4 API endpoints — kill-queue / anatomy / entry-validator / scores
+
+### experiment（5 条）
+> 实验条目保留证伪 / 采纳结论。
+- `20e5bca` experiment(BTC trend-follow): 用户复审 — max_hold/SL/TP grid + 独立期验证 → 证伪加固 (证伪)
+- `98c4fa1` experiment(M9 候选): BTC 顺势 Pine 翻译 + 4 组 wf 对照 → 证伪 (证伪)
+- `3531a42` experiment: max-hold 6 档扫描 — 找到甜蜜点 = 240 min (PF 顶 + 周转最快) (采纳)
+- `0780a69` experiment: max-hold 时间窗对照 — 找到 paper PF 0.77 vs backtest 2.08 主因 (进行中)
+- `035d68a` experiment(backtest): funding z-score threshold 2.0 vs 1.5 (revert) (证伪)
+
+### docs（29 条）
+- `2d092ac` docs(structure): §七 §九 加回 architecture-map 反向引用
+- `2ccfaef` docs(structure): 刷新 PROJECT_STRUCTURE.md 对齐 v0.5.x → HEAD
+- `98d0516` docs: 合并 docs/project-structure.md 独有段落到 PROJECT_STRUCTURE.md 并删除重复
+- `68242ac` docs(audit): fix D-R7 range + D-R9 count + D-P5 orders_history clarity
+- `8d6a2dc` docs(audit): doc-vs-code-diff — Phase 1 的 shopping list
+- `8b13b24` docs(audit): tech-debt Finding 8 snippet 加回 try: 行避免误读为语法错
+- `9f68064` docs(audit): dead-code § 二 deepseek_ai_learner 与 § 一 保持一致
+- `8cbb9db` docs(audit): tech-debt — findings + CONFIRMED/PLAUSIBLE + failure scenarios
+- `6df98cd` docs(audit): fix ai_training_data write-path citation across Task 2+3 + note strategy_config dup
+- `a4f6403` docs(audit): dead-code-and-tables — 0 行表 + 无调用者模块 + 未读 config 字段
+- `c8578e6` docs(audit): fix KnowledgePage hooks + refresh funding_rates count
+- `42dc896` docs(plan): fix existence-check regex to include digits
+- `ff32991` docs(audit): architecture-map — 后端/前端目录 + 数据流 + DB 读写路径
+- `e247ef1` docs(audit): 体检目录 + index 骨架
+- `d894917` docs(plan): 项目全面体检 + 开发文档刷新 implementation plan
+- `9385ee1` docs(spec): 项目全面体检 + 开发文档刷新 design (Phase 0/1/2)
+- `c0f3721` docs: 加项目结构 + 设计优化接缝指南
+- `168e6b3` docs: SHADOW trial contract for exp3b 2-week verification
+- `843e103` docs: UI design brief for AI generation
+- `43f54d9` docs(v6): funding rate phases 1-6 implementation plan (12 tasks, ~44 BE tests)
+- `1165342` docs(v6): funding rate design spec
+- `43a9415` docs(reflection): Phases 1-3 implementation plan (14 tasks, ~65 BE tests)
+- `9811a6e` docs(reflection): Reflection Worker design spec
+- `2fee7b7` docs(v5): Plan B-2 frontend implementation plan (17 tasks)
+- `a6c8d0c` docs(plan): V5 Plan B-1 backend implementation plan
+- `cd34b79` docs: V5 frontend rebuild + AI learning loop design (Plan B)
+- `6479699` docs(plan): V5 backend rebuild implementation plan
+- `290bfa8` docs: V5 RSI-MACD 15min rebuild design
+- `2c383c5` docs: add project structure overview
+
+### chore（8 条）
+- `1c3304a` chore(sidebar): 移除深链区"中控仪表 V2"和"手动开单"入口
+- `261ca60` chore: 死代码 Phase 1 清理 (-26 文件) + 审计报告
+- `600fdd9` chore(v6): verify_v5_acceptance covers Funding Phases 1-6 schema
+- `47c0e37` chore(reflection): verify_v5_acceptance covers Phases 1-3 schema
+- `c3f7b89` chore(v5): verify_v5_acceptance covers Plan B-2 frontend dist
+- `168b86c` chore(frontend): wipe V4.3, scaffold V5 skeleton, add deps
+- `47e93ed` chore(v5): verify_v5_acceptance covers Plan B-1 schema
+- `2b9c017` chore(v5): SHADOW 24h acceptance script
+
+### test / refactor（2 条）
+- `d98b764` test: bootstrap pytest infra + V5 shared types
+- `7b83ff8` refactor(v5): physically delete V4.3/V4.4, rewire collector_main
+
+### 其他 / misc（24 条，非标准 type）
+- `3ccc848` style(ui): sweep 剩 3 个 live 页面到 Field Instrument tokens
+- `ac3f852` style(ui): pages-v4 11 个页面 sweep 到 Field Instrument tokens
+- `20735df` ui(v4): 1:1 architectural port from cryptoquant-ai reference
+- `07e40c4` ui(v3): convert all remaining 10 pages to cryptoquant-ai style
+- `e734081` ui(v3-sample): redesign V5SignalsPage as dense data table
+- `8964a25` ui(v3-sample): Dashboard sample in cryptoquant-ai style (zinc + indigo)
+- `e0b9786` ui+ai: switch to system fonts; translate English labels; reflection in Chinese
+- `1cf3b26` spec+plan: backtest engine MVP (CLI, 8 tasks)
+- `d4147ba` ui(v2): Phase 7+8 — V5GlossaryPage + final cleanup
+- `8c0b321` ui(v2): Phase 7.1 — V5SettingsPage + V5ManualOrderPage
+- `0f5c740` ui(v2): Phase 6.4 — V5StrategyConfigPage rewrite
+- `4babe30` ui(v2): Phase 6.3 — V5ChartPage + IndicatorOverlayChart re-skin
+- `06b6d56` ui(v2): Phase 6.2 — V5OrderHistoryPage + V5SignalHistoryPage
+- `c09f878` ui(v2): Phase 6.1 — V5ReflectionPage rewrite (3 tabs)
+- `bed28ff` ui(v2): Phase 5.3 — V5SignalsPage rewrite
+- `c2c157c` ui(v2): Phase 5.2 — V5AIStatusPage rewrite, kill HoloCard
+- `03ace09` ui(v2): Phase 5.1 — V5ActivePositionsPage + ActivePositionCard
+- `1e21b28` ui(v2): Phase 4 — V5DashboardPage rewrite (flagship)
+- `1cb5a0a` ui(v2): Phase 3 primitives — Card/Badge/KpiCard/ProgressBar/etc
+- `3e738ab` ui(v2): Phase 2 shell — Sidebar + TopBar + AppShell
+- `6908a7b` ui(v2): Phase 1 foundation — fonts + tokens + Tailwind + CSS + Aperture
+- `9c447e8` plan: V2 Field Instrument UI migration (23 tasks, 8 phases)
+- `22aa696` design(v2): add ActivePositions + AIStatus preview pages
+- `dea9232` design(v2): Field Instrument visual direction + Dashboard preview
+
+---
+
 ## v0.5.0 — 安全 + 正确性 + 学习闭环（v45 大检修）
 **日期**: 2026-06-07
 
