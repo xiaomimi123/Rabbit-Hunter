@@ -345,3 +345,161 @@ def test_close_permanent_marks_monitor_tick_permanent_source(tmp_path):
     assert row[1] == 0.163
     ctx = json.loads(row[2])
     assert ctx["exit_price_source"] == "monitor_tick_permanent"
+
+
+# ── 保命核实 · open_position 失败链条(rollback 成功已有,补 3 条) ─────────
+
+
+def test_sl_fail_rollback_also_fails_marks_reconcile_needed(tmp_path, monkeypatch):
+    """主仓 success + SL fail + rollback fail → 写 ERROR_RECONCILE_NEEDED + 抛异常。
+
+    保命场景:交易所有主仓,我们没 SL,回滚 close 也挂了 → 必须留 DB 记录
+    让人工介入,不能悄悄放过。
+    """
+    import sqlite3
+    import json
+    from scripts.local_db import init_local_db
+    from scripts.v5_position_manager import V5PositionManager
+
+    monkeypatch.setenv("SL_TP_FAIL_OPEN", "false")
+    db = str(tmp_path / "x.db")
+    init_local_db(db)
+
+    mock_broker = MagicMock(spec=OkxTrader)
+    mock_broker.open_position.return_value = {
+        "success": True, "order_id": "main", "symbol": "H/USDT",
+    }
+    mock_broker.set_stop_loss.return_value = {
+        "success": False, "error": "SL insufficient margin", "error_kind": "PERMANENT",
+    }
+    mock_broker.close_position.return_value = {
+        "success": False, "error": "rollback network timeout", "error_kind": "TRANSIENT",
+    }
+
+    pm = V5PositionManager(broker=mock_broker, db_path=db)
+    with pytest.raises(Exception, match="SL 失败且回滚失败"):
+        pm.open_position(
+            symbol="H/USDT", side="SHORT", entry_price=0.166,
+            sl_price=0.169, tp_price=0.162, size_usdt=15, leverage=10,
+        )
+
+    conn = sqlite3.connect(db)
+    row = conn.execute(
+        "SELECT status, sl_attached, tp_attached, error_context "
+        "FROM positions_v5 WHERE status='ERROR_RECONCILE_NEEDED'"
+    ).fetchone()
+    conn.close()
+    assert row is not None, "必须留 ERROR_RECONCILE_NEEDED 记录让人工介入"
+    assert row[0] == "ERROR_RECONCILE_NEEDED"
+    assert row[1] == 0  # sl_attached=False
+    assert row[2] == 0  # tp_attached=False
+    ctx = json.loads(row[3])
+    assert "sl_error" in ctx
+    assert "SL insufficient margin" in ctx["sl_error"]
+    assert "rollback_error" in ctx
+    assert "rollback network timeout" in ctx["rollback_error"]
+
+
+def test_tp_fail_rollback_also_fails_marks_reconcile_needed(tmp_path, monkeypatch):
+    """主仓 success + SL success + TP fail + rollback fail → 写 ERROR_RECONCILE_NEEDED。
+
+    保命场景:主仓 + SL 都成了,只差 TP 没挂上,回滚也挂 → 必须留记录人工介入。
+    """
+    import sqlite3
+    import json
+    from scripts.local_db import init_local_db
+    from scripts.v5_position_manager import V5PositionManager
+
+    monkeypatch.setenv("SL_TP_FAIL_OPEN", "false")
+    db = str(tmp_path / "x.db")
+    init_local_db(db)
+
+    mock_broker = MagicMock(spec=OkxTrader)
+    mock_broker.open_position.return_value = {
+        "success": True, "order_id": "main", "symbol": "H/USDT",
+    }
+    mock_broker.set_stop_loss.return_value = {
+        "success": True, "order_id": "sl", "symbol": "H/USDT",
+    }
+    mock_broker.set_take_profit.return_value = {
+        "success": False, "error": "TP order rejected", "error_kind": "PERMANENT",
+    }
+    mock_broker.close_position.return_value = {
+        "success": False, "error": "rollback timeout", "error_kind": "TRANSIENT",
+    }
+
+    pm = V5PositionManager(broker=mock_broker, db_path=db)
+    with pytest.raises(Exception, match="TP 失败且回滚失败"):
+        pm.open_position(
+            symbol="H/USDT", side="SHORT", entry_price=0.166,
+            sl_price=0.169, tp_price=0.162, size_usdt=15, leverage=10,
+        )
+
+    conn = sqlite3.connect(db)
+    row = conn.execute(
+        "SELECT status, sl_attached, tp_attached, error_context "
+        "FROM positions_v5 WHERE status='ERROR_RECONCILE_NEEDED'"
+    ).fetchone()
+    conn.close()
+    assert row is not None
+    assert row[0] == "ERROR_RECONCILE_NEEDED"
+    assert row[1] == 1  # sl_attached=True (SL 成了)
+    assert row[2] == 0  # tp_attached=False
+    ctx = json.loads(row[3])
+    assert "tp_error" in ctx
+    assert "TP order rejected" in ctx["tp_error"]
+    assert "rollback_error" in ctx
+    assert "rollback timeout" in ctx["rollback_error"]
+
+
+def test_sl_fail_with_fail_open_preserves_main_as_open_degraded(tmp_path, monkeypatch):
+    """sl_tp_fail_open=true + SL fail → 保留主仓,不回滚,写 OPEN_DEGRADED。
+
+    保命场景:运营明确开启 fail-open,SL 挂不上时不平仓强行留仓,monitor 会
+    继续跟踪(get_open_positions 用 status IN (OPEN, OPEN_DEGRADED))。
+    """
+    import sqlite3
+    import json
+    from scripts.local_db import init_local_db
+    from scripts.v5_position_manager import V5PositionManager
+
+    monkeypatch.setenv("SL_TP_FAIL_OPEN", "true")
+    db = str(tmp_path / "x.db")
+    init_local_db(db)
+
+    mock_broker = MagicMock(spec=OkxTrader)
+    mock_broker.open_position.return_value = {
+        "success": True, "order_id": "main", "symbol": "H/USDT",
+    }
+    mock_broker.set_stop_loss.return_value = {
+        "success": False, "error": "SL rejected", "error_kind": "PERMANENT",
+    }
+    mock_broker.set_take_profit.return_value = {
+        "success": True, "order_id": "tp", "symbol": "H/USDT",
+    }
+
+    pm = V5PositionManager(broker=mock_broker, db_path=db)
+    pid = pm.open_position(
+        symbol="H/USDT", side="SHORT", entry_price=0.166,
+        sl_price=0.169, tp_price=0.162, size_usdt=15, leverage=10,
+    )
+
+    mock_broker.close_position.assert_not_called()
+
+    conn = sqlite3.connect(db)
+    row = conn.execute(
+        "SELECT status, sl_attached, tp_attached, error_context "
+        "FROM positions_v5 WHERE id=?", (pid,)
+    ).fetchone()
+    conn.close()
+    assert row[0] == "OPEN_DEGRADED"
+    assert row[1] == 0  # sl_attached=False
+    assert row[2] == 1  # tp_attached=True
+    ctx = json.loads(row[3])
+    assert "sl_error" in ctx
+    assert "SL rejected" in ctx["sl_error"]
+    assert "rollback_error" not in ctx  # fail-open 分支不尝试回滚
+
+    # monitor 视角:OPEN_DEGRADED 记录仍能被 get_open_positions 拉到
+    opens = pm.get_open_positions()
+    assert any(p["id"] == pid for p in opens), "monitor 必须能看到 OPEN_DEGRADED 继续跟踪"
