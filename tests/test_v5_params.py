@@ -110,3 +110,22 @@ def test_invalid_value_falls_back_to_default(monkeypatch):
     conn.close()
     v = get_param("v5_rsi_overbought", default=70.0, cast=float)
     assert v == 70.0
+
+
+def test_db_error_logs_warning_and_returns_default(monkeypatch, capsys):
+    """DB 层抛异常 → 打印 WARN + 返 default (不再静默,Finding 8)."""
+    from scripts import v5_params
+
+    v5_params._CACHE.clear()  # 清缓存,让 DB 路径被走
+    monkeypatch.delenv("V5_MAX_CONCURRENT", raising=False)
+
+    # DB 路径指向不存在的目录 → sqlite3.connect() 抛 OperationalError
+    monkeypatch.setattr(v5_params, "_db_path", lambda: "/nonexistent/dir/x.db")
+
+    result = v5_params.get_param("v5_max_concurrent", 3, int)
+
+    captured = capsys.readouterr()
+    assert result == 3
+    assert "[get_param]" in captured.out
+    assert "DB 读取失败" in captured.out
+    assert "v5_max_concurrent" in captured.out

@@ -82,8 +82,8 @@ def get_param(key: str, default: Any, cast: Callable[[str], Any] = str) -> Any:
         else:
             # Cache the miss so repeated calls within TTL don't hit the DB
             _CACHE[key] = (None, now + _DEFAULT_TTL)
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[get_param] DB 读取失败,使用默认值 {key}={default}: {type(e).__name__}: {e}")
 
     # 4. default
     return default
