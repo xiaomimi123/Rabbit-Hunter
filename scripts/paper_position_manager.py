@@ -44,6 +44,14 @@ def _utcnow_iso() -> str:
     return _utcnow().isoformat()
 
 
+class ConcurrencyLimitExceeded(Exception):
+    """开仓时检测到当前 OPEN 数已达 max_concurrent 上限(TOCTOU 二次校验)。
+
+    Finding 11: IMMEDIATE 事务内二次 count 双表(paper_trades + positions_v5),
+    上层 catch 后应写 block_reason=MAX_CONCURRENT_POSITIONS_RACE,不重试。
+    """
+
+
 class PaperPositionManager:
     """V5 虚拟仓位管理器。
 
@@ -101,7 +109,8 @@ class PaperPositionManager:
     # V5 核心接口
     # ─────────────────────────────────────────────────────────────────
 
-    def open_position(self, *, enriched, indicators, decision, risk, ai) -> int:
+    def open_position(self, *, enriched, indicators, decision, risk, ai,
+                      max_concurrent: Optional[int] = None) -> int:
         """SHADOW 开仓 — 返回 paper_trades.id。
 
         参数均为 v5_types 数据类：
@@ -126,6 +135,24 @@ class PaperPositionManager:
 
         conn = self._conn()
         try:
+            if max_concurrent is not None:
+                # Finding 11: 加 IMMEDIATE 锁 + 二次 count paper + live
+                conn.execute("BEGIN IMMEDIATE")
+                n_paper = conn.execute(
+                    "SELECT COUNT(*) FROM paper_trades WHERE status='OPEN'"
+                ).fetchone()[0]
+                try:
+                    n_live = conn.execute(
+                        "SELECT COUNT(*) FROM positions_v5 WHERE status='OPEN'"
+                    ).fetchone()[0]
+                except sqlite3.OperationalError:
+                    n_live = 0  # positions_v5 表可能未 mig,视为 0
+                if n_paper + n_live >= max_concurrent:
+                    conn.rollback()
+                    raise ConcurrencyLimitExceeded(
+                        f"open_position 并发上限已达:{n_paper}(paper)+{n_live}(live)"
+                        f">={max_concurrent},拒绝开仓"
+                    )
             cur = conn.execute("""
                 INSERT INTO paper_trades (
                     symbol, side, entry_price, status, strategy_id,

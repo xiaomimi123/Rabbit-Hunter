@@ -28,6 +28,7 @@ from scripts.risk_gates import (
     gate_min_rr, gate_per_trade_risk, gate_setup_enabled, gate_sl_attached,
     get_today_realized_pnl,
 )
+from scripts.paper_position_manager import ConcurrencyLimitExceeded
 def _enqueue_ws(db_path: str, payload: dict) -> None:
     """跨进程 WS 消息总线:写 ws_event_queue,api 进程 poll 后广播。
 
@@ -410,6 +411,7 @@ async def process_enriched_v5(*, enriched: EnrichedItem, ai, paper_pm, live_pm,
             position_id = paper_pm.open_position(
                 enriched=enriched, indicators=indicators,
                 decision=decision, risk=risk, ai=ai_result,
+                max_concurrent=_max_concurrent(),
             )
         else:
             position_id = live_pm.open_position(
@@ -418,6 +420,14 @@ async def process_enriched_v5(*, enriched: EnrichedItem, ai, paper_pm, live_pm,
                 tp_price=risk.tp_price, size_usdt=risk.size_usdt,
                 leverage=risk.leverage,
             )
+    except ConcurrencyLimitExceeded as e:
+        _write_trade_score(db_path, enriched, indicators, decision,
+                          ai=ai_result, risk=risk,
+                          block_reason="MAX_CONCURRENT_POSITIONS_RACE",
+                          funding_z_score=funding_z_score,
+                          funding_rate_8h=funding_rate_8h)
+        print(f"[V5Scorer] {enriched.symbol} 并发二次校验拒开: {e}")
+        return
     except Exception as e:
         _write_trade_score(db_path, enriched, indicators, decision,
                           ai=ai_result, risk=risk,

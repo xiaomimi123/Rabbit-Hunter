@@ -104,3 +104,50 @@ def test_close_position_fills_exit_fields():
     assert exit_reason == "TP_HIT"
     # SHORT entry=0.166 exit=0.162 → profitable
     assert pnl is not None and pnl > 0
+
+
+def test_open_position_race_double_check_rejects_when_at_limit():
+    """Finding 11: max_concurrent=3, 已有 3 OPEN paper → 二次校验抛 ConcurrencyLimitExceeded, 无 INSERT。"""
+    from scripts.paper_position_manager import (
+        PaperPositionManager, ConcurrencyLimitExceeded,
+    )
+    db = _fresh_db()
+    conn = sqlite3.connect(db)
+    for _ in range(3):
+        conn.execute(
+            "INSERT INTO paper_trades (symbol, side, status, strategy_id, "
+            "created_at, entry_time) "
+            "VALUES ('BTC/USDT', 'LONG', 'OPEN', 'v5', datetime('now'), datetime('now'))"
+        )
+    conn.commit()
+    conn.close()
+
+    pm = PaperPositionManager(db_path=db)
+    with pytest.raises(ConcurrencyLimitExceeded, match="并发上限已达"):
+        pm.open_position(**_open_intent_kwargs(), max_concurrent=3)
+
+    conn = sqlite3.connect(db)
+    n = conn.execute(
+        "SELECT COUNT(*) FROM paper_trades WHERE status='OPEN'"
+    ).fetchone()[0]
+    conn.close()
+    assert n == 3, "上限达到时不应再 INSERT"
+
+
+def test_open_position_no_max_concurrent_bypasses_check():
+    """Finding 11: max_concurrent=None(默认)→ 不校验,即便 100 条 OPEN 也放行。"""
+    from scripts.paper_position_manager import PaperPositionManager
+    db = _fresh_db()
+    conn = sqlite3.connect(db)
+    for _ in range(100):
+        conn.execute(
+            "INSERT INTO paper_trades (symbol, side, status, strategy_id, "
+            "created_at, entry_time) "
+            "VALUES ('BTC/USDT', 'LONG', 'OPEN', 'v5', datetime('now'), datetime('now'))"
+        )
+    conn.commit()
+    conn.close()
+
+    pm = PaperPositionManager(db_path=db)
+    pid = pm.open_position(**_open_intent_kwargs())  # 无 max_concurrent
+    assert pid > 0
