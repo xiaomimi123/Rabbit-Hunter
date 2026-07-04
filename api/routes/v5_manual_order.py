@@ -14,6 +14,12 @@ from api.schemas.v5_manual_order import (
     ManualOrderDecisionSnapshot, ManualOrderRagCase,
     ManualOrderExecuteRequest, ManualOrderExecuteResponse,
 )
+from scripts.risk_gates import (
+    IronlawViolation, gate_setup_enabled,
+    gate_daily_drawdown, gate_per_trade_risk,
+    get_today_realized_pnl,
+)
+from scripts.config import get_config
 
 
 router = APIRouter(prefix="/api/v5", tags=["manual-order"])
@@ -160,6 +166,63 @@ async def execute(req: ManualOrderExecuteRequest) -> ManualOrderExecuteResponse:
         should_trade=True, side=req.side,
         reasoning=decision.reasoning, block_reason=None,
     )
+
+    # ── M3 铁律层 (Finding 13):manual 与 scorer 走同一层守卫 ──
+    # 1. SHORT 全局开关
+    if req.side == "SHORT" and not get_config(reload=True).enable_short_trading:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error_kind": "SHORT_DISABLED",
+                "gate": "enable_short_trading",
+                "message": "ENABLE_SHORT_TRADING=false;SHORT 交易被全局关闭",
+            },
+        )
+
+    # 2. Setup 禁用清单
+    try:
+        from scripts.ai.setup_type import derive_setup_type
+        setup_type = derive_setup_type({
+            "side": req.side,
+            "rsi_15m": indicators.rsi_15m,
+            "macd_hist": indicators.macd_hist_15m,
+            "macd_hist_prev": indicators.macd_hist_prev_15m,
+            "funding_z_score": None,
+        })
+        gate_setup_enabled(setup_type=setup_type, db_path=_db())
+    except IronlawViolation as e:
+        raise HTTPException(
+            status_code=400,
+            detail={"error_kind": e.kind, "gate": "gate_setup_enabled", "message": str(e)},
+        )
+
+    # 3. 日熔断
+    balance = float(os.environ.get("PAPER_INITIAL_BALANCE_USDT", "1000"))
+    try:
+        today_pnl = get_today_realized_pnl(_db())
+        gate_daily_drawdown(equity_usdt=balance, today_realized_pnl=today_pnl)
+    except IronlawViolation as e:
+        raise HTTPException(
+            status_code=400,
+            detail={"error_kind": e.kind, "gate": "gate_daily_drawdown", "message": str(e)},
+        )
+
+    # 4. 单笔风险
+    from scripts.v5_params import get_param
+    cap_pct = float(get_param("v5_risk_per_trade", 0.015, float))
+    sl_dist = abs(risk.entry_price - risk.sl_price) * req.sl_multiplier
+    sl_dist_pct = sl_dist / max(risk.entry_price, 1e-9)
+    final_size = risk.size_usdt * req.size_multiplier
+    planned_loss = final_size * risk.leverage * sl_dist_pct
+    try:
+        gate_per_trade_risk(
+            equity_usdt=balance, planned_loss_usdt=planned_loss, cap_pct=cap_pct,
+        )
+    except IronlawViolation as e:
+        raise HTTPException(
+            status_code=400,
+            detail={"error_kind": e.kind, "gate": "gate_per_trade_risk", "message": str(e)},
+        )
 
     from scripts.paper_position_manager import PaperPositionManager
     pm = PaperPositionManager(db_path=_db())

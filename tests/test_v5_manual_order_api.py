@@ -71,6 +71,9 @@ def test_execute_writes_paper_trade(app_with_db, monkeypatch):
     klines_15m, klines_4h = _fake_klines()
     _inject_fake_exchange(monkeypatch, klines_15m, klines_4h)
     monkeypatch.setenv("V5_RSI_OVERBOUGHT", "60")
+    monkeypatch.setenv("ENABLE_SHORT_TRADING", "true")
+    from scripts.config import get_config
+    get_config(reload=True)  # 清 singleton 让 env 生效
 
     from v5_types import AIResult
     with patch("scripts.ai.trading_assistant.TradingAssistant") as mock_ta_cls:
@@ -99,3 +102,80 @@ def test_execute_writes_paper_trade(app_with_db, monkeypatch):
             "WHERE id=?", (data["position_id"],)).fetchone()
         conn.close()
         assert row == ("TEST/USDT", "SHORT", "OPEN", "v5_manual")
+
+
+def test_execute_blocks_short_when_disabled(app_with_db, monkeypatch):
+    """SHORT + enable_short_trading=false → 400 SHORT_DISABLED, 无 INSERT。"""
+    klines_15m, klines_4h = _fake_klines()
+    _inject_fake_exchange(monkeypatch, klines_15m, klines_4h)
+    monkeypatch.setenv("V5_RSI_OVERBOUGHT", "60")
+    monkeypatch.delenv("ENABLE_SHORT_TRADING", raising=False)
+    from scripts.config import get_config
+    get_config(reload=True)
+
+    from v5_types import AIResult
+    with patch("scripts.ai.trading_assistant.TradingAssistant") as mock_ta_cls:
+        mock_ta = mock_ta_cls.return_value
+        mock_ta.client = object()
+        mock_ta.provider = "deepseek"
+        mock_ta.assistant_id = None
+        mock_ta.decide = AsyncMock(return_value=AIResult(
+            execute=True, sl_multiplier=1.0, tp_multiplier=1.0,
+            size_multiplier=1.0, confidence=0.7, reasoning="ok"))
+
+        client, db = app_with_db
+        r = client.post("/api/v5/manual-order/execute", json={
+            "symbol": "TEST/USDT", "side": "SHORT", "size_usdt": 15.0,
+            "sl_multiplier": 1.0, "tp_multiplier": 1.0, "size_multiplier": 1.0,
+        })
+        assert r.status_code == 400, r.text
+        body = r.json()
+        assert body["detail"]["error_kind"] == "SHORT_DISABLED"
+        assert body["detail"]["gate"] == "enable_short_trading"
+
+    conn = sqlite3.connect(db)
+    n = conn.execute("SELECT COUNT(*) FROM paper_trades WHERE status='OPEN'").fetchone()[0]
+    conn.close()
+    assert n == 0, "违规 SHORT 不应产生 OPEN 记录"
+
+
+def test_execute_blocks_when_daily_drawdown_exceeded(app_with_db, monkeypatch):
+    """monkeypatch gate_daily_drawdown 抛 IronlawViolation → 400 DAILY_DRAWDOWN_HIT。"""
+    klines_15m, klines_4h = _fake_klines()
+    _inject_fake_exchange(monkeypatch, klines_15m, klines_4h)
+    monkeypatch.setenv("V5_RSI_OVERBOUGHT", "60")
+    monkeypatch.setenv("ENABLE_SHORT_TRADING", "true")
+    from scripts.config import get_config
+    get_config(reload=True)
+
+    from scripts.risk_gates import IronlawViolation
+
+    def _bang(**_):
+        raise IronlawViolation("DAILY_DRAWDOWN_HIT", "day pnl -50 exceeds cap 3%")
+
+    monkeypatch.setattr("api.routes.v5_manual_order.gate_daily_drawdown", _bang)
+
+    from v5_types import AIResult
+    with patch("scripts.ai.trading_assistant.TradingAssistant") as mock_ta_cls:
+        mock_ta = mock_ta_cls.return_value
+        mock_ta.client = object()
+        mock_ta.provider = "deepseek"
+        mock_ta.assistant_id = None
+        mock_ta.decide = AsyncMock(return_value=AIResult(
+            execute=True, sl_multiplier=1.0, tp_multiplier=1.0,
+            size_multiplier=1.0, confidence=0.7, reasoning="ok"))
+
+        client, db = app_with_db
+        r = client.post("/api/v5/manual-order/execute", json={
+            "symbol": "TEST/USDT", "side": "SHORT", "size_usdt": 15.0,
+            "sl_multiplier": 1.0, "tp_multiplier": 1.0, "size_multiplier": 1.0,
+        })
+        assert r.status_code == 400, r.text
+        body = r.json()
+        assert body["detail"]["error_kind"] == "DAILY_DRAWDOWN_HIT"
+        assert body["detail"]["gate"] == "gate_daily_drawdown"
+
+    conn = sqlite3.connect(db)
+    n = conn.execute("SELECT COUNT(*) FROM paper_trades WHERE status='OPEN'").fetchone()[0]
+    conn.close()
+    assert n == 0
