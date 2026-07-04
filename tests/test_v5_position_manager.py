@@ -211,3 +211,49 @@ def test_close_broker_exception_marks_reconcile(tmp_path):
     ctx = json.loads(row[1])
     assert ctx["close_error"]["kind"] == "UNKNOWN"
     assert "unexpected explode" in ctx["close_error"]["msg"]
+
+
+def test_close_success_after_retryable_clears_stale_error_context(tmp_path):
+    """RETRYABLE 后再次调 close 成功 → CLOSED 记录 error_context 不带 stale close_error。"""
+    import sqlite3
+    import json
+    from unittest.mock import MagicMock
+    from scripts.local_db import init_local_db
+    from scripts.okx_trader import OkxTrader
+    from scripts.v5_position_manager import V5PositionManager
+
+    db = str(tmp_path / "x.db")
+    init_local_db(db)
+    pid = _seeded_open_position(db)
+
+    # 第一次:RETRYABLE
+    mock_broker = MagicMock(spec=OkxTrader)
+    mock_broker.close_position.return_value = {
+        "success": False, "error_kind": "RETRYABLE", "error": "timeout",
+    }
+    pm = V5PositionManager(broker=mock_broker, db_path=db)
+    pm.close_position(pid, exit_price=0.163, exit_reason="TP_HIT")
+
+    # 确认 stale close_error 在
+    conn = sqlite3.connect(db)
+    ctx_json = conn.execute(
+        "SELECT error_context FROM positions_v5 WHERE id=?", (pid,)
+    ).fetchone()[0]
+    conn.close()
+    assert "close_error" in json.loads(ctx_json)
+
+    # 第二次:success → CLOSED,stale 应被清
+    mock_broker2 = MagicMock(spec=OkxTrader)
+    mock_broker2.close_position.return_value = {"success": True, "order_id": "rb2"}
+    pm2 = V5PositionManager(broker=mock_broker2, db_path=db)
+    pm2.close_position(pid, exit_price=0.163, exit_reason="TP_HIT")
+
+    conn = sqlite3.connect(db)
+    row = conn.execute(
+        "SELECT status, error_context FROM positions_v5 WHERE id=?", (pid,)
+    ).fetchone()
+    conn.close()
+    assert row[0] == "CLOSED"
+    # error_context 应为 None (清空后我们存 NULL) 或不含 close_error 键
+    if row[1] is not None:
+        assert "close_error" not in json.loads(row[1])

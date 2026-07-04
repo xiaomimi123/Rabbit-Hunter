@@ -236,8 +236,12 @@ class V5PositionManager:
         self, conn: sqlite3.Connection, position_id: int, side: str,
         entry_price: float, size_usdt: float, leverage: int,
         entry_time_str: str, exit_price: float, exit_reason: str,
+        existing_ctx_json: Optional[str],
     ) -> None:
-        """成功平仓 or PERMANENT 补记账 —— 计算 PnL 并写 CLOSED。"""
+        """成功平仓 or PERMANENT 补记账 —— 计算 PnL 并写 CLOSED。
+
+        若 error_context 里有 close_error（前次 RETRYABLE 遗留），清掉。
+        """
         entry_time = datetime.fromisoformat(entry_time_str)
         exit_time = _utcnow()
         holding_minutes = (exit_time - entry_time).total_seconds() / 60
@@ -247,13 +251,22 @@ class V5PositionManager:
         else:
             pnl_pct = (entry_price - exit_price) / entry_price
         pnl_usdt = notional * pnl_pct
+
+        # 清掉前次失败的 close_error（若有）,保留其他键（如 open_error）
+        ctx = self._parse_error_context(existing_ctx_json)
+        ctx.pop("close_error", None)
+        # 空 dict 序列化为 "{}" 略啰嗦;若清完为空,存 NULL 更干净
+        ctx_json = json.dumps(ctx) if ctx else None
+
         conn.execute("""
             UPDATE positions_v5 SET status='CLOSED', exit_price=?, exit_time=?,
-              exit_reason=?, pnl_usdt=?, pnl_pct=?, holding_minutes=?, updated_at=?
+              exit_reason=?, pnl_usdt=?, pnl_pct=?, holding_minutes=?,
+              error_context=?, updated_at=?
             WHERE id=?
         """, (
             exit_price, exit_time.isoformat(), exit_reason,
-            pnl_usdt, pnl_pct * 100, holding_minutes, exit_time.isoformat(), position_id,
+            pnl_usdt, pnl_pct * 100, holding_minutes, ctx_json, exit_time.isoformat(),
+            position_id,
         ))
 
     def _append_close_error(
@@ -262,12 +275,11 @@ class V5PositionManager:
     ) -> None:
         """RETRYABLE:保持 status,合并 close_error 到 error_context。"""
         ctx = self._parse_error_context(existing_ctx_json)
-        ctx["close_error"] = {
-            "kind": kind, "msg": msg, "at": _utcnow().isoformat(),
-        }
+        now = _utcnow().isoformat()
+        ctx["close_error"] = {"kind": kind, "msg": msg, "at": now}
         conn.execute(
             "UPDATE positions_v5 SET error_context=?, updated_at=? WHERE id=?",
-            (json.dumps(ctx), _utcnow().isoformat(), position_id),
+            (json.dumps(ctx), now, position_id),
         )
 
     def _mark_reconcile_needed(
@@ -276,13 +288,12 @@ class V5PositionManager:
     ) -> None:
         """UNKNOWN:标 ERROR_RECONCILE_NEEDED,合并 close_error。"""
         ctx = self._parse_error_context(existing_ctx_json)
-        ctx["close_error"] = {
-            "kind": "UNKNOWN", "msg": msg, "at": _utcnow().isoformat(),
-        }
+        now = _utcnow().isoformat()
+        ctx["close_error"] = {"kind": "UNKNOWN", "msg": msg, "at": now}
         conn.execute(
             "UPDATE positions_v5 SET status='ERROR_RECONCILE_NEEDED', "
             "error_context=?, updated_at=? WHERE id=?",
-            (json.dumps(ctx), _utcnow().isoformat(), position_id),
+            (json.dumps(ctx), now, position_id),
         )
 
     @staticmethod
@@ -323,7 +334,7 @@ class V5PositionManager:
                 # 成功 → 正常 CLOSED
                 self._update_closed(
                     conn, position_id, side, entry_price, size_usdt, leverage,
-                    entry_time_str, exit_price, exit_reason,
+                    entry_time_str, exit_price, exit_reason, existing_ctx_json,
                 )
             elif broker_error_kind == "PERMANENT":
                 # 交易所已平 → DB 补记账
@@ -335,6 +346,7 @@ class V5PositionManager:
                     conn, position_id, side, entry_price, size_usdt, leverage,
                     entry_time_str, exit_price,
                     f"{exit_reason}|broker_permanent:{broker_error_msg}",
+                    existing_ctx_json,
                 )
             elif broker_error_kind == "RETRYABLE":
                 # 保持 OPEN + error_context, monitor 下 tick 重试
