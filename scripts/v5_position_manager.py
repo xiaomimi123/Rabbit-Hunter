@@ -14,6 +14,7 @@ import json
 import os
 import sqlite3
 from datetime import datetime, timezone, timedelta
+from typing import Optional
 
 
 SOFT_TARGET_MINUTES = 15
@@ -231,37 +232,129 @@ class V5PositionManager:
         finally:
             conn.close()
 
+    def _update_closed(
+        self, conn: sqlite3.Connection, position_id: int, side: str,
+        entry_price: float, size_usdt: float, leverage: int,
+        entry_time_str: str, exit_price: float, exit_reason: str,
+    ) -> None:
+        """成功平仓 or PERMANENT 补记账 —— 计算 PnL 并写 CLOSED。"""
+        entry_time = datetime.fromisoformat(entry_time_str)
+        exit_time = _utcnow()
+        holding_minutes = (exit_time - entry_time).total_seconds() / 60
+        notional = (size_usdt or 0) * (leverage or 1)
+        if side == "LONG":
+            pnl_pct = (exit_price - entry_price) / entry_price
+        else:
+            pnl_pct = (entry_price - exit_price) / entry_price
+        pnl_usdt = notional * pnl_pct
+        conn.execute("""
+            UPDATE positions_v5 SET status='CLOSED', exit_price=?, exit_time=?,
+              exit_reason=?, pnl_usdt=?, pnl_pct=?, holding_minutes=?, updated_at=?
+            WHERE id=?
+        """, (
+            exit_price, exit_time.isoformat(), exit_reason,
+            pnl_usdt, pnl_pct * 100, holding_minutes, exit_time.isoformat(), position_id,
+        ))
+
+    def _append_close_error(
+        self, conn: sqlite3.Connection, position_id: int, kind: str,
+        msg: str, existing_ctx_json: Optional[str],
+    ) -> None:
+        """RETRYABLE:保持 status,合并 close_error 到 error_context。"""
+        ctx = self._parse_error_context(existing_ctx_json)
+        ctx["close_error"] = {
+            "kind": kind, "msg": msg, "at": _utcnow().isoformat(),
+        }
+        conn.execute(
+            "UPDATE positions_v5 SET error_context=?, updated_at=? WHERE id=?",
+            (json.dumps(ctx), _utcnow().isoformat(), position_id),
+        )
+
+    def _mark_reconcile_needed(
+        self, conn: sqlite3.Connection, position_id: int, msg: str,
+        existing_ctx_json: Optional[str],
+    ) -> None:
+        """UNKNOWN:标 ERROR_RECONCILE_NEEDED,合并 close_error。"""
+        ctx = self._parse_error_context(existing_ctx_json)
+        ctx["close_error"] = {
+            "kind": "UNKNOWN", "msg": msg, "at": _utcnow().isoformat(),
+        }
+        conn.execute(
+            "UPDATE positions_v5 SET status='ERROR_RECONCILE_NEEDED', "
+            "error_context=?, updated_at=? WHERE id=?",
+            (json.dumps(ctx), _utcnow().isoformat(), position_id),
+        )
+
+    @staticmethod
+    def _parse_error_context(existing: Optional[str]) -> dict:
+        """把已有 error_context JSON 反序列化 or 空 dict。"""
+        if not existing:
+            return {}
+        try:
+            v = json.loads(existing)
+            return v if isinstance(v, dict) else {}
+        except json.JSONDecodeError:
+            return {}
+
     def close_position(self, position_id: int, *, exit_price: float, exit_reason: str) -> None:
         conn = self._conn()
         try:
             row = conn.execute(
-                "SELECT symbol, side, entry_price, size_usdt, leverage, entry_time "
+                "SELECT symbol, side, entry_price, size_usdt, leverage, entry_time, error_context "
                 "FROM positions_v5 WHERE id=?", (position_id,)).fetchone()
             if not row:
                 return
-            symbol, side, entry_price, size_usdt, leverage, entry_time_str = row
+            symbol, side, entry_price, size_usdt, leverage, entry_time_str, existing_ctx_json = row
 
+            # ── broker.close_position 结果分类 ──────────────
+            broker_error_kind: Optional[str] = None
+            broker_error_msg: Optional[str] = None
             try:
-                self.broker.close_position(symbol)
+                rb_result = self.broker.close_position(symbol)
+                if isinstance(rb_result, dict) and not rb_result.get("success"):
+                    broker_error_kind = rb_result.get("error_kind", "UNKNOWN")
+                    broker_error_msg = rb_result.get("error", "unknown")
             except Exception as e:
-                print(f"[V5PositionManager] 平仓 broker 失败: {e}")
+                broker_error_kind = "UNKNOWN"
+                broker_error_msg = f"{type(e).__name__}: {e}"
 
-            entry_time = datetime.fromisoformat(entry_time_str)
-            exit_time = _utcnow()
-            holding_minutes = (exit_time - entry_time).total_seconds() / 60
-            notional = (size_usdt or 0) * (leverage or 1)
-            if side == "LONG":
-                pnl_pct = (exit_price - entry_price) / entry_price
+            # ── 决策分支 ────────────────────────────────
+            if broker_error_kind is None:
+                # 成功 → 正常 CLOSED
+                self._update_closed(
+                    conn, position_id, side, entry_price, size_usdt, leverage,
+                    entry_time_str, exit_price, exit_reason,
+                )
+            elif broker_error_kind == "PERMANENT":
+                # 交易所已平 → DB 补记账
+                print(
+                    f"[V5PositionManager] close broker PERMANENT: {broker_error_msg}; "
+                    f"position {position_id} 交易所已平,DB 补记 CLOSED"
+                )
+                self._update_closed(
+                    conn, position_id, side, entry_price, size_usdt, leverage,
+                    entry_time_str, exit_price,
+                    f"{exit_reason}|broker_permanent:{broker_error_msg}",
+                )
+            elif broker_error_kind == "RETRYABLE":
+                # 保持 OPEN + error_context, monitor 下 tick 重试
+                print(
+                    f"[V5PositionManager] close broker RETRYABLE: {broker_error_msg}; "
+                    f"position {position_id} 保持 OPEN 待重试"
+                )
+                self._append_close_error(
+                    conn, position_id, "RETRYABLE", broker_error_msg, existing_ctx_json,
+                )
             else:
-                pnl_pct = (entry_price - exit_price) / entry_price
-            pnl_usdt = notional * pnl_pct
+                # UNKNOWN → 保守 → 人工对账
+                print(
+                    f"[V5PositionManager] close broker UNKNOWN error: {broker_error_msg}; "
+                    f"position {position_id} → ERROR_RECONCILE_NEEDED"
+                )
+                self._mark_reconcile_needed(
+                    conn, position_id, broker_error_msg, existing_ctx_json,
+                )
 
-            conn.execute("""
-                UPDATE positions_v5 SET status='CLOSED', exit_price=?, exit_time=?,
-                  exit_reason=?, pnl_usdt=?, pnl_pct=?, holding_minutes=?, updated_at=?
-                WHERE id=?
-            """, (exit_price, exit_time.isoformat(), exit_reason,
-                  pnl_usdt, pnl_pct * 100, holding_minutes, exit_time.isoformat(), position_id))
             conn.commit()
         finally:
             conn.close()

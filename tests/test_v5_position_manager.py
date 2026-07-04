@@ -74,3 +74,140 @@ def test_broker_missing_method_fails_fast():
     # OkxTrader 上没有 create_order 方法。spec mock 应拒绝这个访问。
     with pytest.raises(AttributeError):
         mock_broker.create_order(symbol="H/USDT", side="sell")
+
+
+# ── F2 close_position 分支测试 ─────────────────
+
+def _seeded_open_position(db_path: str) -> int:
+    """辅助:插一条 status=OPEN 的 LIVE 记录,返回 position_id。"""
+    from unittest.mock import MagicMock
+    from scripts.okx_trader import OkxTrader
+    from scripts.v5_position_manager import V5PositionManager
+
+    mock_broker = MagicMock(spec=OkxTrader)
+    mock_broker.open_position.return_value = {"success": True, "order_id": "x"}
+    mock_broker.set_stop_loss.return_value = {"success": True, "order_id": "sl"}
+    mock_broker.set_take_profit.return_value = {"success": True, "order_id": "tp"}
+    pm = V5PositionManager(broker=mock_broker, db_path=db_path)
+    return pm.open_position(
+        symbol="H/USDT", side="SHORT", entry_price=0.166,
+        sl_price=0.169, tp_price=0.162, size_usdt=15, leverage=10,
+    )
+
+
+def test_close_success_marks_closed(tmp_path):
+    """broker.close_position 返 success=True → DB 标 CLOSED,PnL 有值。"""
+    import sqlite3
+    from unittest.mock import MagicMock
+    from scripts.local_db import init_local_db
+    from scripts.okx_trader import OkxTrader
+    from scripts.v5_position_manager import V5PositionManager
+
+    db = str(tmp_path / "x.db")
+    init_local_db(db)
+    pid = _seeded_open_position(db)
+
+    mock_broker = MagicMock(spec=OkxTrader)
+    mock_broker.close_position.return_value = {"success": True, "order_id": "rb"}
+    pm = V5PositionManager(broker=mock_broker, db_path=db)
+    pm.close_position(pid, exit_price=0.163, exit_reason="TP_HIT")
+
+    conn = sqlite3.connect(db)
+    row = conn.execute(
+        "SELECT status, exit_price, exit_reason FROM positions_v5 WHERE id=?", (pid,)
+    ).fetchone()
+    conn.close()
+    assert row[0] == "CLOSED"
+    assert row[1] == 0.163
+    assert row[2] == "TP_HIT"
+
+
+def test_close_broker_permanent_still_marks_closed(tmp_path):
+    """PERMANENT (交易所已平) → DB 补记 CLOSED,exit_reason 追加 broker_permanent。"""
+    import sqlite3
+    from unittest.mock import MagicMock
+    from scripts.local_db import init_local_db
+    from scripts.okx_trader import OkxTrader
+    from scripts.v5_position_manager import V5PositionManager
+
+    db = str(tmp_path / "x.db")
+    init_local_db(db)
+    pid = _seeded_open_position(db)
+
+    mock_broker = MagicMock(spec=OkxTrader)
+    mock_broker.close_position.return_value = {
+        "success": False, "error_kind": "PERMANENT",
+        "error": "position not found on exchange",
+    }
+    pm = V5PositionManager(broker=mock_broker, db_path=db)
+    pm.close_position(pid, exit_price=0.163, exit_reason="TP_HIT")
+
+    conn = sqlite3.connect(db)
+    row = conn.execute(
+        "SELECT status, exit_reason FROM positions_v5 WHERE id=?", (pid,)
+    ).fetchone()
+    conn.close()
+    assert row[0] == "CLOSED"
+    assert "broker_permanent" in row[1]
+    assert "not found" in row[1]
+
+
+def test_close_broker_retryable_keeps_open(tmp_path):
+    """RETRYABLE → 保持 OPEN + error_context 有 RETRYABLE close_error。"""
+    import sqlite3
+    import json
+    from unittest.mock import MagicMock
+    from scripts.local_db import init_local_db
+    from scripts.okx_trader import OkxTrader
+    from scripts.v5_position_manager import V5PositionManager
+
+    db = str(tmp_path / "x.db")
+    init_local_db(db)
+    pid = _seeded_open_position(db)
+
+    mock_broker = MagicMock(spec=OkxTrader)
+    mock_broker.close_position.return_value = {
+        "success": False, "error_kind": "RETRYABLE",
+        "error": "network timeout",
+    }
+    pm = V5PositionManager(broker=mock_broker, db_path=db)
+    pm.close_position(pid, exit_price=0.163, exit_reason="TP_HIT")
+
+    conn = sqlite3.connect(db)
+    row = conn.execute(
+        "SELECT status, error_context FROM positions_v5 WHERE id=?", (pid,)
+    ).fetchone()
+    conn.close()
+    assert row[0] == "OPEN"
+    ctx = json.loads(row[1])
+    assert ctx["close_error"]["kind"] == "RETRYABLE"
+    assert "network timeout" in ctx["close_error"]["msg"]
+
+
+def test_close_broker_exception_marks_reconcile(tmp_path):
+    """broker.close_position 抛异常 → ERROR_RECONCILE_NEEDED + error_context 含 UNKNOWN。"""
+    import sqlite3
+    import json
+    from unittest.mock import MagicMock
+    from scripts.local_db import init_local_db
+    from scripts.okx_trader import OkxTrader
+    from scripts.v5_position_manager import V5PositionManager
+
+    db = str(tmp_path / "x.db")
+    init_local_db(db)
+    pid = _seeded_open_position(db)
+
+    mock_broker = MagicMock(spec=OkxTrader)
+    mock_broker.close_position.side_effect = RuntimeError("unexpected explode")
+    pm = V5PositionManager(broker=mock_broker, db_path=db)
+    pm.close_position(pid, exit_price=0.163, exit_reason="TP_HIT")
+
+    conn = sqlite3.connect(db)
+    row = conn.execute(
+        "SELECT status, error_context FROM positions_v5 WHERE id=?", (pid,)
+    ).fetchone()
+    conn.close()
+    assert row[0] == "ERROR_RECONCILE_NEEDED"
+    ctx = json.loads(row[1])
+    assert ctx["close_error"]["kind"] == "UNKNOWN"
+    assert "unexpected explode" in ctx["close_error"]["msg"]
