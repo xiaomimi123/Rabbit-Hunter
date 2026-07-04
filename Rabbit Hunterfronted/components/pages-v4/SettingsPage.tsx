@@ -158,6 +158,20 @@ export function SettingsPage() {
     }
   };
 
+  // AI API Key onBlur commit — 提交后清空 input 避免明文停留
+  const commitOpenaiKey = () => {
+    const v = openaiKey.trim();
+    if (!v) return;
+    patch.mutate({ openai_api_key: v } as any);
+    setOpenaiKey('');
+  };
+  const commitDeepseekKey = () => {
+    const v = deepseekKey.trim();
+    if (!v) return;
+    patch.mutate({ deepseek_api_key: v } as any);
+    setDeepseekKey('');
+  };
+
   const isLive = settings?.system_mode === 'LIVE';
   const autoOn = settings?.enable_auto_trading ?? false;
 
@@ -177,13 +191,15 @@ export function SettingsPage() {
             <Field title="OpenAI Assistant" hint="主决策 · GPT-4o · 二次判断与反思"
               control={<Pill tone={settings?.active_ai_provider === 'openai' ? 'ok' : 'off'}>
                 {settings?.active_ai_provider === 'openai' ? '已激活' : '未启用'}</Pill>} />
-            <Field title="OpenAI API Key" hint={`已存: ${settings?.openai_api_key_masked || '(空)'}`}
-              control={<TextInput type="password" value={openaiKey} onChange={setOpenaiKey} placeholder="sk-..." />} />
+            <Field title="OpenAI API Key" hint={`已存: ${settings?.openai_api_key_masked || '(空)'} · 输入后离开输入框自动保存`}
+              control={<TextInput type="password" value={openaiKey}
+                onChange={setOpenaiKey} onBlur={commitOpenaiKey} placeholder="sk-..." />} />
             <Field title="DeepSeek 备用" hint="主模型故障时兜底"
               control={<Toggle on={settings?.deepseek_enabled ?? false}
                 onClick={() => patch.mutate({ deepseek_enabled: !settings?.deepseek_enabled } as any)} />} />
-            <Field title="DeepSeek API Key" hint={`已存: ${settings?.deepseek_api_key_masked || '(空)'}`}
-              control={<TextInput type="password" value={deepseekKey} onChange={setDeepseekKey} placeholder="sk-..." />} />
+            <Field title="DeepSeek API Key" hint={`已存: ${settings?.deepseek_api_key_masked || '(空)'} · 输入后离开输入框自动保存`}
+              control={<TextInput type="password" value={deepseekKey}
+                onChange={setDeepseekKey} onBlur={commitDeepseekKey} placeholder="sk-..." />} />
             <Field title="AI 故障时下单 (fail-open)" hint="关闭 = AI 不可用时拒绝交易 (推荐 fail-closed)"
               control={<Toggle on={settings?.ai_fail_open ?? false}
                 onClick={() => patch.mutate({ ai_fail_open: !settings?.ai_fail_open } as any)} />} />
