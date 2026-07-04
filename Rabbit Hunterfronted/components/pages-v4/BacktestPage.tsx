@@ -142,12 +142,15 @@ export function BacktestPage() {
   const report = useWalkforwardReport(selectedReport);
 
   // 任务完成时自动选中报告
+  // Finding 19: selectedReport 加入 deps 满足 exhaustive-deps lint。
+  // 注:若用户在 job 完成前手动切换报告,该 effect 仍会 overwrite —— 属于设计层
+  //     问题(需引入"已手动选择过"flag),不在本 P2 fix 范围。
   useEffect(() => {
     if (jobQuery.data?.status === 'done' && jobQuery.data?.report_name && selectedReport !== jobQuery.data.report_name) {
       setSelectedReport(jobQuery.data.report_name);
       reports.refetch();
     }
-  }, [jobQuery.data?.status, jobQuery.data?.report_name]);
+  }, [jobQuery.data?.status, jobQuery.data?.report_name, selectedReport]);
 
   const isRunning = jobQuery.data?.status === 'queued' || jobQuery.data?.status === 'running';
 
