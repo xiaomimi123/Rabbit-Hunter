@@ -28,6 +28,7 @@ from scripts.risk_gates import (
     gate_min_rr, gate_per_trade_risk, gate_setup_enabled, gate_sl_attached,
     get_today_realized_pnl,
 )
+from scripts.v5_position_monitor import _enqueue_ws  # noqa: F811 (local def below overrides; kept for Batch-2 F5 traceability)
 
 
 def _enqueue_ws(db_path: str, payload: dict) -> None:
@@ -473,3 +474,9 @@ class V5Scorer:
                 )
             except Exception as e:
                 print(f"[V5Scorer] {enriched.symbol} 处理异常: {type(e).__name__}: {e}")
+                # Finding 10:发 ws 事件让前端/运维实时看见,不再依赖 healthcheck 5min 告警
+                _enqueue_ws(self.db_path, {
+                    "type": "scorer_error",
+                    "symbol": enriched.symbol,
+                    "error": f"{type(e).__name__}: {e}",
+                })
