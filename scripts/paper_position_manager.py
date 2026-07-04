@@ -92,8 +92,8 @@ class PaperPositionManager:
             lev = cfg.get("leverage")
             if lev:
                 return int(lev)
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[PaperPositionManager] _resolve_leverage DB 读取失败,回退到 env/default: {e}")
 
         env_active = (os.environ.get("EXCHANGE", "okx") or "okx").lower()
         env_key = "OKX_LEVERAGE" if env_active == "okx" else "BINANCE_LEVERAGE"

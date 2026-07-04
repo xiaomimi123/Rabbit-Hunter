@@ -151,3 +151,32 @@ def test_open_position_no_max_concurrent_bypasses_check():
     pm = PaperPositionManager(db_path=db)
     pid = pm.open_position(**_open_intent_kwargs())  # 无 max_concurrent
     assert pid > 0
+
+
+def test_resolve_leverage_db_error_logs_warning(monkeypatch, capsys):
+    """F17: exchange_config_manager 抛异常 → print WARN + fallback env/default,不静默。"""
+    import sys
+    from scripts.paper_position_manager import PaperPositionManager
+
+    def _raise(_supabase):
+        raise AttributeError("get_exchange_config_manager broken")
+
+    # Block the first import path so code falls back to scripts.exchange_config_manager
+    sys.modules['exchange_config_manager'] = None
+
+    monkeypatch.setattr(
+        "scripts.exchange_config_manager.get_exchange_config_manager",
+        _raise,
+    )
+    monkeypatch.delenv("OKX_LEVERAGE", raising=False)
+    monkeypatch.delenv("BINANCE_LEVERAGE", raising=False)
+    monkeypatch.delenv("EXCHANGE", raising=False)
+
+    pm = PaperPositionManager(db_path=":memory:")
+    result = pm._resolve_leverage()
+
+    captured = capsys.readouterr()
+    assert result == 10  # default fallback
+    assert "[PaperPositionManager]" in captured.out
+    assert "_resolve_leverage DB 读取失败" in captured.out
+    assert "AttributeError" in captured.out or "broken" in captured.out
