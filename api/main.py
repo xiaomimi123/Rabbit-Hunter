@@ -227,6 +227,7 @@ from api.routes import v5_reflection
 from api.routes import v5_funding
 from api.routes import v5_constitution
 from api.routes import v5_walkforward
+from api.routes import v5_dashboard
 from api.routes import v5_m9
 from api.routes import v5_account
 from api.routes import v5_trader_kpi
@@ -247,6 +248,7 @@ app.include_router(v5_reflection.router,      dependencies=_global_auth)
 app.include_router(v5_funding.router,         dependencies=_global_auth)
 app.include_router(v5_constitution.router,    dependencies=_global_auth)
 app.include_router(v5_walkforward.router,     dependencies=_global_auth)
+app.include_router(v5_dashboard.router,       dependencies=_global_auth)
 app.include_router(v5_m9.router,              dependencies=_global_auth)
 app.include_router(v5_account.router,         dependencies=_global_auth)
 app.include_router(v5_trader_kpi.router,      dependencies=_global_auth)
