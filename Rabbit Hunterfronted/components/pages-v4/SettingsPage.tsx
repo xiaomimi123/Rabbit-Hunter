@@ -3,7 +3,7 @@
  *
  * 4 个区: AI 接入 / OKX 交易所 / 交易模式 (LIVE 二次确认) / 风控参数 (宪法锁)
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Settings as SettingsIcon, TrendingUp, AlertTriangle, ShieldCheck } from 'lucide-react';
 import { useV5Settings } from '../../hooks/api/useV5Settings';
 
@@ -63,15 +63,17 @@ function Toggle({ on, onClick, tone = 'amber', disabled }: {
   );
 }
 
-function TextInput({ value, type = 'text', onChange, placeholder, disabled }: {
+function TextInput({ value, type = 'text', onChange, onBlur, placeholder, disabled }: {
   value: string | number; type?: 'text' | 'password';
-  onChange?: (v: string) => void; placeholder?: string; disabled?: boolean;
+  onChange?: (v: string) => void; onBlur?: () => void;
+  placeholder?: string; disabled?: boolean;
 }) {
   return (
     <input
       type={type}
       value={value}
       onChange={(e) => onChange?.(e.target.value)}
+      onBlur={onBlur}
       placeholder={placeholder}
       disabled={disabled}
       className="rounded-md border border-line bg-[#0E141A] px-3 py-1.5 font-mono text-[12px] text-v3text placeholder:text-v3faint focus:border-amber focus:outline-none transition w-[200px] disabled:opacity-60"
@@ -143,6 +145,18 @@ export function SettingsPage() {
   const [okxKey, setOkxKey] = useState('');
   const [okxSecret, setOkxSecret] = useState('');
   const [okxPassphrase, setOkxPassphrase] = useState('');
+  const [maxConcurrentDraft, setMaxConcurrentDraft] = useState<string>('');
+  useEffect(() => {
+    if (settings?.v5_max_concurrent != null) {
+      setMaxConcurrentDraft(String(settings.v5_max_concurrent));
+    }
+  }, [settings?.v5_max_concurrent]);
+  const commitMaxConcurrent = () => {
+    const n = Number(maxConcurrentDraft);
+    if (Number.isInteger(n) && n >= 1 && n <= 10 && n !== settings?.v5_max_concurrent) {
+      patch.mutate({ v5_max_concurrent: n } as any);
+    }
+  };
 
   const isLive = settings?.system_mode === 'LIVE';
   const autoOn = settings?.enable_auto_trading ?? false;
@@ -215,8 +229,12 @@ export function SettingsPage() {
               control={<TextInput value="-3.0 %" disabled />} locked />
             <Field title="杠杆上限" hint="宪法 §4 · 系统再反推压低"
               control={<TextInput value="5x" disabled />} locked />
-            <Field title="同时活仓上限" hint="v5_max_concurrent"
-              control={<TextInput value="3" />} />
+            <Field title="同时活仓上限" hint="v5_max_concurrent · 范围 1-10"
+              control={<TextInput
+                value={maxConcurrentDraft}
+                onChange={setMaxConcurrentDraft}
+                onBlur={commitMaxConcurrent}
+              />} />
             <Field title="SL/TP 失败保留仓" hint="关闭 = SL/TP 挂单失败立即平仓回滚"
               control={<Toggle on={settings?.sl_tp_fail_open ?? false}
                 onClick={() => patch.mutate({ sl_tp_fail_open: !settings?.sl_tp_fail_open } as any)} />} />

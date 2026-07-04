@@ -118,6 +118,7 @@ export interface SettingsResponse {
   enable_auto_trading: boolean;
   ai_fail_open: boolean;
   sl_tp_fail_open: boolean;
+  v5_max_concurrent: number;
 }
 export interface SettingsPatchRequest {
   exchange?: string;
@@ -129,6 +130,7 @@ export interface SettingsPatchRequest {
   enable_auto_trading?: boolean;
   ai_fail_open?: boolean;
   sl_tp_fail_open?: boolean;
+  v5_max_concurrent?: number;
 }
 export interface TestAIRequest {
   provider?: AIProvider;
