@@ -81,6 +81,27 @@ function TextInput({ value, type = 'text', onChange, onBlur, placeholder, disabl
   );
 }
 
+function SaveButton({ onClick, disabled, saved }: {
+  onClick: () => void; disabled?: boolean; saved?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={`ml-2 rounded-md border px-3 py-1.5 text-[12px] font-semibold transition ${
+        saved
+          ? 'border-gain/40 bg-gain/10 text-gain'
+          : disabled
+          ? 'border-line bg-[#1a232d] text-v3faint opacity-50 cursor-not-allowed'
+          : 'border-amber/40 bg-amber/10 text-amber hover:bg-amber/20'
+      }`}
+    >
+      {saved ? '✓ 已保存' : '保存'}
+    </button>
+  );
+}
+
 function LiveConfirmModal({ onCancel, onConfirm }: { onCancel: () => void; onConfirm: () => void }) {
   const [text, setText] = useState('');
   const canConfirm = text === 'CONFIRM';
@@ -158,18 +179,36 @@ export function SettingsPage() {
     }
   };
 
-  // AI API Key onBlur commit — 提交后清空 input 避免明文停留
+  // AI API Key 保存按钮:显式点击 → mutate → 清空 input(避免明文停留) → 显示"已保存"2s
+  const [openaiSaved, setOpenaiSaved] = useState(false);
+  const [deepseekSaved, setDeepseekSaved] = useState(false);
   const commitOpenaiKey = () => {
     const v = openaiKey.trim();
     if (!v) return;
-    patch.mutate({ openai_api_key: v } as any);
-    setOpenaiKey('');
+    patch.mutate({ openai_api_key: v } as any, {
+      onSuccess: () => {
+        setOpenaiKey('');
+        setOpenaiSaved(true);
+        setTimeout(() => setOpenaiSaved(false), 2000);
+      },
+      onError: (e: any) => {
+        alert(`OpenAI Key 保存失败: ${e?.message || e}`);
+      },
+    });
   };
   const commitDeepseekKey = () => {
     const v = deepseekKey.trim();
     if (!v) return;
-    patch.mutate({ deepseek_api_key: v } as any);
-    setDeepseekKey('');
+    patch.mutate({ deepseek_api_key: v } as any, {
+      onSuccess: () => {
+        setDeepseekKey('');
+        setDeepseekSaved(true);
+        setTimeout(() => setDeepseekSaved(false), 2000);
+      },
+      onError: (e: any) => {
+        alert(`DeepSeek Key 保存失败: ${e?.message || e}`);
+      },
+    });
   };
 
   const isLive = settings?.system_mode === 'LIVE';
@@ -191,15 +230,25 @@ export function SettingsPage() {
             <Field title="OpenAI Assistant" hint="主决策 · GPT-4o · 二次判断与反思"
               control={<Pill tone={settings?.active_ai_provider === 'openai' ? 'ok' : 'off'}>
                 {settings?.active_ai_provider === 'openai' ? '已激活' : '未启用'}</Pill>} />
-            <Field title="OpenAI API Key" hint={`已存: ${settings?.openai_api_key_masked || '(空)'} · 输入后离开输入框自动保存`}
-              control={<TextInput type="password" value={openaiKey}
-                onChange={setOpenaiKey} onBlur={commitOpenaiKey} placeholder="sk-..." />} />
+            <Field title="OpenAI API Key" hint={`已存: ${settings?.openai_api_key_masked || '(空)'}`}
+              control={<div className="flex items-center">
+                <TextInput type="password" value={openaiKey}
+                  onChange={setOpenaiKey} placeholder="sk-..." />
+                <SaveButton onClick={commitOpenaiKey}
+                  disabled={!openaiKey.trim() || patch.isPending}
+                  saved={openaiSaved} />
+              </div>} />
             <Field title="DeepSeek 备用" hint="主模型故障时兜底"
               control={<Toggle on={settings?.deepseek_enabled ?? false}
                 onClick={() => patch.mutate({ deepseek_enabled: !settings?.deepseek_enabled } as any)} />} />
-            <Field title="DeepSeek API Key" hint={`已存: ${settings?.deepseek_api_key_masked || '(空)'} · 输入后离开输入框自动保存`}
-              control={<TextInput type="password" value={deepseekKey}
-                onChange={setDeepseekKey} onBlur={commitDeepseekKey} placeholder="sk-..." />} />
+            <Field title="DeepSeek API Key" hint={`已存: ${settings?.deepseek_api_key_masked || '(空)'}`}
+              control={<div className="flex items-center">
+                <TextInput type="password" value={deepseekKey}
+                  onChange={setDeepseekKey} placeholder="sk-..." />
+                <SaveButton onClick={commitDeepseekKey}
+                  disabled={!deepseekKey.trim() || patch.isPending}
+                  saved={deepseekSaved} />
+              </div>} />
             <Field title="AI 故障时下单 (fail-open)" hint="关闭 = AI 不可用时拒绝交易 (推荐 fail-closed)"
               control={<Toggle on={settings?.ai_fail_open ?? false}
                 onClick={() => patch.mutate({ ai_fail_open: !settings?.ai_fail_open } as any)} />} />
