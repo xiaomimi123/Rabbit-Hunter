@@ -29,3 +29,5 @@ class StrategyConfigPreviewResponse(BaseModel):
     estimated_hourly_entries: float
     estimated_win_rate: float
     sample_days: int
+    data_source: str = "no_data"
+    sample_n: int = 0

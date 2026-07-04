@@ -133,21 +133,28 @@ async def preview_strategy_config(req: dict) -> StrategyConfigPreviewResponse:
 
         hourly = (would_trade / max(sample_days, 1)) / 24.0
 
-        wins = conn.execute(
-            "SELECT COUNT(*) FROM ai_training_data "
-            "WHERE outcome='WIN' "
-            "  AND ((side='SHORT' AND entry_rsi_15m > ?) "
-            "    OR (side='LONG'  AND entry_rsi_15m < ?))",
+        # JOIN paper_trades → trade_scores_v5 via source_score_id
+        # 过滤: CLOSED 交易 + 符合候选 RSI 阈值。WIN = pnl > 0
+        totals = conn.execute(
+            "SELECT COUNT(*) FROM paper_trades pt "
+            "JOIN trade_scores_v5 ts ON pt.source_score_id = ts.id "
+            "WHERE pt.status = 'CLOSED' "
+            "  AND pt.pnl IS NOT NULL "
+            "  AND ((pt.side = 'SHORT' AND ts.rsi_15m > ?) "
+            "    OR (pt.side = 'LONG'  AND ts.rsi_15m < ?))",
             (overbought, oversold),
         ).fetchone()[0] or 0
-        totals = conn.execute(
-            "SELECT COUNT(*) FROM ai_training_data "
-            "WHERE outcome IN ('WIN','LOSS','FLAT') "
-            "  AND ((side='SHORT' AND entry_rsi_15m > ?) "
-            "    OR (side='LONG'  AND entry_rsi_15m < ?))",
+        wins = conn.execute(
+            "SELECT COUNT(*) FROM paper_trades pt "
+            "JOIN trade_scores_v5 ts ON pt.source_score_id = ts.id "
+            "WHERE pt.status = 'CLOSED' "
+            "  AND pt.pnl > 0 "
+            "  AND ((pt.side = 'SHORT' AND ts.rsi_15m > ?) "
+            "    OR (pt.side = 'LONG'  AND ts.rsi_15m < ?))",
             (overbought, oversold),
         ).fetchone()[0] or 0
         win_rate = (wins / totals) if totals else 0.0
+        data_source = "paper_trades" if totals > 0 else "no_data"
     finally:
         conn.close()
 
@@ -156,4 +163,6 @@ async def preview_strategy_config(req: dict) -> StrategyConfigPreviewResponse:
         estimated_hourly_entries=round(hourly, 2),
         estimated_win_rate=round(win_rate, 3),
         sample_days=sample_days,
+        data_source=data_source,
+        sample_n=totals,
     )
