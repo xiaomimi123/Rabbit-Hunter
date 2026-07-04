@@ -28,7 +28,12 @@ def _make_monitor(paper_pm=None, live_pm=None, db_path=":memory:"):
 
 
 def _open_position(side="SHORT", entry=0.166, sl=0.169, tp=0.162,
-                   target_offset_min=5, extension_count=0):
+                   target_offset_min=5, extension_count=0, entry_age_min=10):
+    """构造 test 用活仓 dict。
+
+    entry_age_min: entry_time 距今多少分钟(SIGNAL_REVERSE 门槛默认 30min,
+    测 SR 场景需传 ≥ 30, 如 40)。
+    """
     now = datetime.now(timezone.utc)
     target = now + timedelta(minutes=target_offset_min)
     return {
@@ -36,7 +41,7 @@ def _open_position(side="SHORT", entry=0.166, sl=0.169, tp=0.162,
         "stop_loss": sl, "take_profit": tp,
         "target_close_at": target.isoformat(),
         "extension_count": extension_count,
-        "entry_time": (now - timedelta(minutes=10)).isoformat(),
+        "entry_time": (now - timedelta(minutes=entry_age_min)).isoformat(),
     }
 
 
@@ -95,22 +100,23 @@ def test_max_extension_force_close():
 
 
 def test_signal_reverse_short_when_rsi_drops_below_65():
+    # entry_age_min=40 让持仓超过 SR 最短门槛(默认 30min)
     from scripts.v5_position_monitor import check_exit_triggers
-    pos = _open_position(side="SHORT", entry=0.166, sl=0.169, tp=0.162)
+    pos = _open_position(side="SHORT", entry=0.166, sl=0.169, tp=0.162, entry_age_min=40)
     intent = check_exit_triggers(pos, _market(price=0.165, rsi_15m=64.0))
     assert intent["exit_reason"] == "SIGNAL_REVERSE"
 
 
 def test_signal_reverse_long_when_rsi_rises_above_35():
     from scripts.v5_position_monitor import check_exit_triggers
-    pos = _open_position(side="LONG", entry=0.166, sl=0.163, tp=0.170)
+    pos = _open_position(side="LONG", entry=0.166, sl=0.163, tp=0.170, entry_age_min=40)
     intent = check_exit_triggers(pos, _market(price=0.167, rsi_15m=36.0))
     assert intent["exit_reason"] == "SIGNAL_REVERSE"
 
 
 def test_macd_recross_short_triggers_reverse():
     from scripts.v5_position_monitor import check_exit_triggers
-    pos = _open_position(side="SHORT", entry=0.166, sl=0.169, tp=0.162)
+    pos = _open_position(side="SHORT", entry=0.166, sl=0.169, tp=0.162, entry_age_min=40)
     intent = check_exit_triggers(pos, _market(
         price=0.165, rsi_15m=68.0,
         macd_hist=0.0003, macd_hist_prev=-0.0005,
