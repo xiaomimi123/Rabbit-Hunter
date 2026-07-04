@@ -237,10 +237,12 @@ class V5PositionManager:
         entry_price: float, size_usdt: float, leverage: int,
         entry_time_str: str, exit_price: float, exit_reason: str,
         existing_ctx_json: Optional[str],
+        exit_price_source: str = "monitor_tick",
     ) -> None:
         """成功平仓 or PERMANENT 补记账 —— 计算 PnL 并写 CLOSED。
 
         若 error_context 里有 close_error（前次 RETRYABLE 遗留），清掉。
+        F14: 加 exit_price_source 到 error_context 让审计可见 fill 来源。
         """
         entry_time = datetime.fromisoformat(entry_time_str)
         exit_time = _utcnow()
@@ -255,8 +257,8 @@ class V5PositionManager:
         # 清掉前次失败的 close_error（若有）,保留其他键（如 open_error）
         ctx = self._parse_error_context(existing_ctx_json)
         ctx.pop("close_error", None)
-        # 空 dict 序列化为 "{}" 略啰嗦;若清完为空,存 NULL 更干净
-        ctx_json = json.dumps(ctx) if ctx else None
+        ctx["exit_price_source"] = exit_price_source  # F14: audit trail
+        ctx_json = json.dumps(ctx)  # ctx 至少含 source, 不再判空
 
         conn.execute("""
             UPDATE positions_v5 SET status='CLOSED', exit_price=?, exit_time=?,
@@ -331,10 +333,21 @@ class V5PositionManager:
 
             # ── 决策分支 ────────────────────────────────
             if broker_error_kind is None:
-                # 成功 → 正常 CLOSED
+                # F14: broker 成功成交时优先用 fill price;无 price 字段 → fallback caller
+                broker_price: Optional[float] = None
+                if isinstance(rb_result, dict):
+                    raw = rb_result.get("price")
+                    if raw is not None:
+                        try:
+                            broker_price = float(raw)
+                        except (TypeError, ValueError):
+                            broker_price = None
+                actual_exit = broker_price if broker_price is not None else exit_price
+                source = "broker_fill" if broker_price is not None else "monitor_tick"
                 self._update_closed(
                     conn, position_id, side, entry_price, size_usdt, leverage,
-                    entry_time_str, exit_price, exit_reason, existing_ctx_json,
+                    entry_time_str, actual_exit, exit_reason, existing_ctx_json,
+                    exit_price_source=source,
                 )
             elif broker_error_kind == "PERMANENT":
                 # 交易所已平 → DB 补记账
@@ -342,11 +355,13 @@ class V5PositionManager:
                     f"[V5PositionManager] close broker PERMANENT: {broker_error_msg}; "
                     f"position {position_id} 交易所已平,DB 补记 CLOSED"
                 )
+                # F14: 无 fill data → 保留 caller monitor tick 价 + 标 source
                 self._update_closed(
                     conn, position_id, side, entry_price, size_usdt, leverage,
                     entry_time_str, exit_price,
                     f"{exit_reason}|broker_permanent:{broker_error_msg}",
                     existing_ctx_json,
+                    exit_price_source="monitor_tick_permanent",
                 )
             elif broker_error_kind == "RETRYABLE":
                 # 保持 OPEN + error_context, monitor 下 tick 重试

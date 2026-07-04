@@ -257,3 +257,91 @@ def test_close_success_after_retryable_clears_stale_error_context(tmp_path):
     # error_context 应为 None (清空后我们存 NULL) 或不含 close_error 键
     if row[1] is not None:
         assert "close_error" not in json.loads(row[1])
+
+
+def test_close_success_uses_broker_fill_price(tmp_path):
+    """F14: broker 返 {'success':True, 'price':0.99} → DB exit_price=0.99 (非 caller 0.163) + source=broker_fill。"""
+    import sqlite3
+    import json
+    from unittest.mock import MagicMock
+    from scripts.local_db import init_local_db
+    from scripts.okx_trader import OkxTrader
+    from scripts.v5_position_manager import V5PositionManager
+
+    db = str(tmp_path / "x.db")
+    init_local_db(db)
+    pid = _seeded_open_position(db)
+
+    mock_broker = MagicMock(spec=OkxTrader)
+    mock_broker.close_position.return_value = {"success": True, "price": 0.99, "order_id": "rb"}
+    pm = V5PositionManager(broker=mock_broker, db_path=db)
+    pm.close_position(pid, exit_price=0.163, exit_reason="TP_HIT")
+
+    conn = sqlite3.connect(db)
+    row = conn.execute(
+        "SELECT exit_price, error_context FROM positions_v5 WHERE id=?", (pid,)
+    ).fetchone()
+    conn.close()
+    assert row[0] == 0.99, "应用 broker fill price 0.99, 非 caller 传入 0.163"
+    ctx = json.loads(row[1])
+    assert ctx["exit_price_source"] == "broker_fill"
+
+
+def test_close_success_no_broker_price_falls_back_to_caller(tmp_path):
+    """F14: broker 返 success 但无 price 字段 → fallback caller's exit_price + source=monitor_tick。"""
+    import sqlite3
+    import json
+    from unittest.mock import MagicMock
+    from scripts.local_db import init_local_db
+    from scripts.okx_trader import OkxTrader
+    from scripts.v5_position_manager import V5PositionManager
+
+    db = str(tmp_path / "x.db")
+    init_local_db(db)
+    pid = _seeded_open_position(db)
+
+    mock_broker = MagicMock(spec=OkxTrader)
+    mock_broker.close_position.return_value = {"success": True, "order_id": "rb"}  # 无 price
+    pm = V5PositionManager(broker=mock_broker, db_path=db)
+    pm.close_position(pid, exit_price=0.163, exit_reason="TP_HIT")
+
+    conn = sqlite3.connect(db)
+    row = conn.execute(
+        "SELECT exit_price, error_context FROM positions_v5 WHERE id=?", (pid,)
+    ).fetchone()
+    conn.close()
+    assert row[0] == 0.163, "无 price → fallback caller"
+    ctx = json.loads(row[1])
+    assert ctx["exit_price_source"] == "monitor_tick"
+
+
+def test_close_permanent_marks_monitor_tick_permanent_source(tmp_path):
+    """F14: PERMANENT (交易所已平) → 用 caller exit_price + source=monitor_tick_permanent。"""
+    import sqlite3
+    import json
+    from unittest.mock import MagicMock
+    from scripts.local_db import init_local_db
+    from scripts.okx_trader import OkxTrader
+    from scripts.v5_position_manager import V5PositionManager
+
+    db = str(tmp_path / "x.db")
+    init_local_db(db)
+    pid = _seeded_open_position(db)
+
+    mock_broker = MagicMock(spec=OkxTrader)
+    mock_broker.close_position.return_value = {
+        "success": False, "error_kind": "PERMANENT",
+        "error": "position not found on exchange",
+    }
+    pm = V5PositionManager(broker=mock_broker, db_path=db)
+    pm.close_position(pid, exit_price=0.163, exit_reason="TP_HIT")
+
+    conn = sqlite3.connect(db)
+    row = conn.execute(
+        "SELECT status, exit_price, error_context FROM positions_v5 WHERE id=?", (pid,)
+    ).fetchone()
+    conn.close()
+    assert row[0] == "CLOSED"
+    assert row[1] == 0.163
+    ctx = json.loads(row[2])
+    assert ctx["exit_price_source"] == "monitor_tick_permanent"
