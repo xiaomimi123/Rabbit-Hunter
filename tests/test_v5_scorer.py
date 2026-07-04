@@ -16,8 +16,7 @@ def _fake_klines(n: int = 50):
 
 
 def _make_enriched():
-    """构造最小 EnrichedItem。klines 30 条 flat, decide() 通常返 should_trade=False,
-    我们用 monkeypatch decide 让它 True 才能触达 balance gate。"""
+    """构造最小 EnrichedItem (50 条 flat klines 足够 IndicatorEngine)。"""
     _stub_ccxt()
     from scripts.v5_types import EnrichedItem
     return EnrichedItem(
@@ -30,7 +29,7 @@ def _make_enriched():
     )
 
 
-def test_process_enriched_none_balance_writes_block(tmp_path, monkeypatch):
+def test_process_enriched_none_balance_writes_block(tmp_path):
     """balance_usdt=None → 写 trade_scores_v5 block_reason=BALANCE_UNAVAILABLE, skip 开仓。"""
     _stub_ccxt()
     from scripts.local_db import init_local_db
@@ -41,16 +40,8 @@ def test_process_enriched_none_balance_writes_block(tmp_path, monkeypatch):
 
     enriched = _make_enriched()
 
-    # monkeypatch decide() 让它返 should_trade=True,才能穿过 "not should_trade" 早期 return,
-    # 触达紧接其后的 balance-None gate
-    from scripts.v5_types import Decision
-    monkeypatch.setattr(
-        scorer, "decide",
-        lambda enr, ind, funding_z=None: Decision(
-            should_trade=True, side="LONG",
-            reasoning="test-strong-signal", block_reason=None,
-        ),
-    )
+    # 注:balance-None gate 位于 decide() 之后但在 `if not decision.should_trade` 之前,
+    # 所以 decide 返 True/False 都能触达。无需 monkeypatch。
 
     paper_pm = MagicMock()
     live_pm = MagicMock()
