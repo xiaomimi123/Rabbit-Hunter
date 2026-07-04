@@ -30,7 +30,7 @@ def _reports_dir() -> str:
 
 
 def _db_path() -> str:
-    return os.environ.get("LOCAL_DB_PATH", "data/rabbit_hunter.db")
+    return os.environ.get("DB_PATH", "data/rabbit_hunter.db")
 
 
 # ─────────────────────────────────────────────────────────────
