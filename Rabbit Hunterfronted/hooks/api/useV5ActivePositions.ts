@@ -7,21 +7,33 @@ interface CombinedActive {
   paper: V5Position[];
   combined: V5Position[];
   total: number;
+  live_error?: string;
+  paper_error?: string;
 }
 
 export function useV5ActivePositions() {
   return useQuery<CombinedActive>({
     queryKey: ['v5', 'active'],
     queryFn: async () => {
-      const [live, paper] = await Promise.all([
+      const [liveResult, paperResult] = await Promise.allSettled([
         apiGet<V5PositionsResponse>('/api/v5/positions?status=OPEN'),
         apiGet<V5PositionsResponse>('/api/v5/paper-positions?status=OPEN'),
       ]);
+      const live = liveResult.status === 'fulfilled' ? liveResult.value.data : [];
+      const paper = paperResult.status === 'fulfilled' ? paperResult.value.data : [];
+      const live_error = liveResult.status === 'rejected'
+        ? String((liveResult.reason as any)?.message ?? liveResult.reason ?? 'unknown')
+        : undefined;
+      const paper_error = paperResult.status === 'rejected'
+        ? String((paperResult.reason as any)?.message ?? paperResult.reason ?? 'unknown')
+        : undefined;
       return {
-        live: live.data,
-        paper: paper.data,
-        combined: [...live.data, ...paper.data],
-        total: live.data.length + paper.data.length,
+        live,
+        paper,
+        combined: [...live, ...paper],
+        total: live.length + paper.length,
+        live_error,
+        paper_error,
       };
     },
     refetchInterval: 5_000,
