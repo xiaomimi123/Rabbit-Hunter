@@ -59,7 +59,33 @@ def _ensure_jobs_table():
         conn.close()
 
 
+def _cleanup_stale_jobs():
+    """Finding 9: 模块加载时,把明显超时的 running/queued 任务标记为 failed。
+
+    daemon 线程在 API 进程重启时被杀,wf_jobs 行永久卡 running。
+    阈值 2h:单次 walk-forward 正常几分钟内完成,>2h 无更新几乎必是僵尸。
+    失败时 print WARN 但不抛,不阻塞 module import。
+    """
+    try:
+        conn = sqlite3.connect(_db_path())
+        try:
+            conn.execute("""
+                UPDATE wf_jobs
+                SET status='failed',
+                    finished_at=datetime('now'),
+                    error='进程重启时任务中断 (stale cleanup)'
+                WHERE status IN ('running','queued')
+                  AND COALESCE(started_at, created_at) < datetime('now', '-2 hours')
+            """)
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception as e:
+        print(f"[wf cleanup] 启动清理失败: {type(e).__name__}: {e}")
+
+
 _ensure_jobs_table()
+_cleanup_stale_jobs()
 
 
 # ─────────────────────────────────────────────────────────────
