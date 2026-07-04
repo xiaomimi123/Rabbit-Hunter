@@ -59,9 +59,15 @@ export function useV5WebSocket(url: string): Status {
       wsRef.current = ws;
 
       ws.onopen = () => {
+        // Finding 21: 若是重连(attemptRef > 0),主动刷新可能在断线期间变化的数据
+        const wasReconnect = attemptRef.current > 0;
         attemptRef.current = 0;
         lastReceivedRef.current = Date.now();
         setStatus((s) => ({ ...s, connected: true, unhealthyCount: 0 }));
+        if (wasReconnect) {
+          qc.invalidateQueries({ queryKey: ['v5', 'active'] });
+          qc.invalidateQueries({ queryKey: ['v5', 'dashboard'] });
+        }
         if (heartbeatTimerRef.current) clearInterval(heartbeatTimerRef.current);
         heartbeatTimerRef.current = setInterval(() => {
           try {
