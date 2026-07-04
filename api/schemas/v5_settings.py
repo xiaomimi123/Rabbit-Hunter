@@ -1,6 +1,6 @@
 """V5 系统设置 schema。"""
 from typing import Optional, Literal
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class SettingsResponse(BaseModel):
@@ -21,6 +21,7 @@ class SettingsResponse(BaseModel):
 
     ai_fail_open: bool
     sl_tp_fail_open: bool
+    v5_max_concurrent: int = 3
 
 
 class SettingsPatchRequest(BaseModel):
@@ -34,6 +35,7 @@ class SettingsPatchRequest(BaseModel):
     enable_auto_trading: Optional[bool] = None
     ai_fail_open: Optional[bool] = None
     sl_tp_fail_open: Optional[bool] = None
+    v5_max_concurrent: Optional[int] = Field(default=None, ge=1, le=10)
 
 
 class TestAIRequest(BaseModel):

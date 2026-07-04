@@ -79,6 +79,12 @@ async def get_settings() -> SettingsResponse:
                         os.environ.get("AI_FAIL_OPEN", "false")).lower() in ("1", "true")
         sl_tp_fail_open = read_sl_tp_fail_open(_db())
 
+        v5_max_concurrent_raw = _read_setting(conn, "v5_max_concurrent")
+        try:
+            v5_max_concurrent = int(v5_max_concurrent_raw) if v5_max_concurrent_raw else 3
+        except ValueError:
+            v5_max_concurrent = 3
+
         if deepseek_enabled and deepseek_key_eff:
             active_provider, active_model = "deepseek", os.environ.get("DEEPSEEK_MODEL", "deepseek-chat")
         elif openai_key_eff:
@@ -104,6 +110,7 @@ async def get_settings() -> SettingsResponse:
         enable_auto_trading=enable_auto_trading,
         ai_fail_open=ai_fail_open,
         sl_tp_fail_open=sl_tp_fail_open,
+        v5_max_concurrent=v5_max_concurrent,
     )
 
 
@@ -253,6 +260,8 @@ async def patch_settings(req: SettingsPatchRequest) -> SettingsResponse:
             _write_setting(conn, "ai_fail_open", "true" if req.ai_fail_open else "false")
         if req.sl_tp_fail_open is not None:
             _write_setting(conn, "sl_tp_fail_open", "true" if req.sl_tp_fail_open else "false")
+        if req.v5_max_concurrent is not None:
+            _write_setting(conn, "v5_max_concurrent", str(req.v5_max_concurrent))
         conn.commit()
     finally:
         conn.close()
