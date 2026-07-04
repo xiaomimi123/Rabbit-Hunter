@@ -28,11 +28,13 @@ from scripts.risk_gates import (
     gate_min_rr, gate_per_trade_risk, gate_setup_enabled, gate_sl_attached,
     get_today_realized_pnl,
 )
-from scripts.v5_position_monitor import _enqueue_ws  # noqa: F811 (local def below overrides; kept for Batch-2 F5 traceability)
-
-
 def _enqueue_ws(db_path: str, payload: dict) -> None:
-    """跨进程 WS 消息总线:写 ws_event_queue,api 进程 poll 后广播。"""
+    """跨进程 WS 消息总线:写 ws_event_queue,api 进程 poll 后广播。
+
+    与 scripts.v5_position_monitor._enqueue_ws 功能等价（Batch 2 F5 建立的
+    ws 总线模式）—— 保留本地副本让 scorer 的错误 print 前缀是 [V5Scorer]
+    而非 [V5PositionMonitor]。
+    """
     import json, sqlite3
     try:
         conn = sqlite3.connect(db_path)
