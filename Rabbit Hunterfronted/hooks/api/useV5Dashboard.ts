@@ -13,22 +13,56 @@ export interface DashboardData {
   avg_holding_minutes: number;
   active_count: number;
   closed_24h: V5Position[];
+  errors?: {
+    signals?: string;
+    paper_history?: string;
+    live_history?: string;
+    paper_active?: string;
+    live_active?: string;
+  };
 }
 
 export function useV5Dashboard() {
   return useQuery<DashboardData>({
     queryKey: ['v5', 'dashboard'],
     queryFn: async () => {
-      const [signals, history, active] = await Promise.all([
+      const [
+        signalsRes,
+        paperHistoryRes,
+        paperActiveRes,
+        liveHistoryRes,
+        liveActiveRes,
+      ] = await Promise.allSettled([
         apiGet<V5SignalsResponse>('/api/v5/signals?limit=2000'),
         apiGet<V5PositionsResponse>('/api/v5/paper-positions?status=CLOSED&limit=500'),
         apiGet<V5PositionsResponse>('/api/v5/paper-positions?status=OPEN'),
+        apiGet<V5PositionsResponse>('/api/v5/positions?status=CLOSED&limit=500'),
+        apiGet<V5PositionsResponse>('/api/v5/positions?status=OPEN'),
       ]);
+
+      const signalsData = signalsRes.status === 'fulfilled' ? signalsRes.value.data : [];
+      const paperHistoryData = paperHistoryRes.status === 'fulfilled' ? paperHistoryRes.value.data : [];
+      const paperActiveData = paperActiveRes.status === 'fulfilled' ? paperActiveRes.value.data : [];
+      const liveHistoryData = liveHistoryRes.status === 'fulfilled' ? liveHistoryRes.value.data : [];
+      const liveActiveData = liveActiveRes.status === 'fulfilled' ? liveActiveRes.value.data : [];
+
+      const errMsg = (r: PromiseSettledResult<unknown>) =>
+        r.status === 'rejected'
+          ? String((r.reason as any)?.message ?? r.reason ?? 'unknown')
+          : undefined;
+      const errors: DashboardData['errors'] = {
+        signals: errMsg(signalsRes),
+        paper_history: errMsg(paperHistoryRes),
+        live_history: errMsg(liveHistoryRes),
+        paper_active: errMsg(paperActiveRes),
+        live_active: errMsg(liveActiveRes),
+      };
+      const hasAnyError = Object.values(errors).some(v => v !== undefined);
 
       const cutoff = Date.now() - 24 * 60 * 60 * 1000;
       const in24 = (iso: string | null) => iso ? new Date(iso).getTime() >= cutoff : false;
 
-      const s24 = signals.data.filter(s => in24(s.created_at));
+      const s24 = signalsData.filter(s => in24(s.created_at));
       const passedAnd = s24.filter(s => s.should_trade === 1);
       const executed = s24.filter(s => s.executed === 1);
 
@@ -38,7 +72,9 @@ export function useV5Dashboard() {
         blockCounts[k] = (blockCounts[k] ?? 0) + 1;
       }
 
-      const closed24 = history.data.filter(p => in24(p.exit_time));
+      // F16: paper + live 合并 24h CLOSED
+      const closed24 = [...paperHistoryData, ...liveHistoryData].filter(p => in24(p.exit_time));
+
       const wins = closed24.filter(p => (p.pnl_pct ?? 0) > 0).length;
       const winRate = closed24.length > 0 ? wins / closed24.length : 0;
       const pnlSum = closed24.reduce((acc, p) => acc + (p.pnl_usdt ?? 0), 0);
@@ -60,8 +96,9 @@ export function useV5Dashboard() {
         pnl_total_usdt: pnlSum,
         pnl_total_pct: pnlPctSum,
         avg_holding_minutes: avgHold,
-        active_count: active.data.length,
+        active_count: paperActiveData.length + liveActiveData.length,
         closed_24h: closed24,
+        errors: hasAnyError ? errors : undefined,
       };
     },
     refetchInterval: 30_000,
