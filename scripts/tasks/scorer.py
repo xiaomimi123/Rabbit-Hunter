@@ -189,7 +189,8 @@ def _write_trade_score(db_path: str, enriched: EnrichedItem, indicators: Indicat
 
 
 async def process_enriched_v5(*, enriched: EnrichedItem, ai, paper_pm, live_pm,
-                              mode: str, db_path: str, balance_usdt: float) -> None:
+                              mode: str, db_path: str,
+                              balance_usdt: Optional[float]) -> None:
     """处理一个 enriched item 走完 V5 管道。"""
     # Top-20 whitelist filter (V5.1)
     if get_param("v5_use_symbol_whitelist", True,
@@ -219,6 +220,15 @@ async def process_enriched_v5(*, enriched: EnrichedItem, ai, paper_pm, live_pm,
         print(f"[V5Scorer] funding lookup 失败 ({enriched.symbol}): {e}")
 
     decision = decide(enriched, indicators, funding_z=funding_z_score)
+
+    # F3:LIVE 余额拉取失败(_fetch_balance 返 None) → 不能可靠算风险,skip 本次开仓
+    if balance_usdt is None:
+        _write_trade_score(db_path, enriched, indicators, decision,
+                          block_reason="BALANCE_UNAVAILABLE",
+                          funding_z_score=funding_z_score,
+                          funding_rate_8h=funding_rate_8h)
+        return
+
     if not decision.should_trade:
         _write_trade_score(db_path, enriched, indicators, decision,
                           funding_z_score=funding_z_score,

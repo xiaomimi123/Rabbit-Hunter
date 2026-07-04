@@ -13,6 +13,7 @@ import os
 import signal
 import sys
 from pathlib import Path
+from typing import Optional
 
 # Ensure project root + scripts/ are on sys.path
 _ROOT = Path(__file__).parent.parent.parent
@@ -64,10 +65,12 @@ def _get_live_trader():
 _PAPER_BALANCE = float(os.environ.get("PAPER_INITIAL_BALANCE_USDT", "1000"))
 
 
-def _fetch_balance() -> float:
-    """SHADOW 模式直接返回 PAPER_INITIAL_BALANCE_USDT — 不 init exchange trader
+def _fetch_balance() -> Optional[float]:
+    """SHADOW 模式直接返回 PAPER_INITIAL_BALANCE_USDT
     (避免每次 scoring 都打一堆 fetch_balance / load_markets 失败的日志)。
-    LIVE 模式才真正去拉真实余额。"""
+    LIVE 模式才真正去拉真实余额。LIVE 失败返 None (由 scorer 端写
+    BALANCE_UNAVAILABLE block 记录,不伪造成 1000 USDT 假余额,防止风险
+    计算被误导 —— F3)."""
     if _resolve_mode_db() != "LIVE":
         return _PAPER_BALANCE
     try:
@@ -85,8 +88,8 @@ def _fetch_balance() -> float:
             if usdt is not None and float(usdt) > 0:
                 return float(usdt)
     except Exception as e:
-        print(f"[collector_main] LIVE 余额拉取失败,用 PAPER_INITIAL_BALANCE_USDT: {e}")
-    return _PAPER_BALANCE
+        print(f"[collector_main] LIVE 余额拉取失败,scorer 侧将写 BALANCE_UNAVAILABLE: {e}")
+    return None
 
 
 async def _build_indicator_fetcher():
